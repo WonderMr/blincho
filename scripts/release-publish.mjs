@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { assertRepository, REPOSITORY, assertVersionMatch, inspectArtifacts, parseChecksums, sha256File, releaseNotes, createManifest, readLocalReceipts, usesUpdateReceipts } from './release-lib.mjs';
@@ -22,9 +22,12 @@ const checksumDigest = await sha256File(checksumFile);
 const title = `Blincho ${version} (beta)`;
 
 function gh(args) {
-  const result = spawnSync('gh', [...args, '--repo', repository], { stdio: 'inherit', shell: false });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`GitHub CLI failed with exit code ${result.status}`);
+  // Keep the event loop free to retire idle HTTP connections during uploads.
+  return new Promise((resolve, reject) => {
+    const child = spawn('gh', [...args, '--repo', repository], { stdio: 'inherit', shell: false });
+    child.once('error', reject);
+    child.once('close', status => status === 0 ? resolve() : reject(new Error(`GitHub CLI failed with exit code ${status}`)));
+  });
 }
 
 function verifyUploaded(release, published) {
@@ -54,9 +57,9 @@ if (existing && !existing.draft) {
   try {
     const notesFile = path.join(temporary, 'notes.md');
     await writeFile(notesFile, notes);
-    if (!existing) gh(['release', 'create', tag, '--verify-tag', '--draft', '--prerelease', '--latest=false', '--title', title, '--notes-file', notesFile]);
+    if (!existing) await gh(['release', 'create', tag, '--verify-tag', '--draft', '--prerelease', '--latest=false', '--title', title, '--notes-file', notesFile]);
     // Clobber is restricted to our matching draft. Failed uploads leave a draft for retry.
-    gh(['release', 'upload', tag, ...artifacts.map(asset => asset.file), checksumFile, '--clobber']);
+    await gh(['release', 'upload', tag, ...artifacts.map(asset => asset.file), checksumFile, '--clobber']);
     existing = (await listReleases({ repository })).find(release => release.tag_name === tag);
     if (!existing?.draft) throw new Error('Release left draft state before upload verification');
     verifyUploaded(existing, false);
@@ -73,7 +76,7 @@ if (existing && !existing.draft) {
       }),
     };
     createManifest([projectedRelease], { repository, requiredTag: tag, checksumsByTag: new Map([[tag, checksums]]), receiptsByTag: new Map([[tag, receipts]]) });
-    gh(['release', 'edit', tag, '--draft=false', '--prerelease', '--latest=false', '--verify-tag']);
+    await gh(['release', 'edit', tag, '--draft=false', '--prerelease', '--latest=false', '--verify-tag']);
     const published = (await listReleases({ repository })).find(release => release.tag_name === tag);
     verifyUploaded(published, true);
     console.log(`Published ${tag} with all packages and verified SHA-256 digests.`);

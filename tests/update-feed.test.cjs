@@ -58,20 +58,29 @@ async function runPublisher({ mutateDraft = () => {}, mutatePublished = () => {}
     await writeFile(path.join(directory, 'mock-github.mjs'), `
       import { readFileSync, appendFileSync } from 'node:fs';
       import childProcess from 'node:child_process';
+      import { EventEmitter } from 'node:events';
       import { syncBuiltinESMExports } from 'node:module';
       const releases = JSON.parse(readFileSync('releases.json', 'utf8'));
       let published = false;
-      childProcess.spawnSync = (command, args) => {
+      let commandPending = false;
+      childProcess.spawn = (command, args) => {
         if (command !== 'gh' || args[0] !== 'release' || !['upload', 'edit'].includes(args[1]) || args[2] !== 'v1.4.1' || args.at(-2) !== '--repo' || args.at(-1) !== 'WonderMr/blincho') throw new Error('Unexpected CLI operation');
         appendFileSync('calls.jsonl', JSON.stringify(args) + '\\n');
         if (args[1] === 'edit') {
           if (!args.includes('--draft=false')) throw new Error('Expected publication command');
-          published = true;
         }
-        return { status: 0 };
+        commandPending = true;
+        const child = new EventEmitter();
+        setImmediate(() => {
+          if (args[1] === 'edit') published = true;
+          commandPending = false;
+          child.emit('close', 0);
+        });
+        return child;
       };
       syncBuiltinESMExports();
       globalThis.fetch = async url => {
+        if (commandPending) throw new Error('GitHub read before CLI operation completed');
         if (url !== 'https://api.github.com/repos/WonderMr/blincho/releases?per_page=100&page=1') throw new Error('Unexpected network request');
         return new Response(JSON.stringify([published ? releases.published : releases.draft]));
       };
