@@ -15,3 +15,7 @@ recovery/
 history.md
 site/DESIGN.txt
 site/copy-source.json
+site/releases.json
+
+# Generated independently for each native release target.
+electron/update-support.json

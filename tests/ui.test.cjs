@@ -96,7 +96,7 @@ results.push('error recovery resets settings while preserving statistics, self-c
 const i18n = load('src/i18n/runtime.ts');
 render(settingsElement());
 const languageControl = () => find(node => node.tagName === 'SELECT' && reactProps(node).className?.includes('language-select'));
-assert.equal(languageControl().querySelectorAll('option').length, 16);
+assert.equal(languageControl().querySelectorAll('option').length, 31);
 const originalDialog = host.querySelector('[aria-modal="true"]');
 const savedSettings = JSON.stringify(settings);
 invoke(languageControl(), 'onChange', { target: { value: 'ar' } });
@@ -114,7 +114,7 @@ invoke(find(node => node.getAttribute('id') === 'technique-search'), 'onChange',
 assert(host.querySelectorAll('article').length > 0);
 assert(host.textContent.includes(translatedTitle));
 assert(!/[А-Яа-яЁё]/.test(host.textContent), 'English library has no Russian display text');
-results.push('sixteen language options, live RTL/LTR without dialog remount or timer changes, persisted choice and translated exercise search');
+results.push('thirty languages plus automatic selection, live RTL/LTR without dialog remount or timer changes, persisted choice and translated exercise search');
 ReactDOM.flushSync(() => i18n.setLanguagePreference('ru'));
 ReactDOM.flushSync(() => root.unmount()); doc.body.removeChild(host); doc.body.removeChild(opener);
 console.log(JSON.stringify({ passed: results.length, results, limitation: 'Real React interactions and SSR with synthetic DOM; no browser visual/E2E claim' }, null, 2));

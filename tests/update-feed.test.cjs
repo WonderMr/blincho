@@ -1,0 +1,251 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { mkdtemp, mkdir, writeFile, readFile, rm, cp, readdir } = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const { createHash } = require('node:crypto');
+const library = import('../scripts/release-lib.mjs');
+const feeds = import('../scripts/update-feed.mjs');
+const packaging = import('../scripts/update-package.mjs');
+const github = import('../scripts/release-github.mjs');
+const version = '1.4.0';
+const hash = (bytes, algorithm = 'sha256', encoding = 'hex') => createHash(algorithm).update(bytes).digest(encoding);
+
+async function fixture(releaseVersion = version, signed = false) {
+  const lib = await library;
+  const { packageSupport } = await packaging;
+  const files = new Map(lib.expectedArtifacts(releaseVersion).map(name => [name, Buffer.from(`package fixture ${name}`)]));
+  const receipts = lib.UPDATE_PLATFORMS.flatMap(platform => ['arm64', 'x64'].map(arch => ({
+    schemaVersion: 1, version: releaseVersion, platform, arch,
+    artifacts: lib.expectedArtifacts(releaseVersion).filter(name => {
+      const item = lib.describeArtifact(name, releaseVersion);
+      return item.platform === lib.SITE_PLATFORMS[platform] && item.architecture === arch;
+    }).map(name => {
+      const target = name.endsWith('.zip') ? 'zip' : name.endsWith('-setup.exe') ? 'nsis' : name.endsWith('-portable.exe') ? 'portable' : name.endsWith('.AppImage') ? 'AppImage' : 'tar.gz';
+      const support = packageSupport(platform, arch, target, platform === 'darwin' && signed);
+      return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: support.packageType, signed: support.signed, notarized: support.signed, updaterConfig: true };
+    }),
+  })));
+  for (const receipt of receipts) files.set(lib.receiptName(releaseVersion, receipt.platform, receipt.arch), Buffer.from(JSON.stringify(receipt)));
+  const checksums = new Map([...files].map(([name, bytes]) => [name, hash(bytes)]));
+  files.set('SHA256SUMS.txt', Buffer.from([...checksums].map(([name, digest]) => `${digest}  ${name}\n`).join('')));
+  const tag = `v${releaseVersion}`;
+  const release = { tag_name: tag, name: `Blincho ${releaseVersion} (beta)`, body: `${lib.releaseSigningNotice(receipts)}\n\n- Example curated release changes.\n`, draft: false, prerelease: true, html_url: `https://github.com/WonderMr/blincho/releases/tag/${tag}`, published_at: '2026-10-12T12:00:00Z', assets: [...files].map(([name, bytes]) => ({ name, size: bytes.length, digest: `sha256:${hash(bytes)}`, state: 'uploaded', browser_download_url: `https://github.com/WonderMr/blincho/releases/download/${tag}/${name}` })) };
+  const options = { requiredTag: tag, checksumsByTag: new Map([[tag, checksums]]), receiptsByTag: new Map([[tag, receipts]]) };
+  return { files, receipts, checksums, release, options, manifest: lib.createManifest([release], options) };
+}
+
+test('mac signing is optional only when no inputs exist and fails closed for every incomplete set', async () => {
+  const { macSigningMode, SIGNING_INPUTS, verifyMacSignature } = await packaging;
+  assert.equal(macSigningMode({}), false);
+  const complete = Object.fromEntries(SIGNING_INPUTS.map(key => [key, 'fixture']));
+  complete.APPLE_TEAM_ID = 'A123456789';
+  assert.equal(macSigningMode(complete), true);
+  for (const key of SIGNING_INPUTS) {
+    assert.throws(() => macSigningMode({ ...complete, [key]: '' }), /Incomplete/);
+    assert.throws(() => macSigningMode({ [key]: 'fixture' }), /Incomplete/);
+  }
+  assert.throws(() => macSigningMode({ ...complete, BLINCHO_MAC_SIGNING_IDENTITY: '-' }), /ad-hoc/);
+  assert.throws(() => macSigningMode({ ...complete, APPLE_TEAM_ID: 'invalid' }), /team ID/);
+  const calls = [];
+  const run = (command, args) => { calls.push([command, args]); return { status: 0, stdout: 'Authority=Developer ID Application: Fixture\nTeamIdentifier=A123456789\nflags=0x10000(runtime)\n' }; };
+  verifyMacSignature('/test/Blincho.app', complete.APPLE_TEAM_ID, run);
+  assert.equal(calls.length, 4);
+  for (let failure = 0; failure < 4; failure++) {
+    let index = 0;
+    assert.throws(() => verifyMacSignature('/test/Blincho.app', complete.APPLE_TEAM_ID, (command, args) => index++ === failure ? { status: 1 } : run(command, args)), /verification failed/);
+  }
+  assert.throws(() => verifyMacSignature('/test/Blincho.app', complete.APPLE_TEAM_ID, () => ({ status: 0, stdout: 'Signature=adhoc\n' })), /Developer ID/);
+});
+
+test('package support distinguishes signed mac, NSIS, AppImage and manual archives', async () => {
+  const { packageSupport, builderArtifactName } = await packaging;
+  for (const arch of ['x64', 'arm64']) {
+    assert.equal(packageSupport('darwin', arch, 'zip', false).packageType, 'manual');
+    assert.equal(packageSupport('darwin', arch, 'zip', true).packageType, 'mac-signed');
+    assert.equal(packageSupport('win32', arch, 'nsis').packageType, 'nsis');
+    assert.equal(packageSupport('win32', arch, 'portable').packageType, 'manual');
+    assert.equal(packageSupport('linux', arch, 'AppImage').packageType, 'appimage');
+    assert.equal(packageSupport('linux', arch, 'tar.gz').packageType, 'manual');
+  }
+  assert.equal(builderArtifactName('Blincho-1.4.0-linux-x64.AppImage', 'linux', 'x64'), 'Blincho-1.4.0-linux-x86_64.AppImage');
+  assert.equal(builderArtifactName('Blincho-1.4.0-linux-x64.tar.gz', 'linux', 'x64'), 'Blincho-1.4.0-linux-x64.tar.gz');
+  assert.throws(() => packageSupport('win32', 'x64', 'nsis', true));
+});
+
+test('local gate checks both digest algorithms against bytes and requires all six metadata receipts', async () => {
+  const lib = await library;
+  const { files, receipts } = await fixture();
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-update-gate-'));
+  try {
+    for (const [name, bytes] of files) await writeFile(path.join(directory, name), bytes);
+    assert.equal((await lib.inspectArtifacts(directory, version)).length, 16);
+    const receipt = receipts[0];
+    const name = lib.receiptName(version, receipt.platform, receipt.arch);
+    const restore = () => writeFile(path.join(directory, name), files.get(name));
+    const mutations = [item => { item.version = '1.4.1'; }, item => { item.arch = 'x64'; }, item => { item.artifacts[0].sha512 = Buffer.alloc(64).toString('base64'); }, item => { item.artifacts[0].sha256 = 'a'.repeat(64); }, item => { item.artifacts[0].packageType = 'mac-signed'; }, item => { item.artifacts[0].signed = true; }, item => { item.artifacts[0].updaterConfig = false; }, item => { item.artifacts.push(item.artifacts[0]); }];
+    for (const mutate of mutations) {
+      const changed = structuredClone(receipt); mutate(changed);
+      await writeFile(path.join(directory, name), JSON.stringify(changed));
+      await assert.rejects(lib.inspectArtifacts(directory, version));
+    }
+    await restore();
+    const packageName = receipt.artifacts[0].name;
+    await writeFile(path.join(directory, packageName), 'tampered');
+    await assert.rejects(lib.inspectArtifacts(directory, version), /differs from package bytes/);
+    await writeFile(path.join(directory, packageName), files.get(packageName));
+    await rm(path.join(directory, name));
+    await assert.rejects(lib.inspectArtifacts(directory, version), /ENOENT/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('published receipts require canonical URLs, hashes and exact architecture coverage before creating feeds', async () => {
+  const { loadUpdateReceipts } = await github;
+  const lib = await library;
+  const f = await fixture();
+  const fetchImpl = async (url, settings) => {
+    assert.equal(settings.headers, undefined);
+    return new Response(f.files.get(url.split('/').at(-1)));
+  };
+  const receiptsByTag = await loadUpdateReceipts([f.release], f.options.checksumsByTag, { fetchImpl });
+  assert.equal(receiptsByTag.get('v1.4.0').length, 6);
+  assert.equal(lib.createManifest([f.release], { ...f.options, receiptsByTag }).releases[0].assets.length, 10);
+  await assert.rejects(loadUpdateReceipts([f.release], f.options.checksumsByTag, { fetchImpl: async () => new Response('tampered') }), /bytes differ/);
+  const bad = structuredClone(f.release);
+  bad.assets.find(item => item.name.includes('-updates-')).browser_download_url = 'https://evil.example/receipt.json';
+  await assert.rejects(loadUpdateReceipts([bad], f.options.checksumsByTag, { fetchImpl: () => { throw new Error('should not fetch'); } }), /Invalid or unverified/);
+  assert.throws(() => lib.createManifest([f.release], { ...f.options, receiptsByTag: new Map() }), /verified update receipts/);
+  const tampered = structuredClone(f.release); tampered.assets[0].digest = `sha256:${'a'.repeat(64)}`;
+  assert.throws(() => lib.createManifest([tampered], f.options), /digest/);
+});
+
+test('installed electron-updater 6.8.9 parses every native feed at its exact channel filename', async () => {
+  const { GenericProvider } = require('electron-updater/out/providers/GenericProvider');
+  const { createUpdateFeeds } = await feeds;
+  const f = await fixture(version, true);
+  const generated = createUpdateFeeds(f.manifest);
+  assert.equal(generated.length, 6);
+  const saved = process.env.TEST_UPDATER_ARCH;
+  try {
+    for (const feed of generated) {
+      const [, platform, arch, filename] = feed.path.split('/');
+      process.env.TEST_UPDATER_ARCH = arch;
+      const base = `https://blincho.app/updates/${platform}/${arch}/`;
+      const provider = new GenericProvider({ provider: 'generic', url: base }, {}, { platform, executor: {} });
+      provider.httpRequest = async url => { assert.equal(url.href, base + filename); return JSON.stringify(feed.info); };
+      const info = await provider.getLatestVersion();
+      const resolved = provider.resolveFiles(info);
+      assert.equal(resolved.length, 1);
+      assert.equal(resolved[0].url.href, feed.info.files[0].url);
+      assert.ok(resolved[0].url.href.includes(`-${arch}`));
+      assert.equal(resolved[0].info.sha512, hash(f.files.get(resolved[0].url.pathname.split('/').at(-1)), 'sha512', 'base64'));
+      assert.ok(!resolved[0].url.href.endsWith('-portable.exe') && !resolved[0].url.href.endsWith('.tar.gz'));
+    }
+  } finally { if (saved === undefined) delete process.env.TEST_UPDATER_ARCH; else process.env.TEST_UPDATER_ARCH = saved; }
+});
+
+test('unsigned mac is manual, signing stays per asset and older retry cannot lower the feed version', async () => {
+  const { createUpdateFeeds } = await feeds;
+  const latest = await fixture('1.4.2', false);
+  const older = await fixture('1.4.1', true);
+  assert.equal(createUpdateFeeds(latest.manifest).length, 4);
+  assert.ok(latest.manifest.releases[0].assets.filter(item => item.platform === 'macos').every(item => item.updateSupport === 'manual' && item.signing === 'unsigned'));
+  assert.ok(older.manifest.releases[0].assets.filter(item => item.platform === 'macos').every(item => item.updateSupport === 'mac-signed' && item.signing === 'signed-notarized'));
+  assert.ok(older.manifest.releases[0].assets.filter(item => item.platform === 'windows').every(item => item.signing === 'unsigned'));
+  const manifest = { ...latest.manifest, releases: [...older.manifest.releases, ...latest.manifest.releases] };
+  const generated = createUpdateFeeds(manifest);
+  assert.equal(generated.length, 6);
+  assert.ok(generated.filter(item => !item.path.includes('/darwin/')).every(item => item.info.version === '1.4.2'));
+  assert.ok(generated.filter(item => item.path.includes('/darwin/')).every(item => item.info.version === '1.4.1'));
+  for (const mutate of [item => { item.url = item.url.replace('WonderMr', 'attacker'); }, item => { item.url = item.url.replace('https:', 'http:'); }, item => { item.sha512 = 'bad'; }, item => { item.name = item.name.replace('x64', 'arm64'); }, item => { item.signing = 'unsigned'; }]) {
+    const broken = structuredClone(older.manifest); mutate(broken.releases[0].assets.find(item => item.name.endsWith('macos-x64.zip')));
+    assert.throws(() => createUpdateFeeds(broken));
+  }
+});
+
+test('CI passes optional signing inputs only to mac jobs and verifies packages before publication', async () => {
+  const workflow = await readFile(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8');
+  for (const key of ['MAC_CSC_LINK', 'MAC_CSC_KEY_PASSWORD', 'MAC_SIGNING_IDENTITY', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) assert.ok(workflow.includes(`matrix.platform == 'macos' && secrets.${key}`));
+  assert.match(workflow, /needs: \[validate, package\]/);
+  assert.doesNotMatch(workflow, /continue-on-error: true/);
+  const source = await readFile(path.join(__dirname, '../scripts/release-publish.mjs'), 'utf8');
+  assert.ok(source.indexOf('verifyUploaded(existing, false)') < source.indexOf("'--draft=false'"));
+  assert.match(source, /loadUpdateReceipts\(\[existing\]/);
+});
+
+
+test('real asar bundles retain target-specific support and reject missing or redirected updater config', async () => {
+  const { createPackage } = require('@electron/asar');
+  const { packageSupport, verifyPackagedSupport } = await packaging;
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-package-support-'));
+  const source = path.join(directory, 'source');
+  const resources = path.join(directory, 'resources');
+  const feed = 'https://blincho.app/updates/win32/x64/';
+  try {
+    await mkdir(path.join(source, 'electron'), { recursive: true });
+    await mkdir(resources);
+    for (const target of ['nsis', 'portable']) {
+      const support = packageSupport('win32', 'x64', target);
+      await writeFile(path.join(source, 'electron/update-support.json'), JSON.stringify(support));
+      await createPackage(source, path.join(resources, 'app.asar'));
+      await writeFile(path.join(resources, 'app-update.yml'), JSON.stringify({ provider: 'generic', url: feed }));
+      await verifyPackagedSupport(resources, support, feed);
+      await assert.rejects(verifyPackagedSupport(resources, { ...support, arch: 'arm64' }, feed), /support does not match/);
+      await writeFile(path.join(resources, 'app-update.yml'), JSON.stringify({ provider: 'generic', url: 'https://evil.example/' }));
+      await assert.rejects(verifyPackagedSupport(resources, support, feed), /canonical target/);
+      await rm(path.join(resources, 'app-update.yml'));
+      await assert.rejects(verifyPackagedSupport(resources, support, feed), /ENOENT/);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('feed writer creates isolated architecture paths and refuses a hashless manifest injection before writing', async () => {
+  const { writeUpdateFeeds } = await feeds;
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-feed-output-'));
+  try {
+    const f = await fixture(version, true);
+    const result = await writeUpdateFeeds(f.manifest, directory);
+    for (const item of result) assert.deepEqual(JSON.parse(await readFile(path.join(directory, item.path), 'utf8')), item.info);
+    assert.ok(result.some(item => item.path === 'updates/linux/arm64/latest-linux-arm64.yml'));
+    assert.ok(result.some(item => item.path === 'updates/linux/x64/latest-linux.yml'));
+    const injected = structuredClone(f.manifest);
+    delete injected.releases[0].assets.find(item => item.updateSupport === 'nsis').sha512;
+    await assert.rejects(writeUpdateFeeds(injected, path.join(directory, 'rejected')), /verified update asset/);
+    await assert.rejects(readFile(path.join(directory, 'rejected/updates/darwin/x64/latest-mac.yml')), /ENOENT/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+
+test('website renders per-download signing and emits feeds only from validated manifest data', async () => {
+  const { execFileSync } = require('node:child_process');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-release-site-'));
+  const root = path.resolve(__dirname, '..');
+  try {
+    await cp(path.join(root, 'site'), path.join(directory, 'site'), { recursive: true });
+    await mkdir(path.join(directory, 'scripts'));
+    await mkdir(path.join(directory, 'assets'));
+    for (const name of ['release-lib.mjs', 'update-feed.mjs']) await cp(path.join(root, 'scripts', name), path.join(directory, 'scripts', name));
+    await cp(path.join(root, 'assets/icon.png'), path.join(directory, 'assets/icon.png'));
+    // Fixture copy only. The translation worker owns the product catalogues.
+    const labels = { 'download.signedNotarized': 'Verified signed fixture', 'download.unsigned': 'Unsigned fixture', 'download.signingUnknown': 'Unknown fixture', 'download.inAppUpdates': 'In-app fixture', 'download.manualUpdates': 'Manual fixture' };
+    for (const name of await readdir(path.join(directory, 'site/locales'))) {
+      const file = path.join(directory, 'site/locales', name);
+      const catalog = JSON.parse(await readFile(file, 'utf8'));
+      await writeFile(file, JSON.stringify({ ...catalog, ...labels }));
+    }
+    const f = await fixture(version, true);
+    await writeFile(path.join(directory, 'site/releases.json'), JSON.stringify(f.manifest));
+    execFileSync(process.execPath, ['site/build.mjs'], { cwd: directory });
+    const html = await readFile(path.join(directory, 'site-dist/en/index.html'), 'utf8');
+    const links = [...html.matchAll(/<a class="download-file" href="([^"]+)">([\s\S]*?)<\/a>/g)];
+    assert.equal(links.length, 10);
+    for (const [, url, content] of links) {
+      assert.ok(content.includes(url.includes('-macos-') ? labels['download.signedNotarized'] : labels['download.unsigned']));
+      assert.ok(content.includes(url.endsWith('-portable.exe') || url.endsWith('.tar.gz') ? labels['download.manualUpdates'] : labels['download.inAppUpdates']));
+    }
+    assert.equal(JSON.parse(await readFile(path.join(directory, 'site-dist/updates/linux/arm64/latest-linux-arm64.yml'), 'utf8')).version, version);
+    f.manifest.releases[0].assets.find(item => item.updateSupport === 'nsis').url = 'https://evil.example/update.exe';
+    await writeFile(path.join(directory, 'site/releases.json'), JSON.stringify(f.manifest));
+    assert.throws(() => execFileSync(process.execPath, ['site/build.mjs'], { cwd: directory, stdio: 'pipe' }), /Invalid verified update asset/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

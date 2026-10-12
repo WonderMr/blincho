@@ -1626,6 +1626,8 @@ html[dir="rtl"] input:checked + .slider:before { transform: translateX(-22px); }
 html[dir="rtl"] .section-eyebrow { letter-spacing: 0; text-transform: none; }
 html[dir="rtl"] .dashboard-title, html[dir="rtl"] .view-header h2 { letter-spacing: 0; }
 html[dir="rtl"] .technique-card-footer .btn > svg:last-child { transform: scaleX(-1); }
+/* Preserve connected letter shaping and vowel marks in supported scripts. */
+html:is(:lang(ar), :lang(fa), :lang(ur), :lang(hi), :lang(bn), :lang(ta), :lang(te), :lang(th)) :is(h1, h2, h3, h4, h5, h6, .section-eyebrow) { letter-spacing: normal; line-height: 1.5; text-transform: none; }
 html[lang="ar"] body { line-height: 1.8; }
 html[lang="ar"] .timer-help, html[lang="ar"] .settings-description { line-height: 1.85; }
 html[lang="zh"] .section-eyebrow, html[lang="ja"] .section-eyebrow, html[lang="ko"] .section-eyebrow { letter-spacing: 0.03em; }
@@ -1670,3 +1672,16 @@ html[lang="zh"] .section-eyebrow, html[lang="ja"] .section-eyebrow, html[lang="k
   .timer-svg-bg { stroke: GrayText; }
   .status-indicator, .weekly-chart-bar { background: Highlight; }
 }
+
+
+/* Updates use the same calm surface and stay in document flow. */
+.update-notice { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: 1.1rem 1.25rem; margin-block-end: 1.25rem; border: 1px solid var(--border-subtle); border-radius: 1rem; background: var(--bg-card); }
+.update-notice-copy { flex: 1 1 16rem; min-width: 0; }
+.update-notice-copy p { margin: .4rem 0 0; color: var(--text-secondary); line-height: 1.5; }
+.update-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }
+.update-actions .btn { white-space: normal; text-align: center; }
+.update-text-button { border: 0; background: transparent; color: var(--text-secondary); padding: .6rem .25rem; font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: .2em; }
+.update-text-button:hover { color: var(--text-primary); }
+.update-status p { margin-block: .75rem; line-height: 1.5; }
+.update-status progress { width: 100%; accent-color: var(--accent-teal); margin-block-end: 1rem; }
+.update-last-check { margin-block-start: .9rem; }

@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage, powerMonitor, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 const { performance } = require('node:perf_hooks');
 const { createLinuxSessionProbe } = require('./linuxSession.cjs');
 const { locales, isLocale, resolveLocale } = require('./locales.cjs');
+const { createUpdateController, registerUpdateIpc } = require('./updater.cjs');
 
 // Keep the existing profile across the MyEyes → Blincho rename, including
 // Chromium localStorage and the single-instance lock. Configure before ready.
@@ -22,6 +23,7 @@ let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let nativeLocale = 'en';
+let updateController = null;
 
 function preferredSystemLanguages() {
   try {
@@ -33,7 +35,7 @@ function preferredSystemLanguages() {
 function requireMainRenderer(event) {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents ||
       !event.senderFrame || event.senderFrame !== mainWindow.webContents.mainFrame) {
-    throw new Error('Language IPC is restricted to the main renderer');
+    throw new Error('IPC is restricted to the main renderer');
   }
 }
 
@@ -154,8 +156,9 @@ if (!gotTheLock) {
   app.on('second-instance', () => showMainWindow());
 }
 
-app.on('before-quit', () => {
+app.on('before-quit', event => {
   isQuitting = true;
+  updateController?.beforeQuit(event);
   powerGeneration += 1;
   linuxSession?.invalidate();
   isStrictLockActive = false;
@@ -270,6 +273,9 @@ function createWindow() {
 }
 
 // IPC Handlers
+registerUpdateIpc({ ipcMain, requireMainRenderer, getController: () => updateController,
+  openDownload: () => shell.openExternal('https://blincho.app/#download') });
+
 ipcMain.handle('get-preferred-languages', event => {
   requireMainRenderer(event);
   return preferredSystemLanguages();
@@ -455,8 +461,17 @@ ipcMain.handle('check-meeting-active', async () => {
 app.whenReady().then(() => {
   if (!gotTheLock || isQuitting) return;
   nativeLocale = resolveLocale(preferredSystemLanguages());
+  updateController = createUpdateController({
+    app, fileSystem: fs, platform: process.platform, arch: process.arch, env: process.env,
+    onState: state => {
+      if (mainWindow && !mainWindow.isDestroyed() && !isQuitting) {
+        mainWindow.webContents.send('update-state', state);
+      }
+    },
+  });
   createWindow();
   updateNativeLanguage();
+  updateController.start();
 
   // Listen to OS sleep, wake, lock and unlock to notify renderer
   powerMonitor.on('suspend', () => {

@@ -14,6 +14,22 @@ import tr from './locales/tr.json';
 import pl from './locales/pl.json';
 import uk from './locales/uk.json';
 
+import hy from './locales/hy.json';
+import bn from './locales/bn.json';
+import id from './locales/id.json';
+import vi from './locales/vi.json';
+import th from './locales/th.json';
+import fa from './locales/fa.json';
+import ur from './locales/ur.json';
+import he from './locales/he.json';
+import nl from './locales/nl.json';
+import sv from './locales/sv.json';
+import cs from './locales/cs.json';
+import ro from './locales/ro.json';
+import el from './locales/el.json';
+import ta from './locales/ta.json';
+import te from './locales/te.json';
+
 export const SUPPORTED_LANGUAGES = [
   { code: 'en', name: 'English', nativeName: 'English', locale: 'en', dir: 'ltr' },
   { code: 'ru', name: 'Russian', nativeName: 'Русский', locale: 'ru', dir: 'ltr' },
@@ -30,12 +46,27 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'tr', name: 'Turkish', nativeName: 'Türkçe', locale: 'tr', dir: 'ltr' },
   { code: 'pl', name: 'Polish', nativeName: 'Polski', locale: 'pl', dir: 'ltr' },
   { code: 'uk', name: 'Ukrainian', nativeName: 'Українська', locale: 'uk', dir: 'ltr' },
+  { code: 'hy', name: 'Armenian', nativeName: 'Հայերեն', locale: 'hy', dir: 'ltr' },
+  { code: 'bn', name: 'Bengali', nativeName: 'বাংলা', locale: 'bn', dir: 'ltr' },
+  { code: 'id', name: 'Indonesian', nativeName: 'Bahasa Indonesia', locale: 'id', dir: 'ltr' },
+  { code: 'vi', name: 'Vietnamese', nativeName: 'Tiếng Việt', locale: 'vi', dir: 'ltr' },
+  { code: 'th', name: 'Thai', nativeName: 'ไทย', locale: 'th', dir: 'ltr' },
+  { code: 'fa', name: 'Persian', nativeName: 'فارسی', locale: 'fa', dir: 'rtl' },
+  { code: 'ur', name: 'Urdu', nativeName: 'اردو', locale: 'ur', dir: 'rtl' },
+  { code: 'he', name: 'Hebrew', nativeName: 'עברית', locale: 'he', dir: 'rtl' },
+  { code: 'nl', name: 'Dutch', nativeName: 'Nederlands', locale: 'nl', dir: 'ltr' },
+  { code: 'sv', name: 'Swedish', nativeName: 'Svenska', locale: 'sv', dir: 'ltr' },
+  { code: 'cs', name: 'Czech', nativeName: 'Čeština', locale: 'cs', dir: 'ltr' },
+  { code: 'ro', name: 'Romanian', nativeName: 'Română', locale: 'ro', dir: 'ltr' },
+  { code: 'el', name: 'Greek', nativeName: 'Ελληνικά', locale: 'el', dir: 'ltr' },
+  { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்', locale: 'ta', dir: 'ltr' },
+  { code: 'te', name: 'Telugu', nativeName: 'తెలుగు', locale: 'te', dir: 'ltr' },
 ] as const;
 
 export type Locale = typeof SUPPORTED_LANGUAGES[number]['code'];
 export type LanguagePreference = Locale | 'auto';
 export type TranslationVariables = Record<string, string | number>;
-const catalogs: Record<Locale, Record<string, string>> = { en, ru, es, fr, de, it, pt, zh, ja, ko, ar, hi, tr, pl, uk };
+const catalogs: Record<Locale, Record<string, string>> = { en, ru, es, fr, de, it, pt, zh, ja, ko, ar, hi, tr, pl, uk, hy, bn, id, vi, th, fa, ur, he, nl, sv, cs, ro, el, ta, te };
 export const LANGUAGE_STORAGE_KEY = 'blincho-language-v1';
 const listeners = new Set<() => void>();
 let revision = 0;

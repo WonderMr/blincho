@@ -43,11 +43,11 @@ function runtimeHarness({ languages = [], language = '', storage = new Map(), st
 
 test('language matching follows the entire ordered preference list and regional tags', () => {
   const { runtime } = runtimeHarness();
-  assert.equal(runtime.SUPPORTED_LANGUAGES.length, 15);
+  assert.equal(runtime.SUPPORTED_LANGUAGES.length, 30);
   for (const [preferences, expected] of [
     [['xx-ZZ', 'fr-CA', 'de-DE'], 'fr'], [['es-MX'], 'es'], [['pt-PT'], 'pt'],
     [['zh-Hans-CN'], 'zh'], [['zh-TW'], 'zh'], [['EN_us'], 'en'], [['uk-UA'], 'uk'],
-    [['xx', 'zz'], 'en'], [[], 'en'], [[null, 123, 'ko-KR'], 'ko'],
+    [['hy-AM'], 'hy'], [['bn-BD'], 'bn'], [['ur-PK'], 'ur'], [['he-IL'], 'he'], [['fa_IR'], 'fa'], [['ta-IN'], 'ta'], [['te-IN'], 'te'], [['xx', 'zz'], 'en'], [[], 'en'], [[null, 123, 'ko-KR'], 'ko'],
   ]) assert.equal(runtime.resolveLocale(preferences), expected);
 });
 
@@ -100,6 +100,24 @@ test('suggestion acknowledgement publishes even if effective locale stays unchan
   unsubscribe(); h.runtime.setLanguagePreference('en');
   assert.equal(updates, 1);
   assert.equal(h.document.documentElement.dir, 'ltr');
+});
+
+test('all thirty locales persist, restore direction and synchronize with native menus', async () => {
+  const { locales, resolveLocale } = require('../electron/locales.cjs');
+  const initial = runtimeHarness();
+  assert.deepEqual(Array.from(initial.runtime.SUPPORTED_LANGUAGES, item => item.code).sort(), Object.keys(locales).sort());
+  for (const language of initial.runtime.SUPPORTED_LANGUAGES) {
+    const storage = new Map();
+    const h = runtimeHarness({ languages: ['en'], storage, bridge: () => Promise.resolve(['en']) });
+    await h.runtime.initializeLanguage();
+    h.runtime.setLanguagePreference(language.code);
+    assert.equal(h.document.documentElement.lang, language.locale);
+    assert.equal(h.document.documentElement.dir, ['ar','fa','ur','he'].includes(language.code) ? 'rtl' : 'ltr');
+    assert.equal(h.nativeUpdates.at(-1), language.code);
+    assert.equal(runtimeHarness({ languages: ['en'], storage }).runtime.getLocale(), language.code);
+    assert.equal(h.runtime.resolveLocale([language.locale]), language.code);
+    assert.equal(resolveLocale([language.locale]), language.code);
+  }
 });
 
 test('system preferences outrank browser and manual choice wins an asynchronous detection race', async () => {
@@ -191,10 +209,11 @@ async function nativeHarness(languages = ['unsupported', 'es-MX']) {
 
 test('native locales are complete and IPC only accepts main-frame canonical locale updates', async () => {
   const { locales, isLocale } = require('../electron/locales.cjs');
-  assert.equal(Object.keys(locales).length, 15);
+  assert.equal(Object.keys(locales).length, 30);
   for (const dictionary of Object.values(locales)) {
     assert.deepEqual(Object.keys(dictionary), Object.keys(locales.en));
     assert(Object.values(dictionary).every(value => typeof value === 'string' && value.length > 0));
+    assert(Object.values(dictionary).every(value => !/[\u2014\u2015]|\s\u2013\s/.test(value)));
   }
   assert.equal(isLocale('__proto__'), false);
   const h = await nativeHarness();

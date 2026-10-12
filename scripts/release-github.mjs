@@ -1,4 +1,4 @@
-import { REPOSITORY, assertRepository, versionFromTag, parseChecksums, createManifest } from './release-lib.mjs';
+import { REPOSITORY, assertRepository, versionFromTag, parseChecksums, createManifest, usesUpdateReceipts, expectedReceipts, validateReceipt, validateReceiptSet, receiptName } from './release-lib.mjs';
 import { createHash } from 'node:crypto';
 
 async function boundedText(response, limit) {
@@ -59,5 +59,35 @@ export async function loadChecksums(releases, { repository = REPOSITORY, fetchIm
 export async function fetchManifest(options = {}) {
   const releases = await listReleases(options);
   const checksumsByTag = await loadChecksums(releases, options);
-  return createManifest(releases, { ...options, checksumsByTag });
+  const receiptsByTag = await loadUpdateReceipts(releases, checksumsByTag, options);
+  return createManifest(releases, { ...options, checksumsByTag, receiptsByTag });
+}
+
+
+export async function loadUpdateReceipts(releases, checksumsByTag, { repository = REPOSITORY, fetchImpl = fetch } = {}) {
+  assertRepository(repository);
+  const result = new Map();
+  for (const release of releases) {
+    if (release?.draft === true || typeof release?.tag_name !== 'string' || !/^v\d+\.\d+\.\d+$/.test(release.tag_name)) continue;
+    const version = versionFromTag(release.tag_name);
+    if (!usesUpdateReceipts(version)) continue;
+    const receipts = [];
+    for (const name of expectedReceipts(version)) {
+      const matches = release.assets?.filter(item => item.name === name);
+      if (matches?.length !== 1) throw new Error('Missing or duplicate update receipt asset');
+      const asset = matches[0];
+      const expectedUrl = `https://github.com/${repository}/releases/download/${release.tag_name}/${name}`;
+      const checksum = checksumsByTag.get(release.tag_name)?.get(name);
+      if (asset.browser_download_url !== expectedUrl || asset.state !== 'uploaded' || !Number.isSafeInteger(asset.size) || asset.size <= 0 || asset.size > 65536 || !checksum || asset.digest !== `sha256:${checksum}`) throw new Error('Invalid or unverified update receipt asset');
+      const response = await fetchImpl(expectedUrl, { signal: AbortSignal.timeout(30_000) });
+      if (!response.ok) throw new Error(`Update receipt download failed (${response.status})`);
+      const text = await boundedText(response, 65536);
+      if (Buffer.byteLength(text) !== asset.size || createHash('sha256').update(text).digest('hex') !== checksum) throw new Error('Update receipt bytes differ from verified digest');
+      const receipt = validateReceipt(JSON.parse(text), version);
+      if (name !== receiptName(version, receipt.platform, receipt.arch)) throw new Error('Update receipt filename mismatch');
+      receipts.push(receipt);
+    }
+    result.set(release.tag_name, validateReceiptSet(receipts, version));
+  }
+  return result;
 }

@@ -29,3 +29,13 @@ test('theme cycles system, light, dark and system; storage failure does not brea
  assert.equal(r.attrs['aria-label'],'System theme');
  r.select.value='ar';r.events.language();assert.deepEqual(r.calls,['/ar/?test=1#download']);
 });
+test('every app locale can be detected, selected and restored on the website',()=>{
+ for(const language of Object.keys(require('../electron/locales.cjs').locales)){
+  assert.deepEqual(run({language:`${language}-XX`}).calls,[`/${language}/?test=1#download`]);
+  const page=run({pathname:'/en/'});
+  page.select.value=language;page.events.language();
+  assert.equal(page.data['blincho-site-language'],language);
+  assert.deepEqual(page.calls,[`/${language}/?test=1#download`]);
+  assert.deepEqual(run({language:'en',stored:page.data}).calls,[`/${language}/?test=1#download`]);
+ }
+});

@@ -9,7 +9,7 @@ test('switching locale preserves the running deadline, statistics and stored tim
     const before = h.captured.TimerWidget.secondsRemaining;
     const settings = h.store.get('myeyes_settings_v1');
     const history = h.store.get('myeyes_stats_v1');
-    for (const language of ['de','ar','zh','en','ru']) {
+    for (const language of Object.keys(require('../electron/locales.cjs').locales)) {
       await h.setLanguage(language);
       assert.equal(h.captured.TimerWidget.secondsRemaining, before);
       assert.equal(h.captured.TimerWidget.phase, 'work');
@@ -29,7 +29,7 @@ test('locale changes cannot resume manual, locked or suspended sessions or credi
       if (phase === 'manual') await h.call('TimerWidget','onTogglePlay');
       else await h.power(phase === 'locked' ? 'lock-screen' : 'suspend');
       const before = h.captured.TimerWidget.secondsRemaining;
-      await h.setLanguage('ar'); await h.advance(30000); await h.setLanguage('ru');
+      await h.setLanguage('hy'); await h.advance(30000); await h.setLanguage('fa');
       assert.equal(h.captured.TimerWidget.phase, phase);
       assert.equal(h.captured.TimerWidget.secondsRemaining, before);
       assert.equal(h.stats().breaksCompleted, 0);

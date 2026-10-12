@@ -26,6 +26,8 @@ import { StatisticsView } from './components/StatisticsView';
 import { SettingsModal } from './components/SettingsModal';
 import { LanguageSuggestion } from './components/LanguageSuggestion';
 import { TransientNotice } from './components/TransientNotice';
+import { UpdateNotice } from './components/UpdateSettings';
+import { useUpdates } from './utils/updates';
 
 import {
   BookOpen, Play, Lock, Video, UserCheck
@@ -33,6 +35,7 @@ import {
 
 export const App: React.FC = () => {
   useI18n();
+  const updates = useUpdates();
   const [settings, setSettings] = useState<AppSettings>(() => normalizeTimerSettings(loadSettings()));
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -573,6 +576,8 @@ export const App: React.FC = () => {
 
         <main className="main-content">
           <LanguageSuggestion onChooseLanguage={() => setIsSettingsOpen(true)} />
+          <UpdateNotice updates={updates} suspended={isIdlePaused || isSettingsOpen || isBreakActive || !!activeTechnique}
+            onSettings={() => setIsSettingsOpen(true)} />
 
           {activeTab === 'timer' && <div className="dashboard-header">
             <span className="dashboard-eyebrow">{t("Сегодня")}</span>
@@ -706,6 +711,7 @@ export const App: React.FC = () => {
       {/* Settings Modal */}
       {isSettingsOpen && (
         <SettingsModal
+          updates={updates}
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
           onClose={() => setIsSettingsOpen(false)}

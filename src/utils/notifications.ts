@@ -1,8 +1,9 @@
 // Cross-platform Notification Dispatcher (Electron IPC & Web Notifications)
+import type { UpdateBridge } from './updates';
 
 declare global {
   interface Window {
-    electronAPI?: {
+    electronAPI?: UpdateBridge & {
       showNotification: (title: string, body: string) => void;
       flashWindow: () => void;
       setAlwaysOnTop: (flag: boolean) => void;

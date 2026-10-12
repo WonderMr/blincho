@@ -42,7 +42,7 @@ jobs:
 
   package:
     needs: validate
-    name: Package ${{ matrix.platform }} ${{ matrix.architecture }} (unsigned beta)
+    name: Package ${{ matrix.platform }} ${{ matrix.architecture }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -72,6 +72,13 @@ jobs:
       - run: npm run build
       - name: Build native packages
         run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
+        env:
+          CSC_LINK: ${{ matrix.platform == 'macos' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          BLINCHO_MAC_SIGNING_IDENTITY: ${{ matrix.platform == 'macos' && secrets.MAC_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'macos' && secrets.APPLE_TEAM_ID || '' }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: packages-${{ matrix.platform }}-${{ matrix.architecture }}
@@ -101,7 +108,7 @@ jobs:
           path: release-upload
       - name: Require every platform artifact and hash the exact bytes
         run: node scripts/release-checksums.mjs
-      - name: Upload draft, verify digests, then publish unsigned beta
+      - name: Upload draft, verify packages and update receipts, then publish beta
         run: node scripts/release-publish.mjs
         env:
           GH_TOKEN: ${{ github.token }}

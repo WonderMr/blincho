@@ -1,4 +1,4 @@
-const languages = ['en','ru','es','fr','de','it','pt','zh','ja','ko','ar','hi','tr','pl','uk'];
+const languages = ['en','ru','es','fr','de','it','pt','zh','ja','ko','ar','hi','tr','pl','uk','hy','bn','id','vi','th','fa','ur','he','nl','sv','cs','ro','el','ta','te'];
 function read(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function save(key, value) { try { localStorage.setItem(key, value); } catch { /* Session choice still works. */ } }
 function match(values) {

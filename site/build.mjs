@@ -1,11 +1,12 @@
 import {readFile, writeFile, mkdir, cp, rm} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import { writeUpdateFeeds, createUpdateFeeds } from '../scripts/update-feed.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = path.join(root, 'site');
 const output = path.join(root, 'site-dist');
-const languages = ['en','ru','es','fr','de','it','pt','zh','ja','ko','ar','hi','tr','pl','uk'];
+const languages = ['en','ru','es','fr','de','it','pt','zh','ja','ko','ar','hi','tr','pl','uk','hy','bn','id','vi','th','fa','ur','he','nl','sv','cs','ro','el','ta','te'];
 const htmlLocales = {pt:'pt-BR', zh:'zh-CN'};
 const config = JSON.parse(await readFile(path.join(source, 'config.json'), 'utf8'));
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -17,6 +18,7 @@ let manifest;
 try { manifest=JSON.parse(await readFile(path.join(source, 'releases.json'), 'utf8')); }
 catch (error) { if (error.code !== 'ENOENT') throw error; manifest={schemaVersion:1, releases:[], latest:null}; }
 if (!Array.isArray(manifest.releases)) throw new Error('Invalid release manifest');
+createUpdateFeeds(manifest);
 const releaseUrl = value => {
   const url = new URL(value);
   if (url.origin !== 'https://github.com' || !url.pathname.startsWith(`/${config.repository}/releases/`)) throw new Error('Unexpected release URL');
@@ -42,7 +44,7 @@ for (const lang of languages) {
       return pattern.test(tag)?tag.replace(pattern,`${attr}="${t(key)}"`):tag.replace(/>$/,` ${attr}="${t(key)}">`);
     });
   }
-  html=html.replace(/<html[^>]*>/,`<html lang="${htmlLocales[lang]||lang}" dir="${lang==='ar'?'rtl':'ltr'}">`);
+  html=html.replace(/<html[^>]*>/,`<html lang="${htmlLocales[lang]||lang}" dir="${['ar','fa','ur','he'].includes(lang)?'rtl':'ltr'}">`);
   html=html.replace(/<\/head>/,`<link rel="canonical" href="${config.origin}/${lang}/">\n${languages.map(l=>`<link rel="alternate" hreflang="${htmlLocales[l]||l}" href="${config.origin}/${l}/">`).join('\n')}\n<link rel="alternate" hreflang="x-default" href="${config.origin}/">\n<meta property="og:title" content="${t('meta.title')}"><meta property="og:description" content="${t('meta.description')}"><meta property="og:image" content="${config.origin}/assets/icon.png"><meta property="og:url" content="${config.origin}/${lang}/"><meta property="og:type" content="website"></head>`);
   html=html.replace(/(<button[^>]+id="theme-toggle")/,`$1 data-system="${t('control.theme.system')}" data-light="${t('control.theme.light')}" data-dark="${t('control.theme.dark')}"`);
   html=html.replace(new RegExp(`(<option value="${lang}")`),'$1 selected');
@@ -55,7 +57,7 @@ for (const lang of languages) {
     const links=assets.map(a=>{
       if(!/^[a-f0-9]{64}$/.test(a.sha256)||!Number.isSafeInteger(a.size)||a.size<=0)throw new Error('Invalid download metadata');
       const arch=platform==='macos'?(a.architecture==='arm64'?'Apple silicon':'Intel'):(a.architecture==='arm64'?'ARM64':'x64');
-      return `<a class="download-file" href="${releaseUrl(a.url)}"><span class="download-file-label">${arch} · ${escape(a.format)}</span><span class="download-file-detail">${t(a.kind==='installer'?'download.installer':'download.portable')} · ${(a.size/1048576).toFixed(1)} MB ↗</span></a>`;
+      return `<a class="download-file" href="${releaseUrl(a.url)}"><span class="download-file-label">${arch} · ${escape(a.format)}</span><span class="download-file-detail">${t(a.kind==='installer'?'download.installer':'download.portable')} · ${(a.size/1048576).toFixed(1)} MB ↗</span><span class="download-file-detail">${t(a.signing==='signed-notarized'?'download.signedNotarized':a.signing==='unsigned'?'download.unsigned':'download.signingUnknown')} · ${t(['mac-signed','nsis','appimage'].includes(a.updateSupport)?'download.inAppUpdates':'download.manualUpdates')}</span></a>`;
     }).join('');
     return open+(links||`<p>${t('download.preparing')}</p>`)+close;
   });
@@ -75,5 +77,6 @@ for (const lang of languages) {
 await writeFile(path.join(output,'robots.txt'),`User-agent: *\nAllow: /\nSitemap: ${config.origin}/sitemap.xml\n`);
 await writeFile(path.join(output,'sitemap.xml'),`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${languages.map(l=>`<url><loc>${config.origin}/${l}/</loc></url>`).join('')}</urlset>`);
 await writeFile(path.join(output,'releases.json'),JSON.stringify(manifest,null,2)+'\n');
+await writeUpdateFeeds(manifest, output);
 await writeFile(path.join(output,'404.html'),'<!doctype html><html lang="en"><meta charset="utf-8"><title>Blincho: 404</title><body><h1>404</h1><a href="/">Blincho</a></body></html>');
 console.log(`Built ${languages.length} language pages; ${manifest.releases.length} releases.`);

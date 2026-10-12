@@ -10,6 +10,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   meetingDetectionSupported: process.platform === 'darwin',
   getPreferredLanguages: () => ipcRenderer.invoke('get-preferred-languages'),
   setLocale: (locale) => ipcRenderer.invoke('set-locale', locale),
+  getUpdateState: () => ipcRenderer.invoke('get-update-state'),
+  setUpdatePolicy: (policy) => ipcRenderer.invoke('set-update-policy', policy),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: (version) => ipcRenderer.invoke('download-update', version),
+  skipUpdate: (version) => ipcRenderer.invoke('skip-update', version),
+  openUpdateDownload: () => ipcRenderer.invoke('open-update-download'),
+  onUpdateState: (callback) => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('update-state', listener);
+    return () => ipcRenderer.removeListener('update-state', listener);
+  },
   showNotification: (title, body) => {
     ipcRenderer.send('show-notification', { title, body });
   },

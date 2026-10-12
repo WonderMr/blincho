@@ -242,6 +242,8 @@ h1 { margin-block: 24px; font-size: clamp(55px, 5.8vw, 82px); line-height: 1.035
 [dir="rtl"] .app-preview { transform: rotate(-2deg); }
 [dir="rtl"] .preview-note { transform: rotate(4deg); }
 [dir="rtl"] h1, [dir="rtl"] h2 { letter-spacing: 0; }
+/* Connected scripts need natural spacing and room for marks above and below letters. */
+:is(:lang(ar), :lang(fa), :lang(ur), :lang(hi), :lang(bn), :lang(ta), :lang(te), :lang(th)) :is(h1, h2, h3, .eyebrow) { letter-spacing: normal; line-height: 1.4; text-transform: none; }
 @media (min-width: 1440px) { .hero { padding-block: 117px 119px; } }
 @media (max-width: 1100px) {
   .wrap { width: calc(100% - 64px); }

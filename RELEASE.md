@@ -1,114 +1,82 @@
-# Releasing Blincho
+# Desktop releases and update feeds
 
-The `Release desktop packages and website` GitHub Actions workflow starts when an existing `vX.Y.Z` tag is pushed. It can also be started manually with that tag. The tag must exactly match `package.json` and both root versions in `package-lock.json`. Add a curated `## [X.Y.Z]` section with meaningful bullet points to `CHANGELOG.md` before tagging.
-
-All current desktop releases are **unsigned beta builds**. macOS packages are not notarized. Windows packages have no trusted publisher signature. The GitHub release is marked as a prerelease, and the website exposes this status. A successful package build does not establish that installation or every system integration has been tested on a physical computer.
-
-## Initial repository setup
-
-Use the public repository `WonderMr/blincho`. The scripts intentionally reject a different repository, so a fork cannot accidentally publish downloads under the official name. Merge the release workflow into `main` before tagging that commit. GitHub's built-in workflow token has repository `contents: write` only in the publication job. No personal GitHub token is required.
-
-Enable Actions, permit the pinned official GitHub actions, and allow the release workflow to write repository contents. Configure tag protection or a repository ruleset so only maintainers can create release tags. Avoid moving or reusing a published tag. Release immutability can provide additional protection.
-
-Create these Actions secrets at repository level or in the `production` environment:
-
-| Secret | Required value |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` | A token scoped to the deployment account and relevant zones using Cloudflare's **Edit Cloudflare Workers** template. It needs Worker deployment access and access to the custom domain routes configured in `wrangler.jsonc`. |
-| `CLOUDFLARE_ACCOUNT_ID` | `c5768935c9474bc1c561a7a0868e97ec` |
-
-The Worker is `blincho-site`. Its account and domains must agree with `wrangler.jsonc`; the primary domain is `blincho.app`, with the configured `.com` redirects. A local Wrangler OAuth session is not available inside GitHub Actions. A CI token is required even after a successful local deployment. A missing secret produces an explicit deployment failure; the existing website stays in place and the published desktop release remains available.
-
-If the `production` environment requires approval in repository settings, GitHub pauses there. The workflow does not create an approval requirement by itself. Restrict who can modify the release workflow because it receives deployment credentials in its final step.
-
-## Native packages
-
-Every platform job runs `npm ci`, the test suite and `npm run build`, then uses the installed and locked `electron-builder`. No job cross-compiles another platform or CPU architecture.
-
-| Runner | Architecture | Packages |
-| --- | --- | --- |
-| `macos-15` | ARM64 | ZIP containing the macOS app |
-| `macos-15-intel` | x64 | ZIP containing the macOS app |
-| `windows-11-arm` | ARM64 | NSIS installer and portable EXE |
-| `windows-2022` | x64 | NSIS installer and portable EXE |
-| `ubuntu-24.04-arm` | ARM64 | AppImage and tar.gz |
-| `ubuntu-24.04` | x64 | AppImage and tar.gz |
-
-Runner labels are explicit to avoid a moving `latest` OS image. The CPU architecture is checked at runtime. If any runner is unavailable or its packaging tools fail, publication and deployment are blocked. ARM64 packaging, installers, first launch, desktop notifications, tray behavior, session lock and sleep still need real platform checks in addition to CI. Linux desktop behavior depends on the session's logind and idle support as described in the application documentation.
-
-The filename contract is:
-
-```text
-Blincho-X.Y.Z-macos-arm64.zip
-Blincho-X.Y.Z-macos-x64.zip
-Blincho-X.Y.Z-windows-arm64-setup.exe
-Blincho-X.Y.Z-windows-arm64-portable.exe
-Blincho-X.Y.Z-windows-x64-setup.exe
-Blincho-X.Y.Z-windows-x64-portable.exe
-Blincho-X.Y.Z-linux-arm64.AppImage
-Blincho-X.Y.Z-linux-arm64.tar.gz
-Blincho-X.Y.Z-linux-x64.AppImage
-Blincho-X.Y.Z-linux-x64.tar.gz
-SHA256SUMS.txt
-```
-
-Only these ten packages and the checksum document are uploaded. Unpacked apps, build logs and local environment files are excluded. GitHub also supplies its own source code archives.
+The release pipeline builds native macOS, Windows and Linux packages for x64 and arm64. `com.myeyes.app` remains the application ID so existing installations retain their identity and data. The package version, lockfile versions and `vX.Y.Z` tag must match. Curated notes come from that version's `CHANGELOG.md` section.
 
 ## Publish a version
 
-For example, after making and reviewing the release changes:
+After reviewing and merging the version and changelog, create and push its version tag. The workflow also accepts an existing version tag for a retry. Do not move or recreate an existing tag.
+
+1. Validate the tag, lockfile, tests and browser build.
+2. Build on six native OS and architecture runners. All six jobs must succeed.
+3. Verify the ten packages and six update receipts against their actual bytes. Generate `SHA256SUMS.txt` over all sixteen files, upload a draft, compare GitHub digests and sizes, validate the complete metadata, then publish the beta prerelease.
+4. Read every published release, verify its checksums and receipts, generate the release manifest and generic update feeds, build the localized website, validate the Worker bundle and deploy the site and feeds together.
+
+A failed build or verification stops publication. A failed upload leaves a draft. Only a matching draft can be resumed. Published assets are never replaced on retry; their existing checksums, receipts and signing information are verified again. A signing configuration change therefore does not relabel previously published unsigned packages.
+
+The highest numeric version is latest. Retrying an older tag does not deploy its older website over a newer release. Historical releases remain in the manifest. Older releases without update receipts stay visible with their known downloads and no invented in-app update capability. Unknown historical signing remains unknown at the download level.
+
+## Package support
+
+| Package | In-app updates | Signing label |
+| --- | --- | --- |
+| macOS zip with verified Developer ID signature and notarization | Supported | Signed and notarized |
+| Unsigned macOS zip | Manual | Unsigned |
+| Installed Windows NSIS setup | Supported | Unsigned |
+| Windows portable executable | Manual | Unsigned |
+| Linux AppImage launched as an AppImage | Supported | Unsigned |
+| Linux tar.gz | Manual | Unsigned |
+
+Each target is built separately with `electron/update-support.json` inside its application archive and `resources/app-update.yml` outside it. The support document identifies schema version, runtime platform, architecture, package type and signing status. The runtime also checks that NSIS is installed and that the running Linux package is an AppImage. The portable/archive packages explicitly bundle `manual` support. Generated source support metadata is restored or removed after packaging and is ignored by Git.
+
+## Optional macOS signing
+
+Without any of the following secrets the macOS jobs produce an explicitly unsigned beta with manual updates. Providing only some secrets fails the job. Supply all six through GitHub Actions secrets to enable signing:
+
+| Secret | Value |
+| --- | --- |
+| `MAC_CSC_LINK` | Existing Developer ID Application certificate and private key exported as password-protected PKCS#12, encoded as base64 |
+| `MAC_CSC_KEY_PASSWORD` | Password protecting that certificate export |
+| `MAC_SIGNING_IDENTITY` | Certificate owner qualifier, including team when needed, without the `Developer ID Application:` prefix |
+| `APPLE_ID` | Apple account used for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | Existing app-specific notarization password |
+| `APPLE_TEAM_ID` | Ten-character Apple Developer team ID |
+
+These inputs reach only the macOS packaging step. Certificate auto-discovery is disabled; signing uses the specified identity, requires distribution signing and enables hardened runtime and notarization with the installed electron-builder 26 API. Credentials are never printed or stored in a release receipt. This workflow does not create accounts, certificates, keys or API credentials.
+
+After signing and notarization, and before zip creation, the job requires `codesign --verify --deep --strict`, a Developer ID authority matching the configured team and hardened runtime, `xcrun stapler validate`, and Gatekeeper assessment. Failure stops packaging. The provisional signed support flag cannot reach publication without these checks. Signed macOS packages do not imply that Windows or Linux packages are signed. Windows signing is not configured.
+
+## Receipts and manifest
+
+Each native job writes `Blincho-X.Y.Z-updates-{darwin|win32|linux}-{x64|arm64}.json`. Every receipt identifies its version, runtime platform and architecture and describes only that target's packages: public filename, size, SHA-256, SHA-512, package type, signed/notarized flags and verified bundled updater configuration. The publication gate requires exactly six receipts, compares both hashes against local package bytes, and hashes the receipt bytes in `SHA256SUMS.txt` along with the packages.
+
+The manifest builder accepts only canonical `https://github.com/WonderMr/blincho/releases/download/vX.Y.Z/FILENAME` asset URLs. For releases from 1.4.0 onward it downloads every receipt, compares its bytes with both the checksum list and GitHub's asset digest, and requires each referenced package's size and SHA-256 to match GitHub metadata. Package SHA-512 values are established by the byte-level publication gate and carried in the digest-verified receipts. The site build consumes this verified manifest; it does not independently download packages.
+
+`site/releases.json` retains `schemaVersion: 1`, `generatedAt`, `repository`, `latest` and the descending `releases` array. Each download additionally carries `signing` (`signed-notarized`, `unsigned`, `unknown`), `updateSupport` (`mac-signed`, `nsis`, `appimage`, `manual`) and SHA-512 when verified by a receipt. Release-level signing is `mixed` if any macOS package is signed, `unsigned` if all modern packages are unsigned, or the historical value. Website labels use each download's own status.
+
+## Feed compatibility
+
+Each feed directory selects the highest compatible verified release for its own platform and architecture. Unsigned macOS packages never enter a macOS update feed. If a later release is unsigned, an earlier compatible signed macOS feed remains available. The runtime refuses version downgrades. Windows portable and Linux archives never enter feeds.
+
+| Runtime target | Canonical channel path |
+| --- | --- |
+| macOS x64 / arm64 | `/updates/darwin/{arch}/latest-mac.yml` |
+| Windows x64 / arm64 | `/updates/win32/{arch}/latest.yml` |
+| Linux x64 | `/updates/linux/x64/latest-linux.yml` |
+| Linux arm64 | `/updates/linux/arm64/latest-linux-arm64.yml` |
+
+These names match the installed electron-updater 6.8.9 `Provider.getChannelFilePrefix`. Feed documents use JSON syntax, which its YAML parser accepts, and include version, release date, one exact architecture-specific HTTPS release asset URL, size and SHA-512. The x64 AppImage produced by builder uses `x86_64` internally; packaging renames it to the public `x64` filename before hashing and receipt generation. Feeds refer to the public name.
+
+The updater can fall back to full downloads when differential blockmaps are unavailable. No package blockmap is required or advertised by this pipeline. The shared deployment transaction and workflow concurrency prevent partial feed/site updates and concurrent release deployment races.
+
+## Local checks
 
 ```sh
-npm version 1.3.3 --no-git-tag-version
-# Edit CHANGELOG.md and commit all intended release changes to main first.
-npm test
-npm run build
-node site/build.mjs
-node scripts/release-check.mjs v1.3.3
-git tag -a v1.3.3 -m "Blincho 1.3.3 unsigned beta"
-git push origin main
-git push origin v1.3.3
-```
-
-Choose a new version rather than repeating this example after `1.3.3` is released. `npm version` updates both package files. The tag must point at the reviewed commit on the public repository's main branch.
-
-The workflow has four stages:
-
-1. Validate the tag, lockfile and changelog, then test and build the app.
-2. Build all six native OS and architecture combinations. All six must succeed.
-3. Require the complete ten-package set, calculate SHA-256 checksums, create a draft release, upload files, verify GitHub-reported byte sizes and digests, and publish the draft as an unsigned beta prerelease with curated notes.
-4. Read all published GitHub releases with pagination, validate their metadata and checksums, generate `site/releases.json`, build the browser app and website, validate the Worker bundle, then deploy the site and manifest together through Wrangler.
-
-A package failure never reaches publication or deployment. An upload failure leaves a draft that can be resumed. A malformed release or checksum fails manifest generation. The manifest is written through a temporary file and rename after validation, and it is never separately pushed to the live server. A website build or deployment failure leaves the previous live release list intact.
-
-Retry failed jobs from the Actions run after fixing a transient error or adding missing secrets. A full manual retry can also use the same existing tag. Already published packages are checked against their published checksums and are never replaced with a rebuilt archive. A draft is only resumed when its title, notes and beta status match this release. Unexpected drafts or changed published metadata require maintainer review.
-
-The highest numeric `X.Y.Z` is the website's latest version, including unsigned beta prereleases. Publication time does not override version ordering. Releasing or retrying an older tag does not deploy its older website/browser app over a newer release. Older published versions are included on the next current-version deployment. Non-version tags and drafts are excluded. Legacy releases without the new filename convention remain visible through their release page and notes, with no invented downloads or signing claims.
-
-## Manifest contract
-
-`site/releases.json` has `schemaVersion: 1`, an ISO `generatedAt`, `repository`, `latest` and a descending semantic-version `releases` array. Each release has `version`, `tag`, `name`, `publishedAt`, `url`, `prerelease`, `signing`, `notes`, `assets` and `checksumUrl`. `signing` is `unsigned` when the notes explicitly describe an unsigned beta, otherwise `unknown`. Legacy entries may have no recognized assets and `checksumUrl: null`.
-
-Each asset has `name`, `url`, `size`, `platform` (`macos`, `windows`, `linux`), `architecture` (`arm64`, `x64`), `format` (`zip`, `exe`, `AppImage`, `tar.gz`), `kind` (`installer`, `portable`) and a lowercase 64-character `sha256`. Only download URLs for the declared repository, tag and filename are accepted. The current release must include every required download and checksum. Notes are untrusted plain text; website rendering must escape them.
-
-To build a manifest locally after a release is public:
-
-```sh
-node scripts/release-manifest.mjs v1.3.3 site/releases.json
+node --test tests/release-pipeline.test.cjs tests/update-feed.test.cjs
+node scripts/release-manifest.mjs v1.4.0 site/releases.json
 npm run build
 node site/build.mjs
 ```
 
-Public reads do not require a GitHub token, although an authenticated `GH_TOKEN` raises API rate limits. Do not commit the token. An HTTP, validation or checksum error stops the process instead of substituting invented release data.
+The manifest command requires a real published release. Read-only GitHub requests can use `GH_TOKEN` for rate limits. Do not commit it. A network, schema or digest failure stops generation; missing data is never replaced with invented releases.
 
-## Signing later
-
-Adding certificates alone will not change these beta packages: `release-package.mjs` explicitly disables certificate discovery, macOS signing/notarization and Windows executable signing. Enabling signed releases requires a reviewed workflow and metadata change, followed by verification on each target platform.
-
-For macOS, prepare an Apple Developer ID Application certificate and private key, its protected CI import material, and the notarization credential method chosen for the build. For Windows, prepare a trusted Authenticode signing service or certificate accessible to the runner. Keep those credentials in restricted Actions secrets or the signing service. Exact secret names should be added alongside the chosen signing integration. Remove unsigned labels and prerelease enforcement only after signatures and notarization are actually verified.
-
-## Validation and reference documentation
-
-Run `node --test tests/release-*.test.cjs` for tag and lockfile matching, curated notes, semantic version sorting, manifest trust boundaries, malformed GitHub metadata, pagination, checksums and complete-package checks. `npm test` also includes this suite. Tests use synthetic release assets; they do not claim that a native installer has launched successfully.
-
-Official references: [GitHub runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners), [release API](https://docs.github.com/en/rest/releases/releases), [workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data), and [Cloudflare authentication for GitHub Actions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/).
+Automated tests use synthetic package bytes and the installed updater parser. They cover missing/tampered metadata, both hashes, URL and architecture selection, unsigned fallback, partial signing credentials, verification failure, feed filenames, release history and CI gates. They do not replace native installer launch checks or a real signed and notarized release. Signing and notarization require valid credentials and successful CI runs.

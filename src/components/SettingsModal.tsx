@@ -1,5 +1,7 @@
 import { useI18n } from '../i18n/useI18n';
 import { LanguagePicker } from './LanguagePicker';
+import { UpdateSettings } from './UpdateSettings';
+import { UpdateControls } from '../utils/updates';
 import { t, formatNumber } from '../i18n/runtime';
 import React, { useEffect, useRef, useState } from 'react';
 import { AppSettings } from '../types';
@@ -11,6 +13,7 @@ interface SettingsModalProps {
   settings: AppSettings;
   onUpdateSettings: (newSettings: AppSettings) => void;
   onClose: () => void;
+  updates?: UpdateControls;
 }
 
 interface ToggleRowProps {
@@ -40,7 +43,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ id, title, description, checked, 
   </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, updates }) => {
   const { preference, suggestedLocale, SUPPORTED_LANGUAGES, setLanguagePreference } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -134,6 +137,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
           <button type="button" onClick={() => showSection('timing-title')}><Clock size={15} aria-hidden="true" />{t("Ритм")}</button>
           <button type="button" onClick={() => showSection('alerts-title')}><Volume2 size={15} aria-hidden="true" />{t("Напоминания")}</button>
           <button type="button" onClick={() => showSection('automation-title')}><Shield size={15} aria-hidden="true" />{t("Автопауза")}</button>
+          {updates && <button type="button" onClick={() => showSection('updates-title')}>{t('Обновления')}</button>}
         </nav>
         <div className="settings-scroll-body">
           <section className="settings-section-card" aria-labelledby="language-title">
@@ -233,6 +237,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
             <ToggleRow id="strict-mode" title={t("Строгий режим")} description={isNative ? t("В течение перерыва окно остаётся поверх остальных, а пропуск недоступен.") : t("В течение перерыва пропуск недоступен. Браузер не блокирует другие приложения.")}
               checked={settings.strictMode} onChange={value => handleChange('strictMode', value)} />
           </section>
+          {updates && <UpdateSettings updates={updates} />}
         </div>
         <footer className="settings-dialog-footer"><span><Monitor size={14} aria-hidden="true" />{isNative ? t("Настольная версия") : t("Браузерная версия")}</span>
           <button type="button" className="btn btn-primary" onClick={onClose}><Check size={17} aria-hidden="true" />{t("Готово")}</button>
