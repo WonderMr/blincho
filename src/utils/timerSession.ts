@@ -107,6 +107,12 @@ export class TimerSession {
     return result;
   }
 
+  ingestNativeFocus(date: string, seconds: number): void {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(seconds) && seconds > 0) {
+      this.focusByDate.set(date, (this.focusByDate.get(date) || 0) + seconds * 1000);
+    }
+  }
+
   private addFocus(start: number, durationMs: number) {
     let cursor = start;
     const end = start + durationMs;

@@ -123,5 +123,6 @@
   "download.signingUnknown": "Signering inte verifierad",
   "download.inAppUpdates": "Uppdateringar i appen",
   "download.manualUpdates": "Manuella uppdateringar",
-  "release.1.4.1": "30 gränssnittsspråk, inklusive armeniska, och uppdateringsinställningar för skrivbordspaket som stöds. Välj automatiska uppdateringar, fråga före hämtning eller stäng av sökning efter uppdateringar i bakgrunden."
+  "release.1.4.1": "30 gränssnittsspråk, inklusive armeniska, och uppdateringsinställningar för skrivbordspaket som stöds. Välj automatiska uppdateringar, fråga före hämtning eller stäng av sökning efter uppdateringar i bakgrunden.",
+  "release.1.5.0": "macOS använder nu Tauri med en inbyggd timer och importerar befintlig lokal historik. Windows och Linux behåller Electron. macOS-uppdateringar görs fortfarande manuellt."
 }

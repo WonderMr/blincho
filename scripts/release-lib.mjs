@@ -159,11 +159,12 @@ export function createManifest(releases, { repository = REPOSITORY, requiredTag,
       const checksum = checksumsByTag.get(release.tag_name)?.get(asset.name);
       requireValue(checksum || digest, `Missing SHA-256 for ${asset.name}`);
       requireValue(!checksum || !digest || checksum === digest, 'GitHub digest does not match SHA256SUMS.txt');
-      const record = receipts?.flatMap(receipt => receipt.artifacts).find(item => item.name === asset.name);
+      const receipt = receipts?.find(receipt => receipt.artifacts.some(item => item.name === asset.name));
+      const record = receipt?.artifacts.find(item => item.name === asset.name);
       if (record) requireValue(digest && checksum === digest && record.sha256 === digest && record.size === asset.size, 'Update receipt does not match verified GitHub asset bytes');
       assets.push({ name: asset.name, url: asset.browser_download_url, size: asset.size, ...description, sha256: checksum ?? digest,
         signing: record ? (record.signed ? 'signed-notarized' : 'unsigned') : 'unknown',
-        updateSupport: record?.packageType ?? 'manual', ...(record ? { sha512: record.sha512 } : {}) });
+        updateSupport: record?.packageType ?? 'manual', ...(record ? { sha512: record.sha512, runtime: receipt.runtime ?? 'electron' } : {}) });
     }
     if (receipts) {
       const checksums = checksumsByTag.get(release.tag_name);
@@ -194,6 +195,7 @@ export function createManifest(releases, { repository = REPOSITORY, requiredTag,
 export const UPDATE_PLATFORMS = ['darwin', 'win32', 'linux'];
 export const SITE_PLATFORMS = { darwin: 'macos', win32: 'windows', linux: 'linux' };
 export function usesUpdateReceipts(version) { return compareVersions(version, '1.4.0') >= 0; }
+export function usesTauriMac(version) { return compareVersions(version, '1.5.0') >= 0; }
 export function compareVersions(left, right) {
   assertVersion(left); assertVersion(right);
   const a = left.split('.').map(Number), b = right.split('.').map(Number);
@@ -212,6 +214,8 @@ export function expectedReleaseFiles(version) {
 }
 export function validateReceipt(receipt, version) {
   requireValue(receipt?.schemaVersion === 1 && receipt.version === version && UPDATE_PLATFORMS.includes(receipt.platform) && ['x64', 'arm64'].includes(receipt.arch), 'Invalid update receipt identity');
+  const tauri = receipt.platform === 'darwin' && usesTauriMac(version);
+  requireValue(tauri ? receipt.runtime === 'tauri' : receipt.runtime == null || receipt.runtime === 'electron', 'Invalid package runtime');
   const expected = expectedArtifacts(version).filter(name => {
     const item = describeArtifact(name, version);
     return item.platform === SITE_PLATFORMS[receipt.platform] && item.architecture === receipt.arch;
@@ -219,7 +223,12 @@ export function validateReceipt(receipt, version) {
   requireValue(Array.isArray(receipt.artifacts) && receipt.artifacts.length === expected.length && new Set(receipt.artifacts.map(item => item?.name)).size === expected.length, 'Incomplete or duplicate update receipt artifacts');
   for (const item of receipt.artifacts) {
     requireValue(item && expected.includes(item.name) && Number.isSafeInteger(item.size) && item.size > 0 && /^[a-f0-9]{64}$/.test(item.sha256) && typeof item.sha512 === 'string' && /^[A-Za-z0-9+/]{86}==$/.test(item.sha512) && Buffer.from(item.sha512, 'base64').toString('base64') === item.sha512, 'Invalid update receipt artifact or hashes');
-    requireValue(typeof item.signed === 'boolean' && typeof item.notarized === 'boolean' && item.updaterConfig === true, 'Missing verified package configuration');
+    requireValue(typeof item.signed === 'boolean' && typeof item.notarized === 'boolean', 'Missing verified signing status');
+    if (tauri) {
+      requireValue(item.bundleVerified === true && item.updaterConfig === false && item.packageType === 'manual' && !item.signed && !item.notarized, 'Tauri macOS packages require verified unsigned manual bundle metadata');
+      continue;
+    }
+    requireValue(item.updaterConfig === true, 'Missing verified package configuration');
     const packageType = receipt.platform === 'darwin' && item.signed && item.notarized ? 'mac-signed' : item.name.endsWith('-setup.exe') ? 'nsis' : item.name.endsWith('.AppImage') ? 'appimage' : 'manual';
     requireValue(item.packageType === packageType, 'Invalid package update support');
     requireValue(receipt.platform === 'darwin' ? item.signed === item.notarized : !item.signed && !item.notarized, 'Unsupported signing claim');

@@ -2,6 +2,15 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.5.0]
+
+- Make Tauri the primary macOS app with a Rust timer and the system WKWebView. Windows and Linux continue to use Electron with the same React interface and 30 languages.
+- Keep timing active while the macOS window is hidden, minimized or closed to the tray, with native idle, screen lock, sleep and meeting handling.
+- Import existing Electron settings, journal answers and statistics once from a private copy of its Chromium database. Preserve the original profile and any existing Tauri data.
+- Preserve the application identity, native menus, notifications, strict breaks and login startup behavior on macOS.
+- Build macOS packages for Apple silicon and Intel with verified bundle metadata and checksums. Current macOS packages remain unsigned and install updates through manual website downloads.
+- Keep verified historical Electron macOS feeds and the existing Windows and Linux release and update behavior.
+
 ## [1.4.2]
 
 - Notify macOS users about newer releases without requiring Apple Developer signing. The notification opens the Blincho download page; installation remains manual.

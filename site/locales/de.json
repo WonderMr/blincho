@@ -123,5 +123,6 @@
   "download.signingUnknown": "Signatur nicht überprüft",
   "download.inAppUpdates": "Updates innerhalb der App",
   "download.manualUpdates": "Manuelle Updates",
-  "release.1.4.1": "30 Oberflächensprachen, darunter Armenisch, und Update-Einstellungen für unterstützte Desktop-Pakete. Wähle automatische Updates, eine Nachfrage vor dem Herunterladen oder deaktiviere die Update-Suche im Hintergrund."
+  "release.1.4.1": "30 Oberflächensprachen, darunter Armenisch, und Update-Einstellungen für unterstützte Desktop-Pakete. Wähle automatische Updates, eine Nachfrage vor dem Herunterladen oder deaktiviere die Update-Suche im Hintergrund.",
+  "release.1.5.0": "macOS nutzt jetzt Tauri mit einem nativen Timer und übernimmt den vorhandenen lokalen Verlauf. Windows und Linux behalten Electron. macOS-Updates werden weiterhin manuell installiert."
 }
