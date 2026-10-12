@@ -2,7 +2,7 @@
 
 A free screen-break companion for macOS, Windows and Linux. Every feature is free.
 
-From version 1.5.1, the primary macOS app uses Tauri, Rust and the system WKWebView. Windows and Linux use Electron. All desktop versions share the same React interface, local statistics and 30 languages.
+From version 1.5.2, the primary macOS app uses Tauri, Rust and the system WKWebView. Windows and Linux use Electron. All desktop versions share the same React interface, local statistics and 30 languages.
 
 Website: https://blincho.app
 

@@ -125,5 +125,6 @@
   "download.manualUpdates": "Aggiornamenti manuali",
   "release.1.4.1": "30 lingue dell’interfaccia, incluso l’armeno, e preferenze di aggiornamento per i pacchetti desktop supportati. Scegli gli aggiornamenti automatici, la richiesta di consenso prima del download oppure disattiva la ricerca degli aggiornamenti in background.",
   "release.1.5.0": "macOS ora usa Tauri con un timer nativo e importa la cronologia locale esistente. Windows e Linux mantengono Electron. Gli aggiornamenti di macOS restano manuali.",
-  "release.1.5.1": "macOS ora usa Tauri con un timer nativo e importa la cronologia locale esistente. Windows e Linux mantengono Electron. Gli aggiornamenti di macOS restano manuali."
+  "release.1.5.1": "macOS ora usa Tauri con un timer nativo e importa la cronologia locale esistente. Windows e Linux mantengono Electron. Gli aggiornamenti di macOS restano manuali.",
+  "release.1.5.2": "macOS ora usa Tauri con un timer nativo e importa la cronologia locale esistente. Windows e Linux mantengono Electron. Gli aggiornamenti di macOS restano manuali."
 }

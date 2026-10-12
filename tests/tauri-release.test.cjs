@@ -30,6 +30,11 @@ async function runMacBundler({ arch = 'arm64', debug = false, target, args, miss
     const mock = path.join(directory, 'mock-native.cjs');
     await writeFile(mock, `
       const fs = require('node:fs');
+      const originalChmod = fs.chmodSync;
+      fs.chmodSync = (filename, mode) => {
+        fs.appendFileSync('chmod.jsonl', JSON.stringify(mode) + '\\n');
+        return originalChmod(filename, mode);
+      };
       Object.defineProperty(process, 'platform', { value: 'darwin' });
       Object.defineProperty(process, 'arch', { value: ${JSON.stringify(arch)} });
       require('node:child_process').execFileSync = (command, args) => {
@@ -43,9 +48,10 @@ async function runMacBundler({ arch = 'arm64', debug = false, target, args, miss
     const bundle = path.join(directory, debug ? 'release/tauri-macos-debug' : 'release/tauri-macos', 'Blincho.app');
     const readOptional = filename => readFile(filename, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     const calls = (await readOptional(path.join(directory, 'calls.jsonl')) || '').trim().split('\n').filter(Boolean).map(JSON.parse);
+    const chmodModes = (await readOptional(path.join(directory, 'chmod.jsonl')) || '').trim().split('\n').filter(Boolean).map(JSON.parse);
     const executable = path.join(bundle, 'Contents/MacOS/blincho');
     return {
-      ...result, calls, copied: await readOptional(executable),
+      ...result, calls, chmodModes, copied: await readOptional(executable),
       executableMode: await stat(executable).then(value => value.mode & 0o777).catch(error => { if (error.code === 'ENOENT') return null; throw error; }),
       metadata: await readOptional(path.join(bundle, 'Contents/Resources/blincho-runtime.json')).then(value => value && JSON.parse(value)),
       stale: await readOptional(path.join(bundle, 'Contents/Resources/nested/stale.txt')),
@@ -61,7 +67,8 @@ test('local release and debug bundling removes stale app files while keeping sib
     const result = await runMacBundler({ debug });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.copied, `host-${debug ? 'debug' : 'release'}`);
-    assert.equal(result.executableMode, 0o755);
+    assert.deepEqual(result.chmodModes, [0o755]);
+    if (process.platform !== 'win32') assert.equal(result.executableMode, 0o755);
     assert.equal(result.stale, null);
     assert.equal(result.sibling, 'owned output sibling');
     assert.equal(result.otherBundle, 'healthy previous bundle');
@@ -126,6 +133,14 @@ async function runMacPackager(arch, scenario = {}) {
       Object.defineProperty(process, 'platform', { value: 'darwin' });
       Object.defineProperty(process, 'arch', { value: arch });
       const bundle = path.resolve('release/tauri-macos/Blincho.app');
+      const executable = path.join(bundle, 'Contents/MacOS/blincho');
+      const originalLstat = fs.promises.lstat;
+      // Model macOS mode bits only for this synthetic executable. Windows cannot store them.
+      fs.promises.lstat = async (...args) => {
+        const result = await originalLstat(...args);
+        if (path.resolve(args[0]) === executable) result.mode = (result.mode & ~0o777) | (scenario.executableMode ?? 0o755);
+        return result;
+      };
       const metadata = { schemaVersion: 1, runtime: 'tauri', platform: 'darwin', arch, version: '1.5.0', identifier: 'com.myeyes.app', packageType: 'manual', signed: false, notarized: false, updaterConfig: false, ...scenario.metadata };
       childProcess.spawnSync = (command, args) => {
         fs.appendFileSync('calls.jsonl', JSON.stringify([command, args]) + '\\n');
@@ -227,7 +242,7 @@ test('macOS packaging builds locked current Cargo sources and publishes canonica
     assert.equal(result.calls.at(-1)[0], '/usr/bin/ditto');
     assert.deepEqual(result.calls.at(-1)[1].slice(0, 4), ['-c', '-k', '--sequesterRsrc', '--keepParent']);
     assert.equal(result.calls.at(-1)[1].length, 6);
-    assert.ok(result.calls.at(-1)[1][4].endsWith('/release/tauri-macos/Blincho.app'));
+    assert.ok(result.calls.at(-1)[1][4].endsWith(path.sep + path.join('release', 'tauri-macos', 'Blincho.app')));
     assert.equal(result.receipt.runtime, 'tauri');
     validateReceipt(result.receipt, '1.5.0');
     const artifact = result.receipt.artifacts[0];
@@ -271,6 +286,7 @@ test('missing or tampered Tauri bundle metadata, identity, architecture and sign
     ['bundle identity', { plist: { CFBundleIdentifier: 'com.myeyes.tauri.prototype' } }, /bundle identity/],
     ['bundle version', { plist: { CFBundleVersion: '1' } }, /bundle identity/],
     ['executable name', { plist: { CFBundleExecutable: '../wrong' } }, /bundle identity/],
+    ['non-executable file', { executableMode: 0o644 }, /is not executable/],
     ['wrong architecture', { binaryArch: 'x86_64' }, /architecture does not match/],
     ['invalid signature', { signatureFailed: true }, /verification failed/],
     ['Developer ID signature', { signature: 'Authority=Developer ID Application: Fixture\nTeamIdentifier=A123456789\n' }, /ad hoc signature/],
