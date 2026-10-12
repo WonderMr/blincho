@@ -19,3 +19,7 @@ site/releases.json
 
 # Generated independently for each native release target.
 electron/update-support.json
+
+# Generated Tauri build output.
+src-tauri/target
+src-tauri/gen

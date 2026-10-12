@@ -123,5 +123,6 @@
   "download.signingUnknown": "Podpis neověřen",
   "download.inAppUpdates": "Aktualizace v aplikaci",
   "download.manualUpdates": "Ruční aktualizace",
-  "release.1.4.1": "30 jazyků rozhraní včetně arménštiny a nastavení aktualizací pro podporované balíčky pro počítače. Zvolte automatické aktualizace, dotaz před stažením nebo vypněte kontrolu aktualizací na pozadí."
+  "release.1.4.1": "30 jazyků rozhraní včetně arménštiny a nastavení aktualizací pro podporované balíčky pro počítače. Zvolte automatické aktualizace, dotaz před stažením nebo vypněte kontrolu aktualizací na pozadí.",
+  "release.1.5.0": "macOS nyní používá Tauri s nativním časovačem a importuje stávající místní historii. Windows a Linux nadále používají Electron. Aktualizace macOS zůstávají ruční."
 }

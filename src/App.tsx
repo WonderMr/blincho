@@ -28,6 +28,7 @@ import { LanguageSuggestion } from './components/LanguageSuggestion';
 import { TransientNotice } from './components/TransientNotice';
 import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
+import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, scheduleLegacyHistoryExport } from './utils/tauriBridge';
 
 import {
   BookOpen, Play, Lock, Video, UserCheck
@@ -61,8 +62,12 @@ export const App: React.FC = () => {
   const undoRef = useRef<{ remainingMs: number; totalMs: number } | null>(null);
   const resetOnReturnRef = useRef(false);
   const sessionRef = useRef<TimerSession | null>(null);
-  if (!sessionRef.current) sessionRef.current = new TimerSession(settings.workMinutes * 60, Date.now());
+  if (!sessionRef.current) sessionRef.current = hasNativeTimer() ? new NativeTimerSession(settings.workMinutes * 60, Date.now()) : new TimerSession(settings.workMinutes * 60, Date.now());
   const session = sessionRef.current;
+  const nativeFocusRef = useRef(new Map<string, number>());
+  const nativeAbsenceEpochRef = useRef(0);
+  const nativeTickRef = useRef(0);
+  const nativeMeetingEpochRef = useRef(0);
   const [, publish] = useState(0);
   const breakIdRef = useRef<string | null>(null);
   const pendingBreakRef = useRef<{ eventId: string; deadlineMonotonicAt: number } | null>(null);
@@ -102,7 +107,13 @@ export const App: React.FC = () => {
     for (const [date, seconds] of focus) recordFocusSeconds(seconds, date);
     refreshStats();
   };
-  const sync = () => { if (mountedRef.current) publish(value => value + 1); };
+  const sync = () => {
+    if (mountedRef.current) {
+      synchronizeNativeTimer(session, settingsRef.current);
+      scheduleLegacyHistoryExport();
+      publish(value => value + 1);
+    }
+  };
   const sendDesktopCommand = (name: string, operation: () => unknown) => {
     try {
       Promise.resolve(operation()).catch(error => console.warn(`Blincho: Desktop command ${name} failed:`, error));
@@ -470,10 +481,60 @@ export const App: React.FC = () => {
     markPageActivity();
     session.lastUpdated = Date.now();
     let polling = false;
+    const nativeFocus = nativeFocusRef.current;
+    const applyNative = (snapshot: NativeTimerSnapshot) => {
+      if (!mountedRef.current || snapshot.totalMs < 1000 || snapshot.tickCount <= nativeTickRef.current) return;
+      nativeTickRef.current = snapshot.tickCount;
+      if (snapshot.version >= session.version) {
+        session.totalMs = snapshot.totalMs;
+        session.remainingMs = snapshot.remainingMs;
+        session.manualPaused = snapshot.manualPaused;
+        session.expiryPending = snapshot.expiryPending;
+        session.version = snapshot.version;
+      }
+      if ((snapshot.meetingPostponedEpoch ?? 0) > nativeMeetingEpochRef.current) {
+        nativeMeetingEpochRef.current = snapshot.meetingPostponedEpoch ?? 0;
+        setInMeetingActive(true);
+        setNoticeMessage("Обнаружена активная встреча. Перерыв отложен на 5 минут.");
+        if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Blincho: встреча активна"), t("Перерыв отложен на 5 минут."));
+      }
+      if (snapshot.absenceEpoch > nativeAbsenceEpochRef.current) {
+        nativeAbsenceEpochRef.current = snapshot.absenceEpoch;
+        const beganAt = snapshot.absentSince ?? Date.now();
+        // A hidden renderer must observe even an absence that ended before this frame arrived.
+        handlersRef.current.setPresenceReason('unconfirmed', true, beganAt);
+        if (session.absentSince !== null) session.absentSince = Math.min(session.absentSince, beganAt);
+        cancelAbsentActivity();
+      }
+      for (const [date, seconds] of Object.entries(snapshot.focusByDate)) {
+        const previous = nativeFocus.get(date) ?? 0;
+        if (seconds > previous) { session.ingestNativeFocus(date, seconds - previous); nativeFocus.set(date, seconds); }
+      }
+      session.lastUpdated = Date.now();
+      // Add the new pause causes before removing old ones, avoiding a false return between causes.
+      for (const active of [true, false]) for (const reason of ['suspended', 'locked', 'unconfirmed', 'idle'] as PresenceReason[]) {
+        if (snapshot.reasons.includes(reason) === active) handlersRef.current.setPresenceReason(reason, active, snapshot.absentSince ?? Date.now());
+      }
+      flushFocus();
+      publish(value => value + 1);
+      if (snapshot.breakElapsed && session.breakActive) {
+        const deadline = performance.now() - Math.max(0, Date.now() - (snapshot.breakEndAt ?? Date.now()));
+        handleBreakElapsed(breakIdRef.current, deadline);
+      }
+      if (snapshot.expiryPending && snapshot.version === session.version && session.counting) void handlersRef.current.handleTimerExpired();
+    };
+    const unsubscribeNative = hasNativeTimer() ? subscribeNativeTimer(applyNative) : undefined;
+    if (hasNativeTimer()) synchronizeNativeTimer(session, settingsRef.current);
     const tick = async () => {
       if (polling) return;
       polling = true;
       try {
+        if (hasNativeTimer()) {
+          const snapshot = await readNativeTimer();
+          if (snapshot) applyNative(snapshot);
+          await handlersRef.current.samplePresence();
+          return;
+        }
         const now = Date.now();
         if (now - session.lastUpdated > 5000) handlersRef.current.setPresenceReason('unconfirmed', true, session.lastUpdated);
         await handlersRef.current.samplePresence();
@@ -529,6 +590,7 @@ export const App: React.FC = () => {
       clearInterval(timer);
       unsubscribeBreak?.();
       unsubscribePower?.();
+      unsubscribeNative?.();
       for (const name of ['mousemove', 'keydown', 'mousedown', 'touchstart']) window.removeEventListener(name, activity);
       window.removeEventListener('focus', focus);
       document.removeEventListener('visibilitychange', visibility);
