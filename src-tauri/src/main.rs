@@ -431,6 +431,9 @@ fn preferred_languages() -> Vec<String> {
 }
 fn diagnostics(app: &tauri::AppHandle) {
     let runtime = app.state::<Runtime>();
+    if runtime.test_dir.is_none() && std::env::var("BLINCHO_DIAGNOSTICS").as_deref() != Ok("1") {
+        return;
+    }
     let (snapshot, strict) = {
         let Ok(timer) = runtime.timer.lock() else {
             return;
