@@ -228,12 +228,6 @@ h1 { margin-block: 24px; font-size: clamp(55px, 5.8vw, 82px); line-height: 1.035
 .faq-plus::after { transform: rotate(90deg); transition: transform .2s; }
 .faq-list details[open] .faq-plus::after { transform: rotate(0); }
 .faq-list details p { color: var(--muted); font-size: 13px; line-height: 1.9; padding-block-end: 23px; padding-inline-end: 34px; }
-.support-section { display: flex; align-items: center; justify-content: center; gap: 63px; padding: 59px 70px; background: var(--mint-soft); border: 1px solid var(--line); border-radius: 18px; }
-.support-section > img { flex-shrink: 0; transform: rotate(-7deg); filter: drop-shadow(0 15px 18px #102e2920); }
-.support-copy { max-width: 540px; }
-.support-copy h2 { font-size: 45px; line-height: 1.1; white-space: pre-line; margin-block: 14px 18px; }
-.support-copy > p:not(.eyebrow) { color: var(--muted); font-size: 13px; line-height: 1.85; }
-.button-secondary { margin-block-start: 24px; background: var(--surface); border: 1px solid var(--line); min-height: 44px; font-size: 12px; }
 .site-footer { display: flex; align-items: center; justify-content: space-between; gap: 30px; padding-block: 53px 40px; }
 .site-footer .wordmark { font-size: 19px; }
 .site-footer p { color: var(--muted); font-size: 11px; margin-block-start: 11px; }
@@ -301,9 +295,6 @@ h1 { margin-block: 24px; font-size: clamp(55px, 5.8vw, 82px); line-height: 1.035
   .download-file { padding-inline: 9px; font-size: 11px; }
   .platform-note { font-size: 11px; }
   .changelog-section { gap: 30px; }
-  .support-section { padding: 45px 40px; gap: 38px; }
-  .support-section > img { width: 95px; height: 95px; }
-  .support-copy h2 { font-size: 39px; }
 }
 @media (max-width: 620px) {
   html { scroll-padding-top: 20px; }
@@ -376,9 +367,6 @@ h1 { margin-block: 24px; font-size: clamp(55px, 5.8vw, 82px); line-height: 1.035
   .faq-section { gap: 30px; }
   .faq-list summary { font-size: 13px; padding-block: 20px; }
   .faq-list details p { padding-inline-end: 22px; font-size: 12px; }
-  .support-section { flex-direction: column; align-items: flex-start; gap: 28px; padding: 33px 28px; }
-  .support-section > img { width: 77px; height: 77px; }
-  .support-copy h2 { font-size: 37px; }
   .site-footer { flex-direction: column; align-items: flex-start; padding-block: 37px 29px; gap: 23px; }
   .site-footer .wordmark img { width: 30px; height: 30px; }
   .footer-links { gap: 24px; font-size: 11px; flex-wrap: wrap; }
@@ -418,7 +406,7 @@ h1 { margin-block: 24px; font-size: clamp(55px, 5.8vw, 82px); line-height: 1.035
 @media (max-width: 620px) {
   .hero-note, .facts p, .rhythm-steps p, .feature p, .platform-note, .download-notes,
   .changelog-section p:not(.eyebrow), .text-link, .faq-list summary, .faq-list details p,
-  .support-copy > p:not(.eyebrow), .site-footer p, .footer-links, .legal-links { font-size: 14px; }
+  .site-footer p, .footer-links, .legal-links { font-size: 14px; }
   .privacy-section.section-shell { width: calc(100% - 40px); padding-block: 48px; }
 }
 @media (max-width: 350px) {

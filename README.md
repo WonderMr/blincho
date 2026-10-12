@@ -1,6 +1,6 @@
 # Blincho
 
-A free screen-break companion for macOS, Windows and Linux. Every feature is free. Optional donations support development.
+A free screen-break companion for macOS, Windows and Linux. Every feature is free.
 
 Website: https://blincho.app
 

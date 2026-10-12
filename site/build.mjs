@@ -11,7 +11,6 @@ const htmlLocales = {pt:'pt-BR', zh:'zh-CN'};
 const config = JSON.parse(await readFile(path.join(source, 'config.json'), 'utf8'));
 const escape = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 if (config.origin !== 'https://blincho.app' || config.repository !== 'WonderMr/blincho') throw new Error('Unexpected site origin or repository');
-if (config.donationUrl && !/^https:\/\/www\.buymeacoffee\.com\/[\w-]+\/?$|^https:\/\/buymeacoffee\.com\/[\w-]+\/?$/.test(config.donationUrl)) throw new Error('Invalid donation URL');
 const template = await readFile(path.join(source, 'index.html'), 'utf8');
 const en = JSON.parse(await readFile(path.join(source, 'locales/en.json'), 'utf8'));
 let manifest;
@@ -63,10 +62,6 @@ for (const lang of languages) {
   });
   const history=manifest.releases.map(r=>`<article class="release-entry"><h3><a href="${releaseUrl(r.url)}">${escape(r.version)}</a></h3>${catalog[`release.${r.version}`]?`<p>${t(`release.${r.version}`)}</p>`:''}<a href="${releaseUrl(r.url)}">${t('changelog.more')} ↗</a>${r.checksumUrl?` · <a href="${releaseUrl(r.checksumUrl)}">${t('download.checksums')}</a>`:''}</article>`).join('');
   html=html.replace(/(<div[^>]+id="changelog-list"[^>]*>)[\s\S]*?(<\/div>)/,`$1${history}$2`);
-  if(config.donationUrl) html=html.replace(/<a\b[^>]*id="donation-link"[^>]*>/,tag=>{
-    tag=tag.replace(/\s+hidden\b/,'');
-    return /\bhref=/.test(tag)?tag.replace(/href="[^"]*"/,`href="${escape(config.donationUrl)}"`):tag.replace(/>$/,` href="${escape(config.donationUrl)}">`);
-  });
   const privacy=`<section id="privacy" class="privacy-section section-shell"><h2>${t('privacy.title')}</h2><p>${t('privacy.body')}</p></section>`;
   html=html.replace('</main>',privacy+'</main>');
   html=html.replace('</footer>',`<nav class="legal-links"><a href="#privacy">${t('footer.privacy')}</a><a href="https://github.com/${config.repository}/issues">${t('footer.contact')}</a></nav></footer>`);
