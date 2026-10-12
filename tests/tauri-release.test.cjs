@@ -242,7 +242,7 @@ test('macOS packaging builds locked current Cargo sources and publishes canonica
     assert.equal(result.calls.at(-1)[0], '/usr/bin/ditto');
     assert.deepEqual(result.calls.at(-1)[1].slice(0, 4), ['-c', '-k', '--sequesterRsrc', '--keepParent']);
     assert.equal(result.calls.at(-1)[1].length, 6);
-    assert.ok(result.calls.at(-1)[1][4].endsWith('/release/tauri-macos/Blincho.app'));
+    assert.ok(result.calls.at(-1)[1][4].endsWith(path.sep + path.join('release', 'tauri-macos', 'Blincho.app')));
     assert.equal(result.receipt.runtime, 'tauri');
     validateReceipt(result.receipt, '1.5.0');
     const artifact = result.receipt.artifacts[0];
