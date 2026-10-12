@@ -28,7 +28,7 @@ import { LanguageSuggestion } from './components/LanguageSuggestion';
 import { TransientNotice } from './components/TransientNotice';
 import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
-import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, scheduleLegacyHistoryExport } from './utils/tauriBridge';
+import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer } from './utils/tauriBridge';
 
 import {
   BookOpen, Play, Lock, Video, UserCheck
@@ -110,7 +110,6 @@ export const App: React.FC = () => {
   const sync = () => {
     if (mountedRef.current) {
       synchronizeNativeTimer(session, settingsRef.current);
-      scheduleLegacyHistoryExport();
       publish(value => value + 1);
     }
   };

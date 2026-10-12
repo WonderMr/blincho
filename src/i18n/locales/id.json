@@ -441,5 +441,13 @@
   "Больше не показывать обновления": "Jangan tampilkan pembaruan lagi",
   "Уведомлять о новых версиях": "Beri tahu tentang versi baru",
   "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "Blincho memeriksa versi baru dan menampilkan pemberitahuan. Unduh versi baru dari situs web dan pasang secara manual.",
-  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Unduh versi baru dari situs web Blincho dan pasang secara manual."
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Unduh versi baru dari situs web Blincho dan pasang secara manual.",
+  "Не удалось перенести историю": "Riwayat tidak dapat diimpor",
+  "Закройте прежнее приложение Blincho (Electron), затем повторите перенос.": "Tutup aplikasi Blincho lama (Electron), lalu coba impor lagi.",
+  "Исходная история в прежнем приложении сохранена. До вашего выбора новые записи не создаются.": "Riwayat asli Anda di aplikasi lama tetap tersimpan. Catatan baru tidak dibuat sampai Anda memilih cara melanjutkan.",
+  "Если продолжить без истории, её автоматический перенос будет отключён для этого профиля. Новые записи сохранятся в этом приложении.": "Melanjutkan tanpa riwayat menonaktifkan impor otomatisnya untuk profil ini. Catatan baru akan disimpan di aplikasi ini.",
+  "Повторить перенос": "Coba impor lagi",
+  "Продолжить без истории": "Lanjutkan tanpa riwayat",
+  "Подготавливаем приложение…": "Menyiapkan aplikasi…",
+  "Причина не указана.": "Alasan tidak diberikan."
 }

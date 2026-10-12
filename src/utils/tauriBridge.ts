@@ -1,4 +1,6 @@
-import { importHistorySnapshot, gatherLegacyHistory } from './historyTransfer';
+import { gatherLegacyHistory } from './historyTransfer';
+import { createHistoryRecovery } from './historyRecovery';
+import type { HistoryStartupResult } from './historyRecovery';
 import { TimerSession, PresenceReason } from './timerSession';
 import type { AppSettings } from '../types';
 import type {} from './notifications';
@@ -22,6 +24,8 @@ const updateListeners = new Set<(state: UpdateState) => void>();
 let latest: NativeTimerSnapshot | null = null;
 let commandQueue = Promise.resolve();
 let exportTimer: ReturnType<typeof setTimeout> | undefined;
+let bridgeInitialization: Promise<void> | undefined;
+let historyRecovery: ReturnType<typeof createHistoryRecovery> | undefined;
 
 export class NativeTimerSession extends TimerSession {
   advance(now: number): boolean { this.lastUpdated = now; return false; }
@@ -48,7 +52,7 @@ export async function readNativeTimer(): Promise<NativeTimerSnapshot | null> {
   return latest;
 }
 export function scheduleLegacyHistoryExport(): void {
-  if (!window.electronAPI?.exportLegacyHistory || window.__TAURI__) return;
+  if (!window.electronAPI?.isElectron || window.electronAPI.platform !== 'darwin' || !window.electronAPI.exportLegacyHistory || window.__TAURI__) return;
   clearTimeout(exportTimer);
   exportTimer = setTimeout(() => {
     try { void window.electronAPI!.exportLegacyHistory!(gatherLegacyHistory(localStorage))
@@ -56,9 +60,37 @@ export function scheduleLegacyHistoryExport(): void {
     catch (error) { console.warn('Blincho: History collection failed:', error); }
   }, 300);
 }
-export async function initializeTauriBridge(): Promise<void> {
+export function initializeTauriBridge(): Promise<void> {
+  if (!window.__TAURI__) { scheduleLegacyHistoryExport(); return Promise.resolve(); }
+  if (!bridgeInitialization) bridgeInitialization = installTauriBridge().catch(error => { bridgeInitialization = undefined; throw error; });
+  return bridgeInitialization;
+}
+
+export async function initializeTauriHistory(): Promise<void> {
+  if (!window.__TAURI__) return;
+  historyRecovery ??= createHistoryRecovery(localStorage, () => window.__TAURI__!.core.invoke('legacy_history'));
+  const history = await historyRecovery.run();
+  reportHistoryStartup(history);
+}
+
+export async function continueWithoutTauriHistory(): Promise<void> {
+  if (!window.__TAURI__) return;
+  historyRecovery ??= createHistoryRecovery(localStorage, () => window.__TAURI__!.core.invoke('legacy_history'));
+  const history = await historyRecovery.continueWithoutHistory();
+  reportHistoryStartup(history);
+}
+
+function reportHistoryStartup(history: HistoryStartupResult): void {
+  // Diagnostics must not turn a successfully imported or explicitly skipped profile into a startup failure.
+  try {
+    void window.__TAURI__!.core.invoke('renderer_report', { report: { ready: true, history, entries: Object.keys(gatherLegacyHistory(localStorage)) } })
+      .catch(error => console.warn('Blincho: History startup report failed:', error));
+  } catch (error) { console.warn('Blincho: History startup report failed:', error); }
+}
+
+async function installTauriBridge(): Promise<void> {
   const api = window.__TAURI__;
-  if (!api) { scheduleLegacyHistoryExport(); return; }
+  if (!api) return;
   document.documentElement.dataset.platform = 'darwin';
   document.documentElement.dataset.runtime = 'tauri';
   const command = (operation: string, flag?: boolean) => api.core.invoke<void>('desktop_command', { operation, flag: flag ?? null });
@@ -85,15 +117,18 @@ export async function initializeTauriBridge(): Promise<void> {
     getPreferredLanguages: () => api.core.invoke<string[]>('preferred_languages'),
     onTriggerBreak: callback => { breaks.add(callback); return () => breaks.delete(callback); },
   };
-  await api.event.listen<NativeTimerSnapshot>('native-timer', event => {
-    latest = event.payload;
-    for (const callback of frames) callback(event.payload);
-  });
-  await api.event.listen<UpdateState>('update-state', event => { for (const callback of updateListeners) callback(event.payload); });
-  await api.event.listen('trigger-break', () => { for (const callback of breaks) callback(); });
-  let history = importHistorySnapshot(localStorage, null);
-  if (history.status === 'no-export') history = importHistorySnapshot(localStorage, await api.core.invoke('legacy_history'));
-  await api.core.invoke('renderer_report', { report: { ready: true, history, entries: Object.keys(gatherLegacyHistory(localStorage)) } });
+  const unlisten: Array<() => void> = [];
+  try {
+    unlisten.push(await api.event.listen<NativeTimerSnapshot>('native-timer', event => {
+      latest = event.payload;
+      for (const callback of frames) callback(event.payload);
+    }));
+    unlisten.push(await api.event.listen<UpdateState>('update-state', event => { for (const callback of updateListeners) callback(event.payload); }));
+    unlisten.push(await api.event.listen('trigger-break', () => { for (const callback of breaks) callback(); }));
+  } catch (error) {
+    for (const unsubscribe of unlisten) unsubscribe();
+    throw error;
+  }
   document.addEventListener('click', event => {
     const anchor = (event.target as Element)?.closest?.('a[href]') as HTMLAnchorElement | null;
     if (!anchor || !anchor.href.startsWith('https:')) return;

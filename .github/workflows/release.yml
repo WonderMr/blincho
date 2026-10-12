@@ -145,6 +145,8 @@ jobs:
           cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Build native packages
         run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: packages-${{ matrix.platform }}-${{ matrix.architecture }}

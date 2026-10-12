@@ -441,5 +441,13 @@
   "Больше не показывать обновления": "Không hiển thị bản cập nhật nữa",
   "Уведомлять о новых версиях": "Thông báo khi có phiên bản mới",
   "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "Blincho kiểm tra phiên bản mới và hiển thị thông báo. Hãy tải phiên bản mới từ trang web và cài đặt thủ công.",
-  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Hãy tải phiên bản mới từ trang web Blincho và cài đặt thủ công."
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Hãy tải phiên bản mới từ trang web Blincho và cài đặt thủ công.",
+  "Не удалось перенести историю": "Không thể nhập lịch sử",
+  "Закройте прежнее приложение Blincho (Electron), затем повторите перенос.": "Đóng ứng dụng Blincho cũ (Electron), rồi thử nhập lại.",
+  "Исходная история в прежнем приложении сохранена. До вашего выбора новые записи не создаются.": "Lịch sử gốc trong ứng dụng cũ vẫn được giữ nguyên. Chưa có bản ghi mới nào được tạo cho đến khi bạn chọn cách tiếp tục.",
+  "Если продолжить без истории, её автоматический перенос будет отключён для этого профиля. Новые записи сохранятся в этом приложении.": "Tiếp tục không có lịch sử sẽ tắt tính năng tự động nhập lịch sử cho hồ sơ này. Các bản ghi mới sẽ được lưu trong ứng dụng này.",
+  "Повторить перенос": "Thử nhập lại",
+  "Продолжить без истории": "Tiếp tục không có lịch sử",
+  "Подготавливаем приложение…": "Đang chuẩn bị ứng dụng…",
+  "Причина не указана.": "Không có lý do được cung cấp."
 }

@@ -441,5 +441,13 @@
   "Больше не показывать обновления": "Updates niet meer tonen",
   "Уведомлять о новых версиях": "Melden wanneer er een nieuwe versie is",
   "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "Blincho controleert op nieuwe versies en toont meldingen. Download de nieuwe versie van de website en installeer deze handmatig.",
-  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Download de nieuwe versie van de Blincho-website en installeer deze handmatig."
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Download de nieuwe versie van de Blincho-website en installeer deze handmatig.",
+  "Не удалось перенести историю": "Geschiedenis kon niet worden geïmporteerd",
+  "Закройте прежнее приложение Blincho (Electron), затем повторите перенос.": "Sluit de oude Blincho-app (Electron) en probeer de import opnieuw.",
+  "Исходная история в прежнем приложении сохранена. До вашего выбора новые записи не создаются.": "Je oorspronkelijke geschiedenis in de oude app blijft bewaard. Er worden geen nieuwe gegevens vastgelegd totdat je kiest hoe je verdergaat.",
+  "Если продолжить без истории, её автоматический перенос будет отключён для этого профиля. Новые записи сохранятся в этом приложении.": "Doorgaan zonder geschiedenis schakelt de automatische import ervan uit voor dit profiel. Nieuwe gegevens worden in deze app opgeslagen.",
+  "Повторить перенос": "Import opnieuw proberen",
+  "Продолжить без истории": "Doorgaan zonder geschiedenis",
+  "Подготавливаем приложение…": "App wordt voorbereid…",
+  "Причина не указана.": "Er is geen reden opgegeven."
 }

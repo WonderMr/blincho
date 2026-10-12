@@ -43,7 +43,7 @@ export async function prepareReleaseTag({
   requireValue(['push', 'workflow_dispatch'].includes(eventName), 'Release preparation requires a tag push or manual dispatch');
   if (eventName === 'push') requireValue(ref === `refs/tags/${tag}`, 'Push reference does not match the release tag');
 
-  async function request(route, { method = 'GET', body, allowMissing = false } = {}) {
+  async function request(route, { method = 'GET', body, allowMissing = false, allowConflict = false } = {}) {
     let response;
     try {
       response = await fetchImpl(`https://api.github.com/repos/${repository}/git/${route}`, {
@@ -61,6 +61,7 @@ export async function prepareReleaseTag({
       throw new Error('GitHub Git reference request failed');
     }
     if (allowMissing && response.status === 404) return undefined;
+    if (method === 'POST' && allowConflict && response.status === 422) return undefined;
     requireValue(response.status === (method === 'POST' ? 201 : 200), `GitHub Git reference ${method} failed (${response.status})`);
     let size = 0;
     const chunks = [];
@@ -74,9 +75,8 @@ export async function prepareReleaseTag({
   }
 
   const tagRef = `refs/tags/${tag}`;
-  const existing = await request(`ref/tags/${tag}`, { allowMissing: true });
-  if (existing !== undefined) {
-    let object = validateReference(existing, tagRef);
+  async function resolveTag(reference) {
+    let object = validateReference(reference, tagRef);
     const seen = new Set();
     // Historical annotated tags are peeled without updating their references.
     while (object.type === 'tag') {
@@ -86,8 +86,10 @@ export async function prepareReleaseTag({
       requireValue(annotated?.sha === object.sha, 'GitHub returned a different annotated tag');
       object = validateObject(annotated.object);
     }
-    return { tag, sha: object.sha, created: false };
+    return object.sha;
   }
+  const existing = await request(`ref/tags/${tag}`, { allowMissing: true });
+  if (existing !== undefined) return { tag, sha: await resolveTag(existing), created: false };
 
   requireValue(eventName === 'workflow_dispatch' && ref === 'refs/heads/main', 'Missing release tags may only be created by manual dispatch on main');
   requireValue(typeof token === 'string' && token.length > 0, 'Release tag creation requires the workflow GITHUB_TOKEN');
@@ -99,10 +101,16 @@ export async function prepareReleaseTag({
   const { packageJson, lockJson } = await readVersions();
   assertVersionMatch(tag, packageJson, lockJson);
 
-  // Create only. A competing creator produces a failure, never a force update.
-  const created = validateReference(await request('refs', {
-    method: 'POST', body: { ref: tagRef, sha: checkedOutSHA },
-  }), tagRef);
+  // Create once. A competing creator is accepted only at the exact same commit.
+  const creation = await request('refs', {
+    method: 'POST', body: { ref: tagRef, sha: checkedOutSHA }, allowConflict: true,
+  });
+  if (creation === undefined) {
+    const racedSHA = await resolveTag(await request(`ref/tags/${tag}`));
+    requireValue(racedSHA === checkedOutSHA, 'Existing release tag does not match the checked-out main commit');
+    return { tag, sha: racedSHA, created: false };
+  }
+  const created = validateReference(creation, tagRef);
   requireValue(created.type === 'commit' && created.sha === checkedOutSHA, 'Created release tag does not match the checked-out main commit');
   return { tag, sha: checkedOutSHA, created: true };
 }
