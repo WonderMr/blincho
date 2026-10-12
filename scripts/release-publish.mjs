@@ -60,7 +60,19 @@ if (existing && !existing.draft) {
     existing = (await listReleases({ repository })).find(release => release.tag_name === tag);
     if (!existing?.draft) throw new Error('Release left draft state before upload verification');
     verifyUploaded(existing, false);
-    createManifest([{ ...existing, draft: false, published_at: new Date().toISOString() }], { repository, requiredTag: tag, checksumsByTag: new Map([[tag, checksums]]), receiptsByTag: new Map([[tag, receipts]]) });
+    // GitHub can use an untagged URL for a draft and its assets. Validate that
+    // source first, then project final URLs only for this prepublication check.
+    const releaseBase = `https://github.com/${repository}/releases/`;
+    const draftUrlTag = typeof existing.html_url === 'string' ? existing.html_url.split('/').at(-1) : null;
+    if (existing.html_url !== `${releaseBase}tag/${draftUrlTag}` || (draftUrlTag !== tag && !/^untagged-[a-f0-9]+$/.test(draftUrlTag))) throw new Error('Release URL does not belong to this repository and draft tag');
+    const projectedRelease = { ...existing, draft: false, published_at: new Date().toISOString(), html_url: `${releaseBase}tag/${tag}`,
+      assets: existing.assets.map(asset => {
+        const name = encodeURIComponent(asset.name);
+        if (asset.browser_download_url !== `${releaseBase}download/${draftUrlTag}/${name}`) throw new Error('Asset download URL does not belong to this repository and draft tag');
+        return { ...asset, browser_download_url: `${releaseBase}download/${tag}/${name}` };
+      }),
+    };
+    createManifest([projectedRelease], { repository, requiredTag: tag, checksumsByTag: new Map([[tag, checksums]]), receiptsByTag: new Map([[tag, receipts]]) });
     gh(['release', 'edit', tag, '--draft=false', '--prerelease', '--latest=false', '--verify-tag']);
     const published = (await listReleases({ repository })).find(release => release.tag_name === tag);
     verifyUploaded(published, true);

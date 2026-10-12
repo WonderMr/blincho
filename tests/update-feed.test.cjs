@@ -4,6 +4,7 @@ const { mkdtemp, mkdir, writeFile, readFile, rm, cp, readdir } = require('node:f
 const os = require('node:os');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const library = import('../scripts/release-lib.mjs');
 const feeds = import('../scripts/update-feed.mjs');
 const packaging = import('../scripts/update-package.mjs');
@@ -34,6 +35,94 @@ async function fixture(releaseVersion = version, signed = false) {
   const options = { requiredTag: tag, checksumsByTag: new Map([[tag, checksums]]), receiptsByTag: new Map([[tag, receipts]]) };
   return { files, receipts, checksums, release, options, manifest: lib.createManifest([release], options) };
 }
+
+async function runPublisher({ mutateDraft = () => {}, mutatePublished = () => {} } = {}) {
+  const f = await fixture('1.4.1');
+  const draftTag = 'untagged-752e02b9c4ead7c770a3';
+  const draft = { ...structuredClone(f.release), draft: true, published_at: null,
+    html_url: f.release.html_url.replace('v1.4.1', draftTag),
+    assets: f.release.assets.map(asset => ({ ...asset, browser_download_url: asset.browser_download_url.replace('v1.4.1/', `${draftTag}/`) })),
+  };
+  mutateDraft(draft);
+  mutatePublished(f.release);
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-publisher-'));
+  try {
+    await mkdir(path.join(directory, 'release-upload'));
+    for (const [name, bytes] of f.files) await writeFile(path.join(directory, 'release-upload', name), bytes);
+    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version: '1.4.1' }));
+    await writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ version: '1.4.1', packages: { '': { version: '1.4.1' } } }));
+    await writeFile(path.join(directory, 'CHANGELOG.md'), '## [1.4.1]\n\n- Example curated release changes.\n');
+    await writeFile(path.join(directory, 'releases.json'), JSON.stringify({ draft, published: f.release }));
+    // Stub the publisher's two external boundaries before importing it. No gh
+    // process or network request can escape this isolated child process.
+    await writeFile(path.join(directory, 'mock-github.mjs'), `
+      import { readFileSync, appendFileSync } from 'node:fs';
+      import childProcess from 'node:child_process';
+      import { syncBuiltinESMExports } from 'node:module';
+      const releases = JSON.parse(readFileSync('releases.json', 'utf8'));
+      let published = false;
+      childProcess.spawnSync = (command, args) => {
+        if (command !== 'gh' || args[0] !== 'release' || !['upload', 'edit'].includes(args[1]) || args[2] !== 'v1.4.1' || args.at(-2) !== '--repo' || args.at(-1) !== 'WonderMr/blincho') throw new Error('Unexpected CLI operation');
+        appendFileSync('calls.jsonl', JSON.stringify(args) + '\\n');
+        if (args[1] === 'edit') {
+          if (!args.includes('--draft=false')) throw new Error('Expected publication command');
+          published = true;
+        }
+        return { status: 0 };
+      };
+      syncBuiltinESMExports();
+      globalThis.fetch = async url => {
+        if (url !== 'https://api.github.com/repos/WonderMr/blincho/releases?per_page=100&page=1') throw new Error('Unexpected network request');
+        return new Response(JSON.stringify([published ? releases.published : releases.draft]));
+      };
+    `);
+    const result = spawnSync(process.execPath, ['--import', path.join(directory, 'mock-github.mjs'), path.resolve(__dirname, '../scripts/release-publish.mjs')], {
+      cwd: directory, encoding: 'utf8', timeout: 30_000,
+      env: { ...process.env, RELEASE_TAG: 'v1.4.1', GITHUB_REPOSITORY: 'WonderMr/blincho', GH_TOKEN: 'fixture-token' },
+    });
+    if (result.error) throw result.error;
+    const calls = (await readFile(path.join(directory, 'calls.jsonl'), 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; })).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+    return { ...result, calls };
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
+
+test('publisher projects temporary GitHub draft release and asset URLs before publishing verified packages', async () => {
+  const result = await runPublisher();
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.calls.map(args => args[1]), ['upload', 'edit']);
+  assert.match(result.stdout, /Published v1\.4\.1 with all packages and verified SHA-256 digests/);
+});
+
+test('publisher refuses unverified draft bytes and unrelated draft URLs before publication', async t => {
+  const mutations = [
+    ['package digest', release => { release.assets[0].digest = `sha256:${'a'.repeat(64)}`; }, /Uploaded bytes/],
+    ['receipt digest', release => { release.assets.find(asset => asset.name.includes('-updates-')).digest = `sha256:${'a'.repeat(64)}`; }, /Uploaded bytes/],
+    ['release repository', release => { release.html_url = release.html_url.replace('WonderMr', 'attacker'); }, /Release URL/],
+    ['release tag', release => { release.html_url = release.html_url.replace(/untagged-[a-f0-9]+$/, 'v1.4.0'); }, /Release URL/],
+    ['asset repository', release => { release.assets[0].browser_download_url = release.assets[0].browser_download_url.replace('WonderMr', 'attacker'); }, /Asset download URL/],
+    ['asset tag', release => { release.assets[0].browser_download_url = release.assets[0].browser_download_url.replace(/untagged-[a-f0-9]+/, 'v1.4.0'); }, /Asset download URL/],
+  ];
+  for (const [name, mutateDraft, expected] of mutations) await t.test(name, async () => {
+    const result = await runPublisher({ mutateDraft });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, expected);
+    assert.deepEqual(result.calls.map(args => args[1]), ['upload']);
+  });
+});
+
+test('publisher strictly validates real published URLs without draft projection', async t => {
+  const mutations = [
+    ['release URL', release => { release.html_url = release.html_url.replace('v1.4.1', 'untagged-752e02b9c4ead7c770a3'); }, /Release URL/],
+    ['asset URL', release => { release.assets[0].browser_download_url = release.assets[0].browser_download_url.replace('v1.4.1/', 'untagged-752e02b9c4ead7c770a3/'); }, /Asset download URL/],
+    ['asset digest', release => { release.assets[0].digest = `sha256:${'a'.repeat(64)}`; }, /Uploaded bytes/],
+  ];
+  for (const [name, mutatePublished, expected] of mutations) await t.test(name, async () => {
+    const result = await runPublisher({ mutatePublished });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, expected);
+    assert.deepEqual(result.calls.map(args => args[1]), ['upload', 'edit']);
+  });
+});
 
 test('mac signing is optional only when no inputs exist and fails closed for every incomplete set', async () => {
   const { macSigningMode, SIGNING_INPUTS, verifyMacSignature } = await packaging;
