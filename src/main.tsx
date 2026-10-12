@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { HistoryRecovery } from './components/HistoryRecovery';
 import './index.css';
 import './styles/themes.css';
 import './styles/appearance.css';
@@ -12,7 +13,7 @@ import './styles/notice.css';
 import { initializeLanguage } from './i18n/runtime';
 import { loadSettings } from './utils/storage';
 import { applyAppearance } from './utils/appearance';
-import { initializeTauriBridge, scheduleLegacyHistoryExport } from './utils/tauriBridge';
+import { initializeTauriBridge, initializeTauriHistory, continueWithoutTauriHistory, scheduleLegacyHistoryExport } from './utils/tauriBridge';
 
 const initialAppearance = loadSettings();
 applyAppearance(initialAppearance.theme, initialAppearance.colorPalette);
@@ -27,22 +28,51 @@ if (import.meta.env.PROD && !window.electronAPI && 'serviceWorker' in navigator 
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
-  void initializeTauriBridge().then(async () => {
+  const root = ReactDOM.createRoot(rootElement);
+  async function mountApp() {
     const appearance = loadSettings();
     applyAppearance(appearance.theme, appearance.colorPalette);
     await initializeLanguage();
     // i18n's module may have loaded before the first-start import.
     if (window.__TAURI__) window.dispatchEvent(new StorageEvent('storage', { key: null }));
     scheduleLegacyHistoryExport();
-    ReactDOM.createRoot(rootElement).render(
+    root.render(
     <React.StrictMode>
       <ErrorBoundary>
         <App />
       </ErrorBoundary>
     </React.StrictMode>
     );
-  }).catch(error => {
-    console.error('Blincho: Desktop initialization failed:', error);
-    rootElement.textContent = 'Не удалось открыть приложение или перенести историю. Исходные данные сохранены.';
-  });
+  }
+  async function showRecovery(error: unknown, onRetry: () => Promise<void>, onContinue?: () => Promise<void>) {
+    await initializeLanguage();
+    root.render(<React.StrictMode><HistoryRecovery error={error} onRetry={onRetry} onContinue={onContinue} /></React.StrictMode>);
+  }
+  async function attemptImport() {
+    try {
+      await initializeTauriHistory();
+      await mountApp();
+    } catch (error) {
+      console.error('Blincho: History initialization failed:', error);
+      await showRecovery(error, attemptImport, continueWithoutHistory);
+    }
+  }
+  async function continueWithoutHistory() {
+    try {
+      await continueWithoutTauriHistory();
+      await mountApp();
+    } catch (error) {
+      await showRecovery(error, attemptImport, continueWithoutHistory);
+    }
+  }
+  async function initialize() {
+    try { await initializeTauriBridge(); }
+    catch (error) {
+      console.error('Blincho: Desktop initialization failed:', error);
+      await showRecovery(error, initialize);
+      return;
+    }
+    await attemptImport();
+  }
+  void initialize();
 }

@@ -441,5 +441,13 @@
   "Больше не показывать обновления": "Güncellemeleri bir daha gösterme",
   "Уведомлять о новых версиях": "Yeni sürümleri bildir",
   "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "Blincho yeni sürümleri kontrol eder ve bildirim gösterir. Yeni sürümü web sitesinden indirip elle yükleyin.",
-  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Yeni sürümü Blincho web sitesinden indirip elle yükleyin."
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Yeni sürümü Blincho web sitesinden indirip elle yükleyin.",
+  "Не удалось перенести историю": "Geçmiş içe aktarılamadı",
+  "Закройте прежнее приложение Blincho (Electron), затем повторите перенос.": "Eski Blincho uygulamasını (Electron) kapatın, ardından içe aktarmayı yeniden deneyin.",
+  "Исходная история в прежнем приложении сохранена. До вашего выбора новые записи не создаются.": "Eski uygulamadaki asıl geçmişiniz korunur. Nasıl devam edeceğinizi seçene kadar yeni kayıt oluşturulmaz.",
+  "Если продолжить без истории, её автоматический перенос будет отключён для этого профиля. Новые записи сохранятся в этом приложении.": "Geçmiş olmadan devam etmek, bu profil için otomatik içe aktarmayı kapatır. Yeni kayıtlar bu uygulamada saklanır.",
+  "Повторить перенос": "İçe aktarmayı yeniden dene",
+  "Продолжить без истории": "Geçmiş olmadan devam et",
+  "Подготавливаем приложение…": "Uygulama hazırlanıyor…",
+  "Причина не указана.": "Neden belirtilmedi."
 }

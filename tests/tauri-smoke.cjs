@@ -100,6 +100,13 @@ async function inspectStorage() {
   const overlay = await inspectStorage(); assert.equal(overlay.renderer.dialog, true);
   console.log('PASS: native expiry presents the React break; close/hide/minimize guards are active.');
   await until(value => !value.strict && value.closable && value.minimizable && !value.timer.breakActive, 12000);
+  let finishedOverlay;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    finishedOverlay = await inspectStorage();
+    if (!finishedOverlay.renderer.dialog) break;
+    await sleep(100);
+  }
+  assert.equal(finishedOverlay.renderer.dialog, false);
   console.log('PASS: strict mode releases automatically after the real break deadline.');
   if (process.argv.includes('--long')) {
     const long = { ...input, totalMs: 360000, remainingMs: 360000, version: read().timer.version + 1 };
@@ -120,13 +127,15 @@ async function inspectStorage() {
   await control('configure',{input:{...input,version:read().timer.version+1}});
   console.log('PASS: native meeting postponement keeps the window hidden and adds five minutes without starting a break.');
   await control('rest'); await until(value => value.strict && value.timer.breakActive);
+  const beforeInterruption = await inspectStorage();
+  const completedBeforeInterruption = beforeInterruption.renderer.stats.reduce((sum, day) => sum + day.breaksCompleted, 0);
   const absenceEpoch = read().timer.absenceEpoch;
   await control('power-cycle');
   await until(value => value.timer.absenceEpoch > absenceEpoch && !value.strict && !value.timer.breakActive);
   let interrupted;
   for (let attempt = 0; attempt < 20; attempt++) { interrupted = await inspectStorage(); if (!interrupted.renderer.dialog) break; await sleep(100); }
   assert.equal(interrupted.renderer.dialog, false);
-  assert.equal(interrupted.renderer.stats.find(value => value.date !== '2026-10-11').breaksCompleted, 0, 'interrupted rest cannot be credited');
+  assert.equal(interrupted.renderer.stats.reduce((sum, day) => sum + day.breaksCompleted, 0), completedBeforeInterruption, 'interrupted rest cannot be credited');
   console.log('PASS: modeled suspend/resume without a tick cancels the React break across the native bridge; this is not physical sleep.');
 
   await stop();

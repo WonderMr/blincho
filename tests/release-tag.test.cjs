@@ -171,13 +171,62 @@ test('only a tag lookup 404 allows preparation; other HTTP failures and malforme
   assert.deepEqual(missingMain.calls.map(call => call.method), ['GET', 'GET']);
 });
 
-test('a competing tag creation fails without retrying, updating or deleting any reference', async t => {
+test('a create conflict outside 422 fails without retrying, updating or deleting any reference', async () => {
   const { prepareReleaseTag } = await library;
-  for (const status of [409, 422]) await t.test(String(status), async () => {
-    const fixture = scenario({ responses: [[404, {}], [200, reference('refs/heads/main')], [status, {}]] });
-    await assert.rejects(prepareReleaseTag(fixture.settings), new RegExp(String(status)));
-    assert.deepEqual(fixture.calls.map(call => call.method), ['GET', 'GET', 'POST']);
-    assert.equal(fixture.calls.at(-1).body.sha, sha);
+  const fixture = scenario({ responses: [[404, {}], [200, reference('refs/heads/main')], [409, {}]] });
+  await assert.rejects(prepareReleaseTag(fixture.settings), /409/);
+  assert.deepEqual(fixture.calls.map(call => call.method), ['GET', 'GET', 'POST']);
+  assert.equal(fixture.calls.at(-1).body.sha, sha);
+});
+
+test('a 422 creation race succeeds through read-only resolution only at the checked-out SHA', async t => {
+  const { prepareReleaseTag } = await library;
+  const annotatedSHA = 'b'.repeat(40);
+  const nestedSHA = 'c'.repeat(40);
+  for (const [name, responses] of [
+    ['lightweight tag', [[200, reference(`refs/tags/${tag}`)]]],
+    ['annotated tag', [
+      [200, reference(`refs/tags/${tag}`, annotatedSHA, 'tag')],
+      [200, { sha: annotatedSHA, object: { type: 'commit', sha } }],
+    ]],
+    ['nested annotated tag', [
+      [200, reference(`refs/tags/${tag}`, annotatedSHA, 'tag')],
+      [200, { sha: annotatedSHA, object: { type: 'tag', sha: nestedSHA } }],
+      [200, { sha: nestedSHA, object: { type: 'commit', sha } }],
+    ]],
+  ]) await t.test(name, async () => {
+    const fixture = scenario({ responses: [[404, {}], [200, reference('refs/heads/main')], [422, {}], ...responses] });
+    assert.deepEqual(await prepareReleaseTag(fixture.settings), { tag, sha, created: false });
+    assert.equal(fixture.versionReads(), 1);
+    assert.deepEqual(fixture.calls.map(call => call.method), ['GET', 'GET', 'POST', ...responses.map(() => 'GET')]);
+    assert.equal(fixture.calls[2].body.sha, sha);
+    assert.equal(Object.hasOwn(fixture.calls[2].body, 'force'), false);
+    assert.equal(fixture.calls[3].url, `https://api.github.com/repos/${repository}/git/ref/tags/${tag}`);
+  });
+});
+
+test('a 422 creation race with a mismatched, missing or invalid tag fails after bounded read-only checks', async t => {
+  const { prepareReleaseTag } = await library;
+  const annotatedSHA = 'b'.repeat(40);
+  for (const [name, responses, expected] of [
+    ['different commit', [[200, reference(`refs/tags/${tag}`, historicalSHA)]], /does not match the checked-out/],
+    ['different annotated commit', [
+      [200, reference(`refs/tags/${tag}`, annotatedSHA, 'tag')],
+      [200, { sha: annotatedSHA, object: { type: 'commit', sha: historicalSHA } }],
+    ], /does not match the checked-out/],
+    ['missing tag', [[404, {}]], /404/],
+    ['wrong reference', [[200, reference('refs/tags/v1.4.2')]], /different release reference/],
+    ['invalid object', [[200, reference(`refs/tags/${tag}`, sha, 'tree')]], /Invalid GitHub Git object/],
+    ['cyclic annotation', [
+      [200, reference(`refs/tags/${tag}`, annotatedSHA, 'tag')],
+      [200, { sha: annotatedSHA, object: { type: 'tag', sha: annotatedSHA } }],
+    ], /nested annotated release tag/],
+    ['lookup failure', [[500, {}]], /500/],
+  ]) await t.test(name, async () => {
+    const fixture = scenario({ responses: [[404, {}], [200, reference('refs/heads/main')], [422, {}], ...responses] });
+    await assert.rejects(prepareReleaseTag(fixture.settings), expected);
+    assert.deepEqual(fixture.calls.map(call => call.method), ['GET', 'GET', 'POST', ...responses.map(() => 'GET')]);
+    assert.equal(fixture.calls[2].body.sha, sha);
   });
 });
 

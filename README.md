@@ -2,7 +2,7 @@
 
 A free screen-break companion for macOS, Windows and Linux. Every feature is free.
 
-From version 1.5.0, the primary macOS app uses Tauri, Rust and the system WKWebView. Windows and Linux use Electron. All desktop versions share the same React interface, local statistics and 30 languages.
+From version 1.5.1, the primary macOS app uses Tauri, Rust and the system WKWebView. Windows and Linux use Electron. All desktop versions share the same React interface, local statistics and 30 languages.
 
 Website: https://blincho.app
 
@@ -19,7 +19,7 @@ Blincho is a general wellness tool. It does not diagnose or treat eye conditions
 
 ## Development
 
-Use Node.js 22.12 or newer. Building the macOS app also needs Xcode Command Line Tools, Rust and CMake. CI pins Rust 1.92.0 and CMake 3.31.10; CMake 4 is incompatible with the bundled LevelDB history migration dependency. The macOS bundle targets macOS 14 or newer.
+Use Node.js 22.12 or newer. Building the macOS app also needs Xcode Command Line Tools, Rust and CMake. CI pins Rust 1.92.0 and CMake 3.31.10; CMake 4 is incompatible with the bundled LevelDB history migration dependency. The macOS bundle targets macOS 14 or newer. Release builds select `aarch64-apple-darwin` for ARM64 or `x86_64-apple-darwin` for Intel explicitly and verify the packaged executable architecture.
 
 ```sh
 npm ci
@@ -54,6 +54,8 @@ Primary domain: `blincho.app`. Aliases `blincho.com`, `www.blincho.com` and `www
 Settings, journal answers and statistics remain on the device. Unless background update checks are turned off, packages contact `blincho.app` for update metadata. Downloads come from GitHub. These requests do not send journal answers or activity history. No account is required.
 
 The application identity remains `com.myeyes.app`. Electron keeps its legacy `myeyes` profile. On the first Tauri macOS launch, Blincho imports settings, journal answers and statistics from a private copy of that profile into WKWebView storage. It does not change the original Electron database or overwrite an existing Tauri profile. Quit the old Electron app before the first migration so its database is stable. Later launches use the migrated profile without importing it again.
+
+If history migration fails, a localized recovery screen appears before the app creates settings or history. Close the old Electron app and choose Retry after correcting the source. Continue without history records an explicit choice for this Tauri profile and allows new local records; later launches do not attempt the legacy import. The original Electron database remains unchanged.
 
 ## Contributing
 

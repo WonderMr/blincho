@@ -330,6 +330,8 @@ struct Inner {
     preferences: Preferences,
     generation: u64,
     operation: Option<u64>,
+    #[cfg(test)]
+    waiting_checks: usize,
     started: bool,
     disposed: bool,
     next_check_at: Option<Instant>,
@@ -431,6 +433,8 @@ impl UpdateController {
                 preferences,
                 generation: 0,
                 operation: None,
+                #[cfg(test)]
+                waiting_checks: 0,
                 started: false,
                 disposed: false,
                 next_check_at: None,
@@ -536,6 +540,17 @@ impl UpdateController {
                 return inner.state.clone();
             }
             if let Some(operation) = inner.operation {
+                // A manual caller upgrades the shared check before its result
+                // is filtered, so it can still expose a skipped release.
+                if manual && !inner.state.manual_check {
+                    inner.state.manual_check = true;
+                    self.publish(&inner);
+                }
+                #[cfg(test)]
+                {
+                    inner.waiting_checks += 1;
+                    self.changed.notify_all();
+                }
                 while inner.operation == Some(operation)
                     && inner.generation == operation
                     && !inner.disposed
@@ -544,6 +559,10 @@ impl UpdateController {
                         .changed
                         .wait(inner)
                         .unwrap_or_else(|error| error.into_inner());
+                }
+                #[cfg(test)]
+                {
+                    inner.waiting_checks -= 1;
                 }
                 return inner.state.clone();
             }
@@ -574,7 +593,7 @@ impl UpdateController {
         inner.operation = None;
         match result {
             Ok(next_version) => {
-                let skipped = !manual
+                let skipped = !inner.state.manual_check
                     && next_version.is_some()
                     && next_version == inner.preferences.skipped_version;
                 inner.state.status = if skipped {
@@ -743,6 +762,20 @@ mod tests {
             Duration::from_millis(20),
             Duration::from_millis(40),
         )
+    }
+
+    fn wait_for_joined_checks(updates: &UpdateController, count: usize) {
+        let (inner, timeout) = updates
+            .changed
+            .wait_timeout_while(updates.lock(), Duration::from_secs(1), |inner| {
+                inner.waiting_checks < count
+            })
+            .unwrap();
+        assert!(
+            !timeout.timed_out(),
+            "callers did not join the pending check"
+        );
+        assert_eq!(inner.waiting_checks, count);
     }
 
     #[test]
@@ -1098,9 +1131,111 @@ mod tests {
         entered_rx.recv_timeout(Duration::from_secs(1)).unwrap();
         let second = updates.clone();
         let second = std::thread::spawn(move || second.check(true));
-        std::thread::sleep(Duration::from_millis(20));
+        wait_for_joined_checks(&updates, 1);
         release_tx.send(()).unwrap();
         assert_eq!(first.join().unwrap(), second.join().unwrap());
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn manual_callers_join_background_check_and_expose_skipped_version() {
+        let directory = TestDirectory::new();
+        save_preferences(
+            &directory.0.join("update-preferences.json"),
+            &Preferences {
+                skipped_version: Some("1.6.0".into()),
+                ..Preferences::default()
+            },
+        )
+        .unwrap();
+        let count = Arc::new(AtomicUsize::new(0));
+        let counter = count.clone();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let release_rx = Mutex::new(release_rx);
+        let updates = controller(
+            &directory,
+            Arc::new(move |_| {
+                counter.fetch_add(1, Ordering::SeqCst);
+                entered_tx.send(()).unwrap();
+                release_rx
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(1))
+                    .unwrap();
+                Ok(newer_manifest())
+            }),
+        );
+        let background = updates.clone();
+        let background = std::thread::spawn(move || background.check(false));
+        entered_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(!updates.get_state().manual_check);
+        let first = updates.clone();
+        let first = std::thread::spawn(move || first.check(true));
+        wait_for_joined_checks(&updates, 1);
+        let second = updates.clone();
+        let second = std::thread::spawn(move || second.check(true));
+        wait_for_joined_checks(&updates, 2);
+        release_tx.send(()).unwrap();
+        let state = first.join().unwrap();
+        assert_eq!(state.status, "available");
+        assert_eq!(state.available_version.as_deref(), Some("1.6.0"));
+        assert_eq!(state.skipped_version.as_deref(), Some("1.6.0"));
+        assert!(state.manual_check);
+        assert_eq!(second.join().unwrap(), state);
+        assert_eq!(background.join().unwrap(), state);
+        assert_eq!(updates.get_state(), state);
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn policy_change_cancels_manual_joiners_without_another_fetch() {
+        let directory = TestDirectory::new();
+        let count = Arc::new(AtomicUsize::new(0));
+        let counter = count.clone();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let release_rx = Mutex::new(release_rx);
+        let updates = controller(
+            &directory,
+            Arc::new(move |_| {
+                counter.fetch_add(1, Ordering::SeqCst);
+                entered_tx.send(()).unwrap();
+                release_rx
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(1))
+                    .unwrap();
+                Ok(newer_manifest())
+            }),
+        );
+        let background = updates.clone();
+        let background = std::thread::spawn(move || background.check(false));
+        entered_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let (completed_tx, completed_rx) = mpsc::channel();
+        let mut joiners = Vec::new();
+        for expected in 1..=2 {
+            let manual = updates.clone();
+            let completed = completed_tx.clone();
+            joiners.push(std::thread::spawn(move || {
+                completed.send(manual.check(true)).unwrap();
+            }));
+            wait_for_joined_checks(&updates, expected);
+        }
+        let cancelled = updates.set_policy("off");
+        for _ in 0..2 {
+            assert_eq!(
+                completed_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+                cancelled
+            );
+        }
+        release_tx.send(()).unwrap();
+        assert_eq!(background.join().unwrap(), cancelled);
+        for joiner in joiners {
+            joiner.join().unwrap();
+        }
+        assert_eq!(updates.get_state(), cancelled);
+        assert_eq!(updates.check(false), cancelled);
         assert_eq!(count.load(Ordering::SeqCst), 1);
     }
 

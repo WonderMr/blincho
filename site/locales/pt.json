@@ -124,5 +124,6 @@
   "download.inAppUpdates": "Atualizações pelo aplicativo",
   "download.manualUpdates": "Atualizações manuais",
   "release.1.4.1": "30 idiomas de interface, incluindo armênio, e preferências de atualização para os pacotes de desktop compatíveis. Escolha atualizações automáticas, perguntar antes de baixar ou desativar a verificação de atualizações em segundo plano.",
-  "release.1.5.0": "O macOS agora usa Tauri com um temporizador nativo e importa o histórico local existente. Windows e Linux mantêm Electron. As atualizações do macOS continuam manuais."
+  "release.1.5.0": "O macOS agora usa Tauri com um temporizador nativo e importa o histórico local existente. Windows e Linux mantêm Electron. As atualizações do macOS continuam manuais.",
+  "release.1.5.1": "O macOS agora usa Tauri com um temporizador nativo e importa o histórico local existente. Windows e Linux mantêm Electron. As atualizações do macOS continuam manuais."
 }
