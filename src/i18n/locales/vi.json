@@ -438,5 +438,8 @@
   "Для проверки обновлений Blincho обращается к blincho.app, для загрузки к GitHub. Статистика и ответы анкеты не отправляются.": "Blincho kết nối với blincho.app để kiểm tra bản cập nhật và GitHub để tải xuống. Thống kê và câu trả lời bảng câu hỏi của bạn không được gửi đi.",
   "Скачать сейчас и установить при выходе из Blincho?": "Tải ngay và cài đặt khi bạn thoát Blincho?",
   "Позже": "Để sau",
-  "Больше не показывать обновления": "Không hiển thị bản cập nhật nữa"
+  "Больше не показывать обновления": "Không hiển thị bản cập nhật nữa",
+  "Уведомлять о новых версиях": "Thông báo khi có phiên bản mới",
+  "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "Blincho kiểm tra phiên bản mới và hiển thị thông báo. Hãy tải phiên bản mới từ trang web và cài đặt thủ công.",
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Hãy tải phiên bản mới từ trang web Blincho và cài đặt thủ công."
 }

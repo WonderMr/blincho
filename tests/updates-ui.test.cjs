@@ -20,7 +20,8 @@ function load(relative) {
 }
 const { UpdateSettings, UpdateNotice } = load('src/components/UpdateSettings.tsx');
 const { useUpdates } = load('src/utils/updates.ts');
-const base = {policy:'ask',status:'available',supported:true,supportReason:null,currentVersion:'1.4.0',availableVersion:'1.4.1',skippedVersion:null,progress:null,lastCheckedAt:null,errorCode:null,installOnQuit:false,manualCheck:false,manualDownloadUrl:'https://blincho.app/#download'};
+const base = {policy:'ask',status:'available',supported:true,checkSupported:true,supportReason:null,currentVersion:'1.4.0',availableVersion:'1.4.1',skippedVersion:null,progress:null,lastCheckedAt:null,errorCode:null,installOnQuit:false,manualCheck:false,manualDownloadUrl:'https://blincho.app/#download'};
+const unsignedMac = {...base,supported:false,checkSupported:true,supportReason:'unsigned-mac'};
 const props = node => node[Object.keys(node).find(key => key.startsWith('__reactProps'))];
 function harness(Component, initialProps) {
   const host=doc.createElement('div');doc.body.appendChild(host);const root=ReactDOMClient.createRoot(host);
@@ -62,6 +63,66 @@ test('settings keep manual actions under off, disable unsupported auto, and expo
     h.render({updates:{...updates,state:{...base,status:'ready',installOnQuit:true}}});
     assert(h.host.textContent.includes('«Выйти»'));h.click('Отменить и отключить обновления');assert.equal(policy,'off');
   } finally {h.close();}
+});
+
+test('unsigned macOS notice opens the website and respects suspension, manual checks and Later', () => {
+  let downloaded=0,opened=0;
+  const updates=controls({state:{...unsignedMac},download:()=>downloaded++,openDownload:()=>opened++});
+  const h=harness(UpdateNotice,{updates,suspended:false,onSettings(){}});
+  try {
+    assert(h.host.textContent.includes('Скачайте новую версию с сайта Blincho и установите её вручную.'));
+    assert(!h.host.textContent.includes('установить при выходе'));
+    assert.equal(h.button('Скачать обновление'),undefined);
+    h.click('Скачать с сайта');assert.equal(opened,1);assert.equal(downloaded,0);
+    for(const patch of [{policy:'off'},{manualCheck:true},{checkSupported:false},{skippedVersion:'1.4.1'}]) {
+      h.render({updates:{...updates,state:{...unsignedMac,...patch}},suspended:false,onSettings(){}});
+      assert.equal(h.host.textContent,'');
+    }
+    h.render({updates,suspended:true,onSettings(){}});assert.equal(h.host.textContent,'');
+    h.render({updates,suspended:false,onSettings(){}});h.click('Позже');assert.equal(h.host.textContent,'');
+    h.render({updates:{...updates,state:{...unsignedMac,availableVersion:'1.4.2'}},suspended:false,onSettings(){}});
+    assert(h.host.textContent.includes('1.4.2'));assert.equal(downloaded,0);
+  } finally {h.close();}
+});
+
+test('unsigned macOS settings describe notifications and never promise installation on quit', () => {
+  const h=harness(UpdateSettings,{updates:controls({state:{...unsignedMac}})});
+  try {
+    assert(h.host.textContent.includes('Уведомлять о новых версиях'));
+    assert(h.host.textContent.includes('Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.'));
+    assert(!h.host.textContent.includes('Установка происходит при выходе'));
+    assert(h.host.querySelectorAll('option').find(node=>node.getAttribute('value')==='auto').getAttribute('disabled')!==null);
+    assert(h.button('Проверить обновления'));assert(h.button('Скачать с сайта'));
+    h.render({updates:controls({state:{...unsignedMac,policy:'auto'}})});
+    assert(!h.host.textContent.includes('Разрешаю загрузку новых версий'));
+  } finally {h.close();}
+});
+
+test('unsigned macOS opt-out persists through the bridge and remount while manual actions remain available', async () => {
+  let storedState={...unsignedMac},checked=0,downloaded=0,opened=0;
+  const policies=[];
+  window.electronAPI={
+    getUpdateState:async()=>({...storedState}),
+    setUpdatePolicy:async policy=>{policies.push(policy);storedState={...storedState,policy};return {...storedState};},
+    checkForUpdates:async()=>{checked++;storedState={...storedState,manualCheck:true};return {...storedState};},
+    downloadUpdate:async()=>{downloaded++;return {...storedState};},
+    openUpdateDownload:async()=>{opened++;return true;},
+  };
+  function Screen({settings=false}) {
+    const updates=useUpdates();
+    return settings ? React.createElement(UpdateSettings,{updates}) : React.createElement(UpdateNotice,{updates,suspended:false,onSettings(){}});
+  }
+  let h=harness(Screen,{});
+  try {
+    await settle();h.click('Больше не показывать обновления');await settle();
+    assert.deepEqual(policies,['off']);assert.equal(storedState.policy,'off');assert.equal(h.host.textContent,'');
+    h.close();h=null;storedState={...storedState,availableVersion:'1.4.2'};
+    h=harness(Screen,{});await settle();assert.equal(h.host.textContent,'');
+    h.render({settings:true});await settle();
+    h.click('Проверить обновления');await settle();h.click('Скачать с сайта');await settle();
+    assert.equal(checked,1);assert.equal(opened,1);assert.equal(downloaded,0);assert.equal(storedState.policy,'off');
+    h.render({settings:false});assert.equal(h.host.textContent,'');
+  } finally {h?.close();window.electronAPI=undefined;}
 });
 
 test('update hook ignores stale initial and command responses after newer push events and cleans subscription', async () => {

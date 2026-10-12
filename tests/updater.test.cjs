@@ -465,3 +465,83 @@ test('pinned BaseUpdater installs silently without forced restart only after act
   assert.equal(h.quit(), 0);
   assert.equal(installed.length, 1);
 });
+
+function notificationManifest(version = '1.5.0') {
+  const name = `Blincho-${version}-macos-x64.zip`;
+  return { schemaVersion: 1, repository: 'WonderMr/blincho', releases: [{ version, tag: `v${version}`,
+    url: `https://github.com/WonderMr/blincho/releases/tag/v${version}`,
+    assets: [{ name, platform: 'macos', architecture: 'x64', format: 'zip', size: 100, sha256: 'a'.repeat(64),
+      url: `https://github.com/WonderMr/blincho/releases/download/v${version}/${name}` }] }] };
+}
+function macHarness(t, options = {}) {
+  let loads = 0;
+  const h = harness(t, { platform: 'darwin', support: { supported: false, checkSupported: true, supportReason: 'unsigned-mac' },
+    updaterFactory() { throw new Error('Unsigned Mac must never construct an installer'); },
+    manifestLoader: async () => { loads++; return notificationManifest(); }, ...options });
+  return { ...h, get loads() { return loads; } };
+}
+
+test('unsigned Mac schedules metadata checks, announces version, and never downloads or installs', async t => {
+  const h = macHarness(t); h.controller.start();
+  assert.equal([...h.timers.values()][0].delay, 60_000);
+  h.tick(); await h.flush();
+  const state = h.controller.getUpdateState();
+  assert.equal(state.checkSupported, true); assert.equal(state.supported, false);
+  assert.equal(state.status, 'available'); assert.equal(state.availableVersion, '1.5.0');
+  assert.equal(h.loads, 1); assert.equal(state.manualCheck, false);
+  assert.equal([...h.timers.values()][0].delay, 6 * 60 * 60 * 1000);
+  assert.equal((await h.controller.downloadUpdate('1.5.0')).errorCode, 'invalid-request');
+  assert.equal(h.controller.setUpdatePolicy('auto').errorCode, 'invalid-request');
+  assert.equal(h.controller.getUpdateState().installOnQuit, false); assert.equal(h.quit(), 0);
+});
+
+test('unsigned Mac never-show choice persists, stops checks, and keeps manual checking and skip available', async t => {
+  const h = macHarness(t); h.controller.start(); h.controller.setUpdatePolicy('off');
+  assert.equal(h.timers.size, 0); assert.equal(h.loads, 0);
+  const fresh = macHarness(t, { directory: h.directory }); fresh.controller.start();
+  assert.equal(fresh.controller.getUpdateState().policy, 'off'); assert.equal(fresh.timers.size, 0);
+  await fresh.controller.checkForUpdates();
+  assert.equal(fresh.loads, 1); assert.equal(fresh.controller.getUpdateState().manualCheck, true);
+  assert.equal(fresh.controller.getUpdateState().status, 'available');
+  fresh.controller.skipUpdate('1.5.0'); fresh.controller.setUpdatePolicy('ask'); fresh.tick(); await fresh.flush();
+  assert.equal(fresh.controller.getUpdateState().status, 'idle');
+  assert.equal(fresh.controller.getUpdateState().skippedVersion, '1.5.0');
+  await fresh.controller.checkForUpdates(); assert.equal(fresh.controller.getUpdateState().status, 'available');
+});
+
+test('unsigned Mac off and quit abort checks and reject late metadata without prompts', async t => {
+  for (const action of ['off', 'quit']) {
+    const result = deferred(); let signal;
+    const h = macHarness(t, { manifestLoader: request => { signal = request.signal; return result.promise; } });
+    const checking = h.controller.checkForUpdates(); await h.flush();
+    if (action === 'off') h.controller.setUpdatePolicy('off'); else h.quit();
+    assert.equal(signal.aborted, true);
+    result.resolve(notificationManifest()); await checking;
+    assert.equal(h.controller.getUpdateState().availableVersion, null);
+    assert.equal(h.controller.getUpdateState().installOnQuit, false);
+  }
+  const h = macHarness(t); const checking = h.controller.checkForUpdates(); h.controller.setUpdatePolicy('off');
+  await checking; assert.equal(h.loads, 0, 'immediate off starts no HTTP request');
+});
+
+test('unsigned Mac reports no newer version and recovers after a failed or malformed check', async t => {
+  let answer = () => { throw new Error('https://private-token'); };
+  const h = macHarness(t, { manifestLoader: () => answer() });
+  await h.controller.checkForUpdates(); assert.equal(h.controller.getUpdateState().errorCode, 'check-failed');
+  assert(!JSON.stringify(h.controller.getUpdateState()).includes('private-token'));
+  answer = () => ({ schemaVersion: 2 });
+  await h.controller.checkForUpdates(); assert.equal(h.controller.getUpdateState().errorCode, 'check-failed');
+  answer = () => notificationManifest('1.3.0');
+  await h.controller.checkForUpdates(); assert.equal(h.controller.getUpdateState().status, 'up-to-date');
+  answer = () => notificationManifest();
+  await h.controller.checkForUpdates(); assert.equal(h.controller.getUpdateState().status, 'available');
+});
+
+test('unsigned Mac treats old automatic-install preference as notification consent only', async t => {
+  const h = harness(t); h.controller.setUpdatePolicy('auto');
+  const fresh = macHarness(t, { directory: h.directory });
+  assert.equal(fresh.controller.getUpdateState().policy, 'ask');
+  fresh.controller.start(); fresh.tick(); await fresh.flush();
+  assert.equal(fresh.controller.getUpdateState().status, 'available');
+  assert.equal(fresh.controller.getUpdateState().installOnQuit, false);
+});

@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { availableMacVersion, fetchReleaseManifest } = require('./manualUpdates.cjs');
 
 const POLICIES = new Set(['ask', 'auto', 'off']);
 const MANUAL_DOWNLOAD_URL = 'https://blincho.app/#download';
@@ -19,7 +20,7 @@ function readBoundedJson(fileSystem, file, limit) {
 
 function resolveUpdateSupport({ app, platform = process.platform, arch = process.arch, env = process.env,
   resourcesPath = process.resourcesPath, execPath = process.execPath, fileSystem = fs }) {
-  const unsupported = supportReason => ({ supported: false, supportReason });
+  const unsupported = supportReason => ({ supported: false, checkSupported: false, supportReason });
   if (!app.isPackaged) return unsupported('development');
   let metadata;
   try { metadata = readBoundedJson(fileSystem, path.join(app.getAppPath(), 'electron', 'update-support.json'), 4096); }
@@ -28,7 +29,7 @@ function resolveUpdateSupport({ app, platform = process.platform, arch = process
     return unsupported('missing-config');
   }
   if (platform === 'darwin') {
-    if (metadata.signed !== true || metadata.packageType !== 'mac-signed') return unsupported('unsigned-mac');
+    if (metadata.signed !== true || metadata.packageType !== 'mac-signed') return { supported: false, checkSupported: true, supportReason: 'unsigned-mac' };
   } else if (platform === 'win32') {
     // An unpacked directory and a portable executable are never an installed NSIS app.
     if (metadata.packageType !== 'nsis' || env.PORTABLE_EXECUTABLE_FILE || env.PORTABLE_EXECUTABLE_DIR ||
@@ -38,15 +39,17 @@ function resolveUpdateSupport({ app, platform = process.platform, arch = process
         !fileSystem.existsSync(env.APPIMAGE)) return unsupported('unsupported-package');
   } else return unsupported('unsupported-package');
   if (!resourcesPath || !fileSystem.existsSync(path.join(resourcesPath, 'app-update.yml'))) return unsupported('missing-config');
-  return { supported: true, supportReason: null };
+  return { supported: true, checkSupported: true, supportReason: null };
 }
 
 function createUpdateController({ app, platform = process.platform, arch = process.arch, env = process.env,
   resourcesPath = process.resourcesPath, execPath = process.execPath, fileSystem = fs,
   updaterFactory = () => require('electron-updater').autoUpdater,
   schedule = setTimeout, cancel = clearTimeout, now = () => new Date().toISOString(),
-  onState = () => {}, support: suppliedSupport }) {
+  onState = () => {}, support: suppliedSupport, manifestLoader = fetchReleaseManifest }) {
   const support = suppliedSupport || resolveUpdateSupport({ app, platform, arch, env, resourcesPath, execPath, fileSystem });
+  const checkSupported = support.supported || support.checkSupported === true;
+  const notificationOnly = platform === 'darwin' && checkSupported && !support.supported;
   const preferencePath = path.join(app.getPath('userData'), 'update-preferences.json');
   let preferences = { schemaVersion: 1, policy: 'ask', skippedVersion: null };
   let preferenceError = false;
@@ -63,9 +66,11 @@ function createUpdateController({ app, platform = process.platform, arch = proce
       preferenceError = true;
     }
   }
+  // An old automatic-install preference cannot promise installation in a manual package.
+  if (notificationOnly && preferences.policy === 'auto') preferences.policy = 'ask';
   const version = app.getVersion?.();
   let state = {
-    policy: preferences.policy, status: preferenceError ? 'error' : 'idle', ...support,
+    policy: preferences.policy, status: preferenceError ? 'error' : 'idle', ...support, checkSupported,
     currentVersion: validVersion(version) ? version : '0.0.0', availableVersion: null,
     skippedVersion: preferences.skippedVersion, progress: null, lastCheckedAt: null,
     errorCode: preferenceError ? 'preferences-failed' : null, installOnQuit: false,
@@ -111,7 +116,7 @@ function createUpdateController({ app, platform = process.platform, arch = proce
   }
   function scheduleCheck(delay = CHECK_INTERVAL) {
     clearTimer();
-    if (!started || quitting || !state.supported || state.policy === 'off') return;
+    if (!started || quitting || !state.checkSupported || state.policy === 'off') return;
     timer = schedule(() => {
       timer = null;
       void runCheck(false).finally(() => scheduleCheck());
@@ -175,7 +180,7 @@ function createUpdateController({ app, platform = process.platform, arch = proce
   }
 
   function setUpdatePolicy(policy) {
-    if (!POLICIES.has(policy) || quitting) return publish({ errorCode: 'invalid-request' });
+    if (!POLICIES.has(policy) || quitting || (notificationOnly && policy === 'auto')) return publish({ errorCode: 'invalid-request' });
     // Even selecting the same policy revokes pending one-time consent.
     revoke();
     clearTimer();
@@ -189,7 +194,8 @@ function createUpdateController({ app, platform = process.platform, arch = proce
     if (quitting || (!manual && state.policy === 'off')) return Promise.resolve(getUpdateState());
     if (operation) return operation.promise;
     if (state.status === 'ready') return Promise.resolve(getUpdateState());
-    if (!state.supported) return Promise.resolve(manual ? publish({ status: 'manual', manualCheck: true, errorCode: null }) : getUpdateState());
+    if (!state.checkSupported) return Promise.resolve(manual ? publish({ status: 'manual', manualCheck: true, errorCode: null }) : getUpdateState());
+    if (notificationOnly) return runNotificationCheck(manual);
     disarm();
     const { CancellationToken } = require('builder-util-runtime');
     const current = { kind: 'check', generation, token: new CancellationToken(), promise: null };
@@ -224,6 +230,31 @@ function createUpdateController({ app, platform = process.platform, arch = proce
       }
       return getUpdateState();
     })();
+    return current.promise;
+  }
+
+  function runNotificationCheck(manual) {
+    const abort = new AbortController();
+    const current = { kind: 'check', generation, token: { cancel: () => abort.abort() }, promise: null };
+    operation = current;
+    publish({ status: 'checking', manualCheck: manual, availableVersion: null, errorCode: null });
+    // Start in a microtask so even a synchronous loader failure clears the operation.
+    current.promise = Promise.resolve().then(async () => {
+      try {
+        if (current.generation !== generation || quitting) return getUpdateState();
+        const manifest = await manifestLoader({ signal: abort.signal, version: state.currentVersion });
+        if (current.generation !== generation || quitting) return getUpdateState();
+        const nextVersion = availableMacVersion(manifest, state.currentVersion, arch);
+        const skipped = !manual && nextVersion && nextVersion === preferences.skippedVersion;
+        return publish({ status: skipped ? 'idle' : nextVersion ? 'available' : 'up-to-date',
+          availableVersion: skipped ? null : nextVersion, lastCheckedAt: now() });
+      } catch {
+        if (current.generation === generation && !quitting) publish({ status: 'error', errorCode: 'check-failed' });
+        return getUpdateState();
+      } finally {
+        if (operation === current) operation = null;
+      }
+    });
     return current.promise;
   }
 

@@ -438,5 +438,8 @@
   "Для проверки обновлений Blincho обращается к blincho.app, для загрузки к GitHub. Статистика и ответы анкеты не отправляются.": "O Blincho se conecta a blincho.app para verificar atualizações e ao GitHub para baixá-las. Suas estatísticas e respostas ao questionário não são enviadas.",
   "Скачать сейчас и установить при выходе из Blincho?": "Baixar agora e instalar ao sair do Blincho?",
   "Позже": "Mais tarde",
-  "Больше не показывать обновления": "Não mostrar atualizações novamente"
+  "Больше не показывать обновления": "Não mostrar atualizações novamente",
+  "Уведомлять о новых версиях": "Avisar sobre novas versões",
+  "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "O Blincho verifica se há novas versões e mostra notificações. Baixe a nova versão pelo site e instale-a manualmente.",
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Baixe a nova versão pelo site do Blincho e instale-a manualmente."
 }

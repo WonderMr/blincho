@@ -2,6 +2,13 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.4.2]
+
+- Notify macOS users about newer releases without requiring Apple Developer signing. The notification opens the Blincho download page; installation remains manual.
+- Remember the choice to stop update notifications and background checks across app restarts, while keeping manual checks available.
+- Check release metadata with request cancellation, time and size limits, numeric version comparison and architecture matching.
+- Clarify update settings and notifications in all 30 interface languages.
+
 ## [1.4.1]
 
 - Launch the Blincho website and desktop app in 30 languages, including Armenian, with automatic detection and a saved manual language choice.

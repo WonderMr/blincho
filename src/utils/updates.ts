@@ -4,7 +4,8 @@ export type UpdatePolicy = 'ask' | 'auto' | 'off';
 export interface UpdateState {
   policy: UpdatePolicy;
   status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'ready' | 'error' | 'manual';
-  supported: boolean;
+  supported: boolean; // Native download and automatic installation are available.
+  checkSupported: boolean; // Version checks may also support manual-install builds.
   supportReason: null | 'development' | 'unsigned-mac' | 'unsupported-package' | 'missing-config';
   currentVersion: string;
   availableVersion: string | null;

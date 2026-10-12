@@ -40,7 +40,7 @@ The static site is generated in 30 languages from `site/locales`. It follows the
 
 See [RELEASE.md](RELEASE.md) for the tag-driven build and publication pipeline. Update the package version, lockfile, changelog and localized release summary together. A pushed `vX.Y.Z` tag builds release packages, publishes checksums and updates the website and desktop update feeds after successful validation. Production deployment requires the configured Cloudflare Actions secret.
 
-Supported desktop packages ask before downloading updates by default. Users can explicitly allow background downloads and installation when they quit Blincho, or turn off background checks and prompts. Manual checks remain available. No update forces an immediate restart. Signed and notarized macOS packages, installed Windows NSIS packages and Linux AppImages support this flow; unsigned macOS, portable Windows and Linux archives use manual downloads.
+Supported desktop packages ask before downloading updates by default. Users can explicitly allow background downloads and installation when they quit Blincho, or turn off background checks and prompts. Manual checks remain available. No update forces an immediate restart. Signed and notarized macOS packages, installed Windows NSIS packages and Linux AppImages support this flow; unsigned macOS, portable Windows and Linux archives use manual downloads. Unsigned macOS builds check for newer releases after one minute and every six hours while running, and offer a website download. Choosing not to show updates again disables background checks persistently; manual checking remains available in settings.
 
 Primary domain: `blincho.app`. Aliases `blincho.com`, `www.blincho.com` and `www.blincho.app` redirect to it, preserving the path and query.
 
