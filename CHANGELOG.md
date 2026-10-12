@@ -2,7 +2,7 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
-## [1.4.0]
+## [1.4.1]
 
 - Launch the Blincho website and desktop app in 30 languages, including Armenian, with automatic detection and a saved manual language choice.
 - Add Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original 15 languages.
@@ -18,3 +18,5 @@ Release notes are curated here before a version tag is pushed. The website keeps
 Earlier versions were developed before this public release process. Their local validation records are not a public release archive. Future published releases remain available in the [GitHub release history](https://github.com/WonderMr/blincho/releases).
 
 Release preparation note: the v1.3.2 build stopped before publication because the Linux AppImage architecture filename differed. The packaging script now normalizes that filename. The v1.3.3 attempt was cancelled before publication to include the expanded language set. Neither tag has public release files.
+
+The v1.4.0 preparation build stopped before publication because a test fixture compared Windows paths with Unix separators. The fixture now uses portable path handling; the existing tag remains unchanged.

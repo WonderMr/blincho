@@ -123,5 +123,5 @@
   "download.signingUnknown": "Firma no verificada",
   "download.inAppUpdates": "Actualizaciones desde la aplicación",
   "download.manualUpdates": "Actualizaciones manuales",
-  "release.1.4.0": "30 idiomas de interfaz, incluido el armenio, y preferencias de actualización para los paquetes de escritorio compatibles. Elige actualizaciones automáticas, preguntar antes de descargar o desactivar la búsqueda de actualizaciones en segundo plano."
+  "release.1.4.1": "30 idiomas de interfaz, incluido el armenio, y preferencias de actualización para los paquetes de escritorio compatibles. Elige actualizaciones automáticas, preguntar antes de descargar o desactivar la búsqueda de actualizaciones en segundo plano."
 }

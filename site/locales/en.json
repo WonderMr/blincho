@@ -123,5 +123,5 @@
   "download.signingUnknown": "Signing not verified",
   "download.inAppUpdates": "In-app updates",
   "download.manualUpdates": "Manual updates",
-  "release.1.4.0": "30 interface languages, including Armenian, and update preferences for supported desktop packages. Choose automatic updates, ask before downloading, or turn off background update checks."
+  "release.1.4.1": "30 interface languages, including Armenian, and update preferences for supported desktop packages. Choose automatic updates, ask before downloading, or turn off background update checks."
 }

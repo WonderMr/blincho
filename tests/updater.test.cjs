@@ -335,10 +335,10 @@ test('unsupported packages make no updater instance or network request and expos
 
 test('support requires matching build metadata, signed mac, installed NSIS or a running AppImage', () => {
   function support(platform, metadata, extra = {}) {
-    const paths = new Set(['/resources/app-update.yml', '/installed/Uninstall Blincho.exe', '/installed/Blincho.AppImage']);
+    const paths = new Set(['/resources/app-update.yml', '/installed/Uninstall Blincho.exe', '/installed/Blincho.AppImage'].map(value => path.normalize(value)));
     return resolveUpdateSupport({ app: { isPackaged: true, getAppPath: () => '/app' }, platform, arch: 'x64',
       resourcesPath: '/resources', execPath: '/installed/Blincho.exe', env: {},
-      fileSystem: { readFileSync: () => Buffer.from(JSON.stringify({ schemaVersion: 1, platform, arch: 'x64', ...metadata })), existsSync: value => paths.has(value) }, ...extra });
+      fileSystem: { readFileSync: () => Buffer.from(JSON.stringify({ schemaVersion: 1, platform, arch: 'x64', ...metadata })), existsSync: value => paths.has(path.normalize(value)) }, ...extra });
   }
   assert.equal(support('darwin', { packageType: 'mac-signed', signed: true }).supported, true);
   assert.equal(support('darwin', { packageType: 'mac-signed', signed: false }).supportReason, 'unsigned-mac');

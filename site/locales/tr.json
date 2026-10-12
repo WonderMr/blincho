@@ -123,5 +123,5 @@
   "download.signingUnknown": "İmza doğrulanmadı",
   "download.inAppUpdates": "Uygulama içinden güncelleme",
   "download.manualUpdates": "Elle güncelleme",
-  "release.1.4.0": "Ermenice dahil 30 arayüz dili ve desteklenen masaüstü paketleri için güncelleme tercihleri. Otomatik güncellemeleri veya indirmeden önce izin istemeyi seçin ya da arka planda güncelleme denetimlerini kapatın."
+  "release.1.4.1": "Ermenice dahil 30 arayüz dili ve desteklenen masaüstü paketleri için güncelleme tercihleri. Otomatik güncellemeleri veya indirmeden önce izin istemeyi seçin ya da arka planda güncelleme denetimlerini kapatın."
 }

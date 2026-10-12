@@ -72,7 +72,7 @@ The updater can fall back to full downloads when differential blockmaps are unav
 
 ```sh
 node --test tests/release-pipeline.test.cjs tests/update-feed.test.cjs
-node scripts/release-manifest.mjs v1.4.0 site/releases.json
+node scripts/release-manifest.mjs v1.4.1 site/releases.json
 npm run build
 node site/build.mjs
 ```
