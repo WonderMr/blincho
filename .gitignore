@@ -1,0 +1,17 @@
+node_modules/
+dist/
+site-dist/
+release/
+release-upload/
+.wrangler/
+.env*
+!.env.example
+.dev.vars*
+*.log
+.DS_Store
+recovery/
+.codegraph/
+.history*
+history.md
+site/DESIGN.txt
+site/copy-source.json

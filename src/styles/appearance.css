@@ -1,0 +1,36 @@
+.appearance-fieldset { border: 0; margin-top: 20px; min-width: 0; }
+.appearance-fieldset legend { color: var(--text-secondary); font-size: .82rem; font-weight: 600; margin-bottom: 10px; }
+.appearance-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.appearance-choice { position: relative; cursor: pointer; min-width: 0; }
+.appearance-choice input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.appearance-choice > span { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; height: 100%; padding: 10px; border-radius: 12px; border: 1px solid var(--border-control); background: var(--bg-card); color: var(--text-secondary); font-size: .86rem; text-align: center; line-height: 1.4; }
+.appearance-choice:hover > span { background: var(--surface-hover); }
+.appearance-choice input:checked + span { background: var(--surface-selected); border-color: var(--accent-primary); color: var(--accent-primary); box-shadow: inset 0 -2px 0 var(--accent-primary); font-weight: 650; }
+.appearance-choice input:focus-visible + span { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.palette-swatch { display: inline-block; width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; border: 1px solid currentColor; }
+.swatch-sage { background: #779986; }
+.swatch-ocean { background: #7695ab; }
+.swatch-lavender { background: #9a88ad; }
+.settings-section-nav { flex-wrap: wrap; }
+.settings-section-nav button { flex: 1 1 auto; }
+@media (max-width: 440px) {
+  .appearance-options { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .appearance-choice > span { justify-content: flex-start; padding-inline: 14px; }
+}
+@media (forced-colors: active) {
+  .appearance-choice > span { border-color: ButtonText; }
+  .appearance-choice input:checked + span { outline: 2px solid Highlight; }
+}
+.timer-mode-pills .timer-mode-btn {
+  flex: 1 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.settings-section-nav button {
+  min-width: max-content;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}

@@ -1,0 +1,146 @@
+name: Release desktop packages and website
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing vX.Y.Z tag to release or retry'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Serialize publication and deployments. A failed or older release cannot race a newer site.
+concurrency:
+  group: blincho-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: node scripts/release-check.mjs
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  package:
+    needs: validate
+    name: Package ${{ matrix.platform }} ${{ matrix.architecture }} (unsigned beta)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, platform: macos, architecture: arm64 }
+          - { os: macos-15-intel, platform: macos, architecture: x64 }
+          - { os: windows-11-arm, platform: windows, architecture: arm64 }
+          - { os: windows-2022, platform: windows, architecture: x64 }
+          - { os: ubuntu-24.04-arm, platform: linux, architecture: arm64 }
+          - { os: ubuntu-24.04, platform: linux, architecture: x64 }
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          architecture: ${{ matrix.architecture }}
+          cache: npm
+      - name: Validate tag and lockfile
+        run: node scripts/release-check.mjs
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Build native packages
+        run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: packages-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: release-upload/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  publish:
+    needs: [validate, package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: release-upload
+      - name: Require every platform artifact and hash the exact bytes
+        run: node scripts/release-checksums.mjs
+      - name: Upload draft, verify digests, then publish unsigned beta
+        run: node scripts/release-publish.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Generate verified release history from published GitHub assets
+        id: manifest
+        run: node scripts/release-manifest.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Install dependencies
+        if: steps.manifest.outputs.deploy == 'true'
+        run: npm ci
+      - name: Build browser app and localized website
+        if: steps.manifest.outputs.deploy == 'true'
+        run: |
+          npm run build
+          node site/build.mjs
+      - name: Validate Worker bundle
+        if: steps.manifest.outputs.deploy == 'true'
+        run: npx --yes wrangler@4.149.0 deploy --dry-run
+      - name: Deploy site and manifest together
+        if: steps.manifest.outputs.deploy == 'true'
+        run: |
+          node -e "for (const name of ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID']) if (!process.env[name]) throw new Error(name + ' secret is missing')"
+          npx --yes wrangler@4.149.0 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

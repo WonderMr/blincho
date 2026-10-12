@@ -1,0 +1,182 @@
+/* The timer shares the page surface; only actions and the active preset need fills. */
+.timer-card.compact-timer {
+  container: compact-timer / inline-size;
+  display: block;
+  padding: 10px 0 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: start;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.compact-timer::before { display: none; }
+
+.compact-timer .timer-workspace {
+  grid-template-columns: minmax(230px, 1fr) minmax(190px, 230px);
+  gap: 34px;
+  max-width: 670px;
+  margin-inline: auto;
+}
+
+.compact-timer .timer-face { position: relative; }
+
+.compact-timer .timer-circle-wrap {
+  width: 254px;
+  height: auto;
+  aspect-ratio: 1;
+  margin: 0;
+  background: transparent;
+}
+
+.compact-timer .timer-state-label {
+  position: absolute;
+  top: 24%;
+  inset-inline: calc(50% - 86px);
+  z-index: 1;
+  min-height: 0;
+  gap: 6px;
+  font-size: .73rem;
+  line-height: 1.4;
+  font-weight: 400;
+  pointer-events: none;
+  overflow-wrap: normal;
+}
+
+.compact-timer .status-indicator { width: 5px; height: 5px; }
+.compact-timer .timer-center-content { padding-top: 23px; }
+.compact-timer .timer-digits { font-size: 3.35rem; font-weight: 500; line-height: 1.15; }
+.compact-timer .timer-sublabel { margin-top: 5px; font-size: .8rem; }
+
+.compact-timer .timer-action-panel {
+  padding: 0;
+  gap: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: start;
+}
+
+.compact-timer .timer-interval-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin-bottom: 3px;
+  color: var(--text-primary);
+  font-size: .92rem;
+}
+
+.compact-timer .timer-interval-summary strong { font-weight: 500; }
+.compact-timer .timer-interval-summary > span + span { color: var(--text-secondary); font-size: .8rem; }
+.compact-timer .timer-interval-summary > span + span strong { color: inherit; font-weight: 400; }
+.compact-timer .timer-controls { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+
+.compact-timer .timer-controls .btn {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: .86rem;
+  font-weight: 500;
+  white-space: normal;
+  line-height: 1.4;
+  box-shadow: none;
+}
+
+.compact-timer .timer-controls .btn-secondary { background: var(--bg-card); border-color: var(--border-subtle); }
+.compact-timer .timer-controls .btn-secondary:hover { background: var(--surface-hover); border-color: var(--border-control); }
+.compact-timer .timer-help { font-size: .73rem; line-height: 1.6; }
+
+.compact-timer .timer-utility-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 22px;
+}
+
+.compact-timer .timer-mode-pills {
+  align-self: auto;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.compact-timer .timer-mode-pills .timer-mode-btn {
+  flex: 0 1 auto;
+  min-width: max-content;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: .73rem;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.compact-timer .timer-mode-pills .timer-mode-btn.active {
+  background: var(--surface-selected);
+  color: var(--accent-primary);
+  border-color: var(--border-subtle);
+  font-weight: 500;
+}
+
+.compact-timer .timer-reset-action,
+.compact-timer .timer-settings-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 6px 3px;
+  color: var(--text-secondary);
+  font-size: .73rem;
+  text-decoration: none;
+}
+
+.compact-timer .timer-reset-action:hover:not(:disabled),
+.compact-timer .timer-settings-link:hover { color: var(--accent-primary); text-decoration: underline; text-underline-offset: 3px; }
+.compact-timer .timer-shortcuts-hint { margin-inline-start: auto; gap: 10px; font-size: .66rem; }
+.compact-timer .kbd-badge kbd { padding: 0 4px; font-size: .63rem; box-shadow: none; }
+
+@container compact-timer (max-width: 540px) {
+  .compact-timer .timer-workspace { grid-template-columns: minmax(185px, 1fr) minmax(160px, 200px); gap: 20px; }
+  .compact-timer .timer-circle-wrap { width: 232px; }
+  .compact-timer .timer-digits { font-size: 3rem; }
+  .compact-timer .timer-state-label { font-size: .68rem; }
+  .compact-timer .timer-shortcuts-hint { width: 100%; margin-inline-start: 0; }
+}
+
+@container compact-timer (max-width: 450px) {
+  .compact-timer .timer-workspace { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .compact-timer .timer-circle-wrap { width: 232px; }
+  .compact-timer .timer-state-label { inset-inline: calc(50% - 76px); }
+  .compact-timer .timer-interval-summary { flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 5px 10px; font-size: .8rem; }
+  .compact-timer .timer-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .compact-timer .timer-controls > .btn:last-child { grid-column: auto; }
+  .compact-timer .timer-controls .btn { padding-inline: 8px; gap: 6px; font-size: .79rem; }
+  .compact-timer .timer-help { text-align: center; }
+  .compact-timer .timer-utility-row { justify-content: center; margin-top: 16px; }
+  .compact-timer .timer-mode-pills, .compact-timer .timer-shortcuts-hint { justify-content: center; }
+}
+
+@media (pointer: coarse) {
+  .compact-timer .timer-mode-pills .timer-mode-btn,
+  .compact-timer .timer-reset-action,
+  .compact-timer .timer-settings-link { min-height: 44px; }
+}
+
+@media (forced-colors: active) {
+  .compact-timer .timer-mode-pills .timer-mode-btn,
+  .compact-timer .timer-controls .btn { border-color: ButtonText; }
+  .compact-timer .timer-mode-pills .timer-mode-btn.active { outline: 2px solid Highlight; }
+}

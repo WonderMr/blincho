@@ -1,0 +1,60 @@
+/* Content column beside the sidebar, using the shared semantic palettes. */
+.app-workspace > .main-content { container: content-column / inline-size; min-width: 0; width: 100%; max-width: 1180px; padding: 28px 36px 36px; gap: 24px; }
+.main-content .dashboard-header { padding: 0; gap: 4px; }
+.dashboard-eyebrow { font-size: .75rem; color: var(--text-secondary); }
+.main-content .dashboard-title { font-size: 1.65rem; line-height: 1.25; letter-spacing: -.025em; }
+.main-content .hero-dashboard-grid { display: flex; flex-direction: column; align-items: stretch; gap: 0; min-width: 0; }
+.daily-summary { padding: 22px 0; border-block: 1px solid var(--border-subtle); }
+.daily-summary h2 { font-size: .92rem; font-weight: 550; margin-bottom: 18px; }
+.daily-metrics { display: flex; flex-wrap: wrap; gap: 18px 40px; }
+.daily-metrics > div { display: flex; align-items: baseline; gap: 9px; }
+.daily-metrics strong { font-size: 1.8rem; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.daily-metrics span { font-size: .8rem; color: var(--text-secondary); }
+.recommended-exercise { display: flex; align-items: center; gap: 15px; padding: 20px 0; border-bottom: 1px solid var(--border-subtle); }
+.recommended-exercise > svg { flex-shrink: 0; color: var(--accent-primary); }
+.recommended-exercise-copy { min-width: 0; flex: 1; }
+.recommended-exercise-copy > span { font-size: .71rem; color: var(--text-secondary); }
+.recommended-exercise h2 { font-size: .94rem; line-height: 1.45; font-weight: 550; margin-top: 3px; }
+.recommended-exercise .btn { flex-shrink: 0; font-size: .8rem; background: transparent; border-color: transparent; color: var(--accent-primary); }
+.main-content .feature-status-list { padding: 16px 0 0; gap: 10px 20px; }
+.main-content .feature-status-row { display: inline-flex; align-items: center; gap: 7px; padding: 0; border: 0; background: transparent; font-size: .72rem; color: var(--text-secondary); line-height: 1.5; }
+.feature-status-row > svg { flex-shrink: 0; }
+.main-content > :is(.library-view, .survey-view, .ergonomics-view, .statistics-view) { width: 100%; max-width: none; min-width: 0; }
+.main-content .view-header { margin-bottom: 22px; }
+.main-content .view-header h2 { font-size: 1.65rem; line-height: 1.3; }
+.main-content .view-header p { font-size: .85rem; line-height: 1.65; max-width: 68ch; }
+.main-content .glass-card { box-shadow: none; border-radius: 12px; }
+.main-content .library-routine-banner { padding: 20px; margin-bottom: 20px; }
+.main-content .exercise-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.main-content .technique-card { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 28px; padding: 22px 0; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: transparent; }
+.main-content .technique-card > div { min-width: 0; }
+.main-content .technique-card h3 { font-size: 1.12rem; }
+.main-content .technique-card-footer { border: 0; padding: 0; justify-content: center; gap: 12px; }
+.main-content .technique-card-footer .btn { min-height: 44px; font-size: .82rem; }
+.main-content .survey-question-card { border-radius: 10px; padding: 18px; }
+.main-content .statistics-metric { border: 0; border-inline-start: 1px solid var(--border-subtle); border-radius: 0; box-shadow: none; background: transparent; padding: 12px 18px; }
+.main-content .statistics-metric:first-child { border-inline-start: 0; }
+.main-content .statistics-metrics { gap: 12px 0; }
+@container content-column (max-width: 600px) {
+  .main-content .technique-card { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .main-content .technique-card-footer { align-items: stretch; }
+  .main-content .ergonomics-principles-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 1100px) and (min-width: 761px) {
+  .app-workspace { --sidebar-width: 204px; }
+  .app-workspace > .main-content { padding-inline: 24px; }
+  .main-content .statistics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .app-workspace > .main-content { padding: 22px 20px 28px; gap: 20px; }
+  .main-content .dashboard-title, .main-content .view-header h2 { font-size: 1.5rem; }
+  .recommended-exercise { flex-wrap: wrap; gap: 10px; }
+  .recommended-exercise .btn { margin-inline-start: auto; }
+}
+@media (max-width: 440px) {
+  .app-workspace > .main-content { padding-inline: 16px; }
+  .daily-metrics { gap: 16px 24px; }
+  .recommended-exercise > svg { display: none; }
+  .recommended-exercise-copy { flex-basis: 100%; }
+  .recommended-exercise .btn { padding-inline: 0; margin: 0; }
+}

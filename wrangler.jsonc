@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "blincho-site",
+  "main": "site/worker.mjs",
+  "compatibility_date": "2026-10-12",
+  "workers_dev": true,
+  "assets": { "directory": "./site-dist", "binding": "ASSETS", "run_worker_first": true },
+  "routes": [
+    { "pattern": "blincho.app", "custom_domain": true },
+    { "pattern": "www.blincho.app", "custom_domain": true },
+    { "pattern": "blincho.com", "custom_domain": true },
+    { "pattern": "www.blincho.com", "custom_domain": true }
+  ],
+  "observability": { "enabled": false }
+}

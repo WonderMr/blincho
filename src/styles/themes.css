@@ -1,0 +1,416 @@
+/* Calm palettes. Import after index.css; this file changes color, not layout.
+ * data-appearance contains the resolved light/dark mode (never "system").
+ * data-palette contains sage, ocean or lavender. Default: light sage.
+ * Inline and canvas token contracts: recovery/theme-palettes-tokens.md.
+ */
+
+:root,
+html[data-appearance="light"][data-palette="sage"] {
+  --bg-primary: #edf1ec;
+  --bg-secondary: #e5ebe3;
+  --bg-card: #f5f7f2;
+  --bg-card-hover: #e7eee5;
+  --bg-dialog: #f5f7f2;
+  --bg-input: #f8faf5;
+  --surface-muted: #e9eee6;
+  --surface-hover: #dde6da;
+  --surface-selected: #dce8dd;
+  --text-primary: #22352b;
+  --text-secondary: #45594d;
+  --text-muted: #536256;
+  --accent-primary: #346a56;
+  --accent-primary-hover: #295743;
+  --accent-secondary: #456b5d;
+  --text-on-accent: #f6faf5;
+  --border-subtle: #cbd6c9;
+  --border-control: #748172;
+  --focus-ring: #346a56;
+  --break-bg: #e5ece3;
+  --exercise-bg: #e4eae1;
+  --exercise-grid: #d5dfd2;
+  --exercise-track: #9baea0;
+  --toggle-track: #738273;
+  --chart-bar: #65816d;
+}
+
+html[data-appearance="light"][data-palette="ocean"] {
+  --bg-primary: #edf1f3;
+  --bg-secondary: #e2e9ed;
+  --bg-card: #f4f7f8;
+  --bg-card-hover: #e5edf1;
+  --bg-dialog: #f4f7f8;
+  --bg-input: #f7fafb;
+  --surface-muted: #e6edf0;
+  --surface-hover: #dbe5ea;
+  --surface-selected: #d9e7ed;
+  --text-primary: #233743;
+  --text-secondary: #465d69;
+  --text-muted: #526570;
+  --accent-primary: #356b82;
+  --accent-primary-hover: #28596d;
+  --accent-secondary: #456879;
+  --text-on-accent: #f6fafc;
+  --border-subtle: #c8d5dd;
+  --border-control: #6f818c;
+  --focus-ring: #356b82;
+  --break-bg: #e1e9ed;
+  --exercise-bg: #dfe8eb;
+  --exercise-grid: #cfdee4;
+  --exercise-track: #96adba;
+  --toggle-track: #6f8290;
+  --chart-bar: #627f90;
+}
+
+html[data-appearance="light"][data-palette="lavender"] {
+  --bg-primary: #f0eef3;
+  --bg-secondary: #e8e3ec;
+  --bg-card: #f7f5f8;
+  --bg-card-hover: #eee7f1;
+  --bg-dialog: #f7f5f8;
+  --bg-input: #faf7fb;
+  --surface-muted: #ece7f0;
+  --surface-hover: #e3dce9;
+  --surface-selected: #e6ddec;
+  --text-primary: #393247;
+  --text-secondary: #594e65;
+  --text-muted: #605669;
+  --accent-primary: #6e5784;
+  --accent-primary-hover: #5e4973;
+  --accent-secondary: #70576f;
+  --text-on-accent: #fcf8fd;
+  --border-subtle: #d7cddd;
+  --border-control: #85798e;
+  --focus-ring: #6e5784;
+  --break-bg: #e9e3ef;
+  --exercise-bg: #e6dfec;
+  --exercise-grid: #d9cede;
+  --exercise-track: #b0a0bb;
+  --toggle-track: #86798f;
+  --chart-bar: #84748f;
+}
+
+html[data-appearance="dark"][data-palette="sage"] {
+  --bg-primary: #17221f;
+  --bg-secondary: #1b2823;
+  --bg-card: #202e29;
+  --bg-card-hover: #293a31;
+  --bg-dialog: #202e29;
+  --bg-input: #1b2823;
+  --surface-muted: #26372e;
+  --surface-hover: #31443b;
+  --surface-selected: #30483d;
+  --text-primary: #e0eae3;
+  --text-secondary: #bbcdbf;
+  --text-muted: #acbeb2;
+  --accent-primary: #9bc9ad;
+  --accent-primary-hover: #b1d7be;
+  --accent-secondary: #a6c4b6;
+  --text-on-accent: #18271e;
+  --border-subtle: #3c5145;
+  --border-control: #869b8c;
+  --focus-ring: #b1d7be;
+  --break-bg: #1c2b24;
+  --exercise-bg: #18271e;
+  --exercise-grid: #293b2e;
+  --exercise-track: #627b69;
+  --toggle-track: #62796b;
+  --chart-bar: #86a892;
+}
+
+html[data-appearance="dark"][data-palette="ocean"] {
+  --bg-primary: #192329;
+  --bg-secondary: #1d2931;
+  --bg-card: #222f37;
+  --bg-card-hover: #2b3c46;
+  --bg-dialog: #222f37;
+  --bg-input: #1d2931;
+  --surface-muted: #283a45;
+  --surface-hover: #304550;
+  --surface-selected: #304957;
+  --text-primary: #e1e9ed;
+  --text-secondary: #b9ccd6;
+  --text-muted: #afc1cb;
+  --accent-primary: #9dc7d9;
+  --accent-primary-hover: #b2d5e4;
+  --accent-secondary: #a6c3ce;
+  --text-on-accent: #192c36;
+  --border-subtle: #41535e;
+  --border-control: #899eaa;
+  --focus-ring: #b2d5e4;
+  --break-bg: #1d2c34;
+  --exercise-bg: #192932;
+  --exercise-grid: #2a3e49;
+  --exercise-track: #607e8d;
+  --toggle-track: #627988;
+  --chart-bar: #84a6b6;
+}
+
+html[data-appearance="dark"][data-palette="lavender"] {
+  --bg-primary: #221f29;
+  --bg-secondary: #292431;
+  --bg-card: #2d2936;
+  --bg-card-hover: #393242;
+  --bg-dialog: #2d2936;
+  --bg-input: #272230;
+  --surface-muted: #352f40;
+  --surface-hover: #40364d;
+  --surface-selected: #443b53;
+  --text-primary: #eae3ef;
+  --text-secondary: #cdbfd7;
+  --text-muted: #bfb1cb;
+  --accent-primary: #c6afd9;
+  --accent-primary-hover: #d4c0e4;
+  --accent-secondary: #c7b6cb;
+  --text-on-accent: #30233a;
+  --border-subtle: #51455e;
+  --border-control: #a393b1;
+  --focus-ring: #d4c0e4;
+  --break-bg: #2a2533;
+  --exercise-bg: #241e2d;
+  --exercise-grid: #372d42;
+  --exercise-track: #7c6990;
+  --toggle-track: #80708e;
+  --chart-bar: #a590b6;
+}
+
+/* Shared status families retain their meaning when the palette changes. */
+:root {
+  color-scheme: light;
+  --status-success: #356446;
+  --status-success-bg: #e1ece1;
+  --status-warning: #765520;
+  --status-warning-bg: #f2e9d5;
+  --status-danger: #963e50;
+  --status-danger-bg: #f4e2e5;
+  --status-info: #38657b;
+  --status-info-bg: #dfebf0;
+  --status-violet: #705980;
+  --status-violet-bg: #ebe2f0;
+  --toggle-thumb: #f8faf6;
+  --modal-scrim: rgba(30, 43, 37, 0.36);
+  --shadow-sm: 0 2px 8px rgba(28, 45, 36, 0.06);
+  --shadow-md: 0 8px 24px -4px rgba(28, 45, 36, 0.1);
+  --shadow-lg: 0 16px 40px -8px rgba(28, 45, 36, 0.2);
+}
+
+html[data-appearance="dark"] {
+  color-scheme: dark;
+  --status-success: #b0d4b7;
+  --status-success-bg: #293f33;
+  --status-warning: #dec294;
+  --status-warning-bg: #463b28;
+  --status-danger: #e2aab5;
+  --status-danger-bg: #492e37;
+  --status-info: #adcddf;
+  --status-info-bg: #2b3e4a;
+  --status-violet: #cdb5e1;
+  --status-violet-bg: #40354d;
+  --toggle-thumb: #e6ede8;
+  --modal-scrim: rgba(8, 15, 12, 0.6);
+  --shadow-sm: 0 2px 8px rgba(4, 10, 7, 0.16);
+  --shadow-md: 0 8px 24px -4px rgba(4, 10, 7, 0.22);
+  --shadow-lg: 0 16px 40px -8px rgba(4, 10, 7, 0.36);
+}
+
+/* Aliases keep the established component vocabulary working in every mode. */
+:root {
+  --bg-surface-glass: var(--bg-card);
+  --bg-overlay: var(--modal-scrim);
+  --surface-accent: var(--surface-selected);
+  --border-active: var(--accent-primary);
+  --border-glow: var(--border-control);
+  --border-accent: var(--border-subtle);
+  --text-highlight: var(--accent-primary);
+  --accent-mint: var(--accent-primary);
+  --accent-cyan: var(--accent-primary);
+  --accent-emerald: var(--status-success);
+  --accent-teal: var(--accent-secondary);
+  --accent-indigo: var(--status-violet);
+  --accent-amber: var(--status-warning);
+  --accent-rose: var(--status-danger);
+  --status-success-border: var(--status-success);
+  --status-warning-border: var(--status-warning);
+  --status-danger-border: var(--status-danger);
+  --status-info-border: var(--status-info);
+  --status-violet-border: var(--status-violet);
+  --grad-primary: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  --grad-glow: linear-gradient(135deg, var(--surface-selected), var(--surface-muted));
+  --grad-card: linear-gradient(180deg, var(--bg-card), var(--surface-muted));
+  --grad-relaxing: linear-gradient(var(--break-bg), var(--break-bg));
+  --shadow-glow: var(--shadow-sm);
+  --shadow-glow-emerald: var(--shadow-sm);
+  --exercise-target: var(--accent-primary);
+  --exercise-target-secondary: var(--status-success);
+  --exercise-target-tertiary: var(--status-violet);
+  --exercise-pupil: var(--exercise-bg);
+  --exercise-cue: var(--status-warning);
+  --chart-track: var(--border-control);
+  --chart-bar-active: var(--accent-primary);
+  --progress-track: var(--border-subtle);
+  --toggle-thumb-checked: var(--text-on-accent);
+}
+
+/* Baseline and focus overrides must follow the legacy button outline reset. */
+body { background: var(--bg-primary); color: var(--text-primary); }
+h1, h2, h3, h4, h5, h6,
+.nav-brand-title, .timer-digits, .metric-val, .break-countdown-large,
+.settings-section-title, .timer-interval-summary strong { color: var(--text-primary); }
+.nav-brand-title { background: none; -webkit-text-fill-color: currentColor; }
+a, .timer-settings-link, .technique-source-details summary::after { color: var(--accent-primary); }
+::selection { background: var(--surface-selected); color: var(--text-primary); }
+::placeholder { color: var(--text-muted); opacity: 1; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb,
+.settings-scroll-body::-webkit-scrollbar-thumb { background: var(--border-control); }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+:focus-visible,
+button:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, summary:focus-visible, a:focus-visible,
+.language-select:focus-visible, .timer-circle-wrap:focus-visible {
+  outline: 3px solid var(--focus-ring);
+}
+.switch input:focus-visible { outline: none; }
+.switch input:focus-visible + .slider { outline: 3px solid var(--focus-ring); }
+
+/* Surfaces are solid so typography remains predictable in either appearance. */
+.nav-bar, .glass-card, .timer-card, .technique-card {
+  background: var(--bg-card);
+  border-color: var(--border-subtle);
+}
+.timer-card::before { background: none; }
+.timer-action-panel, .metric-box, .settings-section-card,
+.settings-nested-fields, .survey-question-card, .ergonomic-diagram-box,
+.exercise-instruction-banner { background: var(--surface-muted); }
+.settings-section-header { border-color: var(--border-subtle); }
+.settings-section-card:hover { border-color: var(--border-control); }
+.library-routine-banner, .language-suggestion, .language-picker {
+  background: var(--surface-selected);
+  border-color: var(--border-subtle);
+}
+.app-notice { background: var(--status-info-bg); border-color: var(--status-info); }
+.library-safety-note { border-color: var(--border-control); }
+.technique-details li::before { color: var(--text-muted); }
+.technique-card:hover { background: var(--bg-card-hover); border-color: var(--border-control); box-shadow: none; }
+.technique-card:focus-within { border-color: var(--focus-ring); }
+.modal-backdrop, .settings-backdrop, .exercise-modal-overlay { background: var(--modal-scrim); }
+.modal-box, .settings-dialog, .exercise-modal-card { background: var(--bg-dialog); border-color: var(--border-subtle); }
+
+/* Selected controls retain their existing border/underline and shape cues. */
+.nav-tabs, .timer-mode-pills, .settings-section-nav { background: var(--bg-secondary); }
+.nav-tab-btn, .timer-mode-btn, .settings-section-nav button { color: var(--text-secondary); }
+.nav-tab-btn:hover, .timer-mode-btn:hover, .settings-section-nav button:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+.nav-tab-btn.active, .timer-mode-btn.active, .survey-radio-btn.selected {
+  background: var(--surface-selected);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.nav-tab-btn.active { box-shadow: inset 0 -2px 0 var(--accent-primary); }
+.btn-primary {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  border-color: var(--accent-primary);
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover {
+  background: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+  box-shadow: var(--shadow-sm);
+  filter: none;
+}
+.btn-secondary, .btn-icon, .survey-radio-btn {
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  border-color: var(--border-control);
+}
+.btn-secondary:hover, .btn-icon:hover, .survey-radio-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+.survey-radio-btn.selected, .survey-radio-btn.selected:hover {
+  background: var(--surface-selected);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+.btn-danger, .btn-danger:hover {
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
+  border-color: var(--status-danger);
+}
+.btn-danger:hover { box-shadow: inset 0 0 0 1px var(--status-danger); }
+.btn:disabled, .btn-icon:disabled { box-shadow: none; }
+.btn-pulse { animation: none; }
+.form-control {
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border-color: var(--border-control);
+  accent-color: var(--accent-primary);
+}
+.form-control:focus { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
+input[type="checkbox"], input[type="radio"], input[type="range"] { accent-color: var(--accent-primary); }
+select { color-scheme: inherit; }
+.slider { background: var(--toggle-track); }
+.slider:before { background: var(--toggle-thumb); }
+input:checked + .slider { background: var(--accent-primary); }
+input:checked + .slider:before { background: var(--toggle-thumb-checked); }
+.kbd-badge kbd { color: var(--text-secondary); background: var(--bg-card); border-color: var(--border-control); box-shadow: var(--shadow-sm); }
+
+/* Status colors are also used by inline semantic replacements and canvas. */
+.status-working, .earned .achievement-state { color: var(--status-success); }
+.status-paused { color: var(--text-secondary); }
+.status-absence { color: var(--status-warning); }
+.status-break { color: var(--status-info); }
+.nav-version-tag, .exercise-step-badge, .ergonomic-icon-wrap,
+.settings-section-icon, .language-picker-symbol, .language-suggestion-icon {
+  color: var(--accent-primary);
+  background: var(--surface-selected);
+  border-color: var(--border-control);
+}
+.badge-ciliary { color: var(--status-info); background: var(--status-info-bg); border-color: var(--status-info); }
+.badge-dryeye { color: var(--status-success); background: var(--status-success-bg); border-color: var(--status-success); }
+.badge-extraocular { color: var(--status-violet); background: var(--status-violet-bg); border-color: var(--status-violet); }
+.badge-sensory { color: var(--status-warning); background: var(--status-warning-bg); border-color: var(--status-warning); }
+.settings-feedback { color: var(--status-info); background: var(--status-info-bg); }
+.error-icon { color: var(--status-warning); background: var(--status-warning-bg); }
+.error-details pre { color: var(--status-danger); background: var(--status-danger-bg); }
+.achievement-icon { color: var(--text-muted); background: var(--surface-muted); }
+.achievement-card.earned { border-color: var(--status-success); }
+.achievement-card.earned .achievement-icon { color: var(--status-success); background: var(--status-success-bg); }
+
+/* Timers, charts, exercise UI and the full-window break share the palette. */
+.timer-svg-bg, .timer-circle-wrap:hover .timer-svg-bg { stroke: var(--progress-track); }
+.timer-svg-progress { stroke: var(--accent-primary); }
+.timer-state-paused .timer-svg-progress,
+.timer-state-absence .timer-svg-progress { stroke: var(--text-muted); }
+.statistics-metric-heading svg { color: var(--accent-primary); }
+.weekly-chart-track { border-color: var(--chart-track); }
+.weekly-chart-bar { background: var(--chart-bar); }
+.is-today .weekly-chart-bar { background: var(--chart-bar-active); }
+.is-today .weekly-chart-day { color: var(--accent-primary); }
+.step-indicator-pill { color: var(--text-muted); background: var(--surface-muted); border-color: var(--border-subtle); }
+.step-indicator-dot { background: var(--text-muted); }
+.step-indicator-pill.active { color: var(--accent-primary); background: var(--surface-selected); border-color: var(--accent-primary); }
+.step-indicator-pill.active .step-indicator-dot { background: var(--accent-primary); box-shadow: none; }
+.step-indicator-pill.completed { color: var(--status-success); background: var(--status-success-bg); border-color: var(--status-success); }
+.step-indicator-pill.completed .step-indicator-dot { background: var(--status-success); }
+.exercise-canvas-container { background: var(--exercise-bg); border-color: var(--border-subtle); }
+.fullscreen-break-takeover { background: var(--break-bg); color: var(--text-primary); }
+.break-orb-pulse { background: radial-gradient(circle, var(--accent-primary) 0%, var(--accent-secondary) 55%, transparent 72%); }
+.break-countdown-large { text-shadow: none; }
+
+/* Preserve native high-contrast modes after all palette overrides. */
+@media (forced-colors: active) {
+  .btn, .btn-icon, .nav-tab-btn, .timer-mode-btn, .survey-radio-btn, .form-control { border-color: ButtonText; }
+  .nav-tab-btn.active, .timer-mode-btn.active, .survey-radio-btn.selected { outline: 2px solid Highlight; }
+  :focus-visible, button:focus-visible, input:focus-visible, select:focus-visible,
+  textarea:focus-visible, summary:focus-visible, a:focus-visible,
+  .language-select:focus-visible, .timer-circle-wrap:focus-visible,
+  .switch input:focus-visible + .slider { outline-color: Highlight; }
+  .timer-svg-progress { stroke: Highlight; }
+  .timer-svg-bg { stroke: GrayText; }
+  .status-indicator, .weekly-chart-bar { background: Highlight; }
+}
