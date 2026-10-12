@@ -124,5 +124,6 @@
   "download.inAppUpdates": "Updates vanuit de app",
   "download.manualUpdates": "Handmatige updates",
   "release.1.4.1": "30 interfacetalen, waaronder Armeens, en updatevoorkeuren voor ondersteunde desktoppakketten. Kies automatische updates, toestemming vragen vóór het downloaden of schakel updatecontroles op de achtergrond uit.",
-  "release.1.5.0": "macOS gebruikt nu Tauri met een systeemeigen timer en importeert de bestaande lokale geschiedenis. Windows en Linux behouden Electron. macOS-updates blijven handmatig."
+  "release.1.5.0": "macOS gebruikt nu Tauri met een systeemeigen timer en importeert de bestaande lokale geschiedenis. Windows en Linux behouden Electron. macOS-updates blijven handmatig.",
+  "release.1.5.1": "macOS gebruikt nu Tauri met een systeemeigen timer en importeert de bestaande lokale geschiedenis. Windows en Linux behouden Electron. macOS-updates blijven handmatig."
 }

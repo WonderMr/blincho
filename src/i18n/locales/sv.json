@@ -441,5 +441,13 @@
   "Больше не показывать обновления": "Visa inte uppdateringar igen",
   "Уведомлять о новых версиях": "Meddela om nya versioner",
   "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "Blincho söker efter nya versioner och visar aviseringar. Hämta den nya versionen från webbplatsen och installera den manuellt.",
-  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Hämta den nya versionen från Blinchos webbplats och installera den manuellt."
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Hämta den nya versionen från Blinchos webbplats och installera den manuellt.",
+  "Не удалось перенести историю": "Det gick inte att importera historiken",
+  "Закройте прежнее приложение Blincho (Electron), затем повторите перенос.": "Stäng den gamla Blincho-appen (Electron) och försök sedan importera igen.",
+  "Исходная история в прежнем приложении сохранена. До вашего выбора новые записи не создаются.": "Din ursprungliga historik i den gamla appen bevaras. Inga nya poster skapas förrän du väljer hur du vill fortsätta.",
+  "Если продолжить без истории, её автоматический перенос будет отключён для этого профиля. Новые записи сохранятся в этом приложении.": "Om du fortsätter utan historik stängs automatisk import av för den här profilen. Nya poster sparas i den här appen.",
+  "Повторить перенос": "Försök importera igen",
+  "Продолжить без истории": "Fortsätt utan historik",
+  "Подготавливаем приложение…": "Förbereder appen…",
+  "Причина не указана.": "Ingen orsak angavs."
 }

@@ -124,5 +124,6 @@
   "download.inAppUpdates": "Uygulama içinden güncelleme",
   "download.manualUpdates": "Elle güncelleme",
   "release.1.4.1": "Ermenice dahil 30 arayüz dili ve desteklenen masaüstü paketleri için güncelleme tercihleri. Otomatik güncellemeleri veya indirmeden önce izin istemeyi seçin ya da arka planda güncelleme denetimlerini kapatın.",
-  "release.1.5.0": "macOS artık yerel bir zamanlayıcıyla Tauri kullanıyor ve mevcut yerel geçmişi içe aktarıyor. Windows ve Linux Electron kullanmaya devam ediyor. macOS güncellemeleri elle yükleniyor."
+  "release.1.5.0": "macOS artık yerel bir zamanlayıcıyla Tauri kullanıyor ve mevcut yerel geçmişi içe aktarıyor. Windows ve Linux Electron kullanmaya devam ediyor. macOS güncellemeleri elle yükleniyor.",
+  "release.1.5.1": "macOS artık yerel bir zamanlayıcıyla Tauri kullanıyor ve mevcut yerel geçmişi içe aktarıyor. Windows ve Linux Electron kullanmaya devam ediyor. macOS güncellemeleri elle yükleniyor."
 }

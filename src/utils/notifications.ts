@@ -19,6 +19,7 @@ declare global {
       onPowerStateChange?: (callback: (state: 'suspend' | 'resume' | 'lock-screen' | 'unlock-screen') => void) => (() => void);
       onTriggerBreak?: (callback: () => void) => (() => void);
       isElectron: boolean;
+      platform?: string;
       getPreferredLanguages?: () => Promise<string[]>;
       setLocale?: (locale: string) => Promise<void>;
       exportLegacyHistory?: (entries: Record<string, string>) => Promise<{ exportedAt: string; entryCount: number }>;

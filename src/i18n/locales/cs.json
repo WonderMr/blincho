@@ -441,5 +441,13 @@
   "Больше не показывать обновления": "Už nezobrazovat aktualizace",
   "Уведомлять о новых версиях": "Upozorňovat na nové verze",
   "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "Blincho kontroluje nové verze a zobrazuje oznámení. Stáhněte si novou verzi z webu a nainstalujte ji ručně.",
-  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Stáhněte si novou verzi z webu Blincho a nainstalujte ji ručně."
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Stáhněte si novou verzi z webu Blincho a nainstalujte ji ručně.",
+  "Не удалось перенести историю": "Historii se nepodařilo importovat",
+  "Закройте прежнее приложение Blincho (Electron), затем повторите перенос.": "Zavřete původní aplikaci Blincho (Electron) a zkuste import znovu.",
+  "Исходная история в прежнем приложении сохранена. До вашего выбора новые записи не создаются.": "Původní historie ve staré aplikaci zůstává zachována. Nové záznamy se nevytvoří, dokud nezvolíte, jak pokračovat.",
+  "Если продолжить без истории, её автоматический перенос будет отключён для этого профиля. Новые записи сохранятся в этом приложении.": "Pokračování bez historie vypne její automatický import pro tento profil. Nové záznamy se budou ukládat v této aplikaci.",
+  "Повторить перенос": "Zkusit import znovu",
+  "Продолжить без истории": "Pokračovat bez historie",
+  "Подготавливаем приложение…": "Příprava aplikace…",
+  "Причина не указана.": "Důvod nebyl uveden."
 }
