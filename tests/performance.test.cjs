@@ -13,7 +13,7 @@ fs.writeFileSync(config, JSON.stringify({
     skipLibCheck: true, rootDir: path.join(repository, 'src'), outDir: directory },
 }));
 try {
-  execFileSync(path.join(repository, 'node_modules/.bin/tsc'), ['-p', config], { stdio: 'inherit' });
+  execFileSync(process.execPath, [path.join(path.dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), '-p', config], { stdio: 'inherit' });
   const storage = require(path.join(directory, 'utils/storage.js'));
   const today = storage.getTodayDateString();
   const previous = '2025-01-01';

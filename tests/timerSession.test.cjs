@@ -12,7 +12,7 @@ fs.writeFileSync(config, JSON.stringify({
   compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext',
     skipLibCheck: true, rootDir: path.join(repository, 'src'), outDir: buildDirectory },
 }));
-execFileSync(path.join(repository, 'node_modules', '.bin', 'tsc'), ['-p', config], { stdio: 'inherit' });
+execFileSync(process.execPath, [path.join(path.dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), '-p', config], { stdio: 'inherit' });
 const { TimerSession, presetDurations, normalizeTimerSettings } = require(path.join(buildDirectory, 'utils/timerSession.js'));
 const storage = require(path.join(buildDirectory, 'utils/storage.js'));
 const saved = new Map();

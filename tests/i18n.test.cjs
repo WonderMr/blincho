@@ -211,8 +211,8 @@ test('native locales are complete and IPC only accepts main-frame canonical loca
   assert.equal(h.trayMenu[0].label, locales.ar.show);
   assert.equal(h.applicationMenu[1].label, locales.ar.edit);
   assert(h.calls.some(([key, value]) => key === 'title' && value === locales.ar.title));
-  assert.equal(h.paths.userData, '/virtual/myeyes');
-  assert.equal(h.paths.sessionData, '/virtual/myeyes');
+  assert.equal(h.paths.userData.replaceAll('\\','/'), '/virtual/myeyes');
+  assert.equal(h.paths.sessionData.replaceAll('\\','/'), '/virtual/myeyes');
 });
 
 test('preload exposes only the narrow preferred-language and locale commands', async () => {

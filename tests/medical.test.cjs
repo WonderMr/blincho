@@ -7,7 +7,7 @@ const { execFileSync } = require("node:child_process");
 const repository = path.resolve(__dirname, "..");
 const compiledDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "myeyes-medical-"));
 process.on("exit", () => fs.rmSync(compiledDirectory, { recursive: true, force: true }));
-execFileSync(path.join(repository, "node_modules/.bin/tsc"), ["--ignoreConfig", "--resolveJsonModule", "--target", "ES2022", "--module", "commonjs", "--jsx", "react", "--esModuleInterop", "--skipLibCheck", "--rootDir", path.join(repository, "src"), "--outDir", compiledDirectory, ...["src/data/medicalTechniques.ts", "src/data/cvsQuestions.ts", "src/components/CVSSurvey.tsx", "src/utils/notifications.ts"].map(file => path.join(repository, file))], { stdio: "inherit" });
+execFileSync(process.execPath, [path.join(path.dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), "--ignoreConfig", "--resolveJsonModule", "--target", "ES2022", "--module", "commonjs", "--jsx", "react", "--esModuleInterop", "--skipLibCheck", "--rootDir", path.join(repository, "src"), "--outDir", compiledDirectory, ...["src/data/medicalTechniques.ts", "src/data/cvsQuestions.ts", "src/components/CVSSurvey.tsx", "src/utils/notifications.ts"].map(file => path.join(repository, file))], { stdio: "inherit" });
 
 function load(file, imports = {}) {
   const sandbox = { exports: {}, require: (id) => imports[id] || {}, console };
