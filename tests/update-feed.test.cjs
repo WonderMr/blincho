@@ -265,7 +265,7 @@ test('unsigned mac is manual, signing stays per asset and older retry cannot low
 
 test('CI installs Rust only for mac jobs and verifies packages before publication', async () => {
   const workflow = await readFile(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8');
-  assert.match(workflow, /if: matrix.platform == 'macos' && hashFiles\('src-tauri\/Cargo.toml'\) != ''\s*\n\s*run: rustup toolchain install 1\.92\.0/);
+  assert.match(workflow, /if: matrix.platform == 'macos' && hashFiles\('src-tauri\/Cargo.toml'\) != ''\s*\n\s*run: \|\s*\n\s*rustup toolchain install 1\.92\.0/);
   assert.doesNotMatch(workflow, /secrets\.(?:MAC_CSC_LINK|MAC_CSC_KEY_PASSWORD|MAC_SIGNING_IDENTITY|APPLE_ID|APPLE_APP_SPECIFIC_PASSWORD|APPLE_TEAM_ID)/);
   assert.match(workflow, /needs: \[validate, package\]/);
   assert.doesNotMatch(workflow, /continue-on-error: true/);

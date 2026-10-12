@@ -183,7 +183,7 @@ test('macOS CI pins Rust for both targets and leaves Ubuntu validation free of R
   const jobs = load(workflow).jobs;
   assert.ok(jobs.validate.steps.every(step => !/cargo|rustup/.test(step.run || '')));
   assert.deepEqual(jobs['tauri-macos'].strategy.matrix.include.map(target => target['rust-target']), ['aarch64-apple-darwin', 'x86_64-apple-darwin']);
-  assert.ok(jobs['tauri-macos'].steps.some(step => /^rustup toolchain install 1\.92\.0 .*--override$/.test(step.run || '')));
+  assert.ok(jobs['tauri-macos'].steps.some(step => /^rustup toolchain install 1\.92\.0 [^\n]+\nrustup override set 1\.92\.0\n?$/.test(step.run || '')));
   assert.ok(jobs['tauri-macos'].steps.some(step => /cmake==3\.31\.10/.test(step.run || '')));
   for (const command of ['cargo fmt --manifest-path src-tauri/Cargo.toml --check', 'cargo check --manifest-path src-tauri/Cargo.toml --locked', 'cargo test --manifest-path src-tauri/Cargo.toml --locked']) assert.ok(jobs['tauri-macos'].steps.some(step => step.run === command));
   const release = load(await readFile(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8'));
