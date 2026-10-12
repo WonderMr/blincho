@@ -6,6 +6,8 @@ The release pipeline builds native macOS, Windows and Linux packages for x64 and
 
 After reviewing and merging the version and changelog, create and push its version tag. The workflow also accepts an existing version tag for a retry. Do not move or recreate an existing tag.
 
+The manual retry for immutable `v1.4.2` repairs one Windows-only test fixture import before running the complete test suite. Its checked-out commit must remain `c77cca3653171ecf84818039ca95913573709b9e`. Only the test's `--import` argument changes from a filesystem path to a file URL; packaged application sources remain exactly those of the tag. Newer tags already include the portable test fixture and do not use this repair.
+
 1. Validate the tag, lockfile, tests and browser build.
 2. Build on six native OS and architecture runners. All six jobs must succeed.
 3. Verify the ten packages and six update receipts against their actual bytes. Generate `SHA256SUMS.txt` over all sixteen files, upload a draft, compare GitHub digests and sizes, validate the complete metadata, then publish the beta prerelease.

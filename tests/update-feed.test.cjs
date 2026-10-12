@@ -85,7 +85,7 @@ async function runPublisher({ mutateDraft = () => {}, mutatePublished = () => {}
         return new Response(JSON.stringify([published ? releases.published : releases.draft]));
       };
     `);
-    const result = spawnSync(process.execPath, ['--import', path.join(directory, 'mock-github.mjs'), path.resolve(__dirname, '../scripts/release-publish.mjs')], {
+    const result = spawnSync(process.execPath, ['--import', require('node:url').pathToFileURL(path.join(directory, 'mock-github.mjs')).href, path.resolve(__dirname, '../scripts/release-publish.mjs')], {
       cwd: directory, encoding: 'utf8', timeout: 30_000,
       env: { ...process.env, RELEASE_TAG: 'v1.4.1', GITHUB_REPOSITORY: 'WonderMr/blincho', GH_TOKEN: 'fixture-token' },
     });
