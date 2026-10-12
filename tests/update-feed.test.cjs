@@ -18,11 +18,13 @@ async function fixture(releaseVersion = version, signed = false) {
   const files = new Map(lib.expectedArtifacts(releaseVersion).map(name => [name, Buffer.from(`package fixture ${name}`)]));
   const receipts = lib.UPDATE_PLATFORMS.flatMap(platform => ['arm64', 'x64'].map(arch => ({
     schemaVersion: 1, version: releaseVersion, platform, arch,
+    ...(lib.usesTauriMac(releaseVersion) ? { runtime: platform === 'darwin' ? 'tauri' : 'electron' } : {}),
     artifacts: lib.expectedArtifacts(releaseVersion).filter(name => {
       const item = lib.describeArtifact(name, releaseVersion);
       return item.platform === lib.SITE_PLATFORMS[platform] && item.architecture === arch;
     }).map(name => {
       const target = name.endsWith('.zip') ? 'zip' : name.endsWith('-setup.exe') ? 'nsis' : name.endsWith('-portable.exe') ? 'portable' : name.endsWith('.AppImage') ? 'AppImage' : 'tar.gz';
+      if (platform === 'darwin' && lib.usesTauriMac(releaseVersion)) return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true };
       const support = packageSupport(platform, arch, target, platform === 'darwin' && signed);
       return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: support.packageType, signed: support.signed, notarized: support.signed, updaterConfig: true };
     }),
@@ -261,14 +263,62 @@ test('unsigned mac is manual, signing stays per asset and older retry cannot low
   }
 });
 
-test('CI passes optional signing inputs only to mac jobs and verifies packages before publication', async () => {
+test('CI installs Rust only for mac jobs and verifies packages before publication', async () => {
   const workflow = await readFile(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8');
-  for (const key of ['MAC_CSC_LINK', 'MAC_CSC_KEY_PASSWORD', 'MAC_SIGNING_IDENTITY', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) assert.ok(workflow.includes(`matrix.platform == 'macos' && secrets.${key}`));
+  assert.match(workflow, /if: matrix.platform == 'macos' && hashFiles\('src-tauri\/Cargo.toml'\) != ''\s*\n\s*run: rustup toolchain install 1\.92\.0/);
+  assert.doesNotMatch(workflow, /secrets\.(?:MAC_CSC_LINK|MAC_CSC_KEY_PASSWORD|MAC_SIGNING_IDENTITY|APPLE_ID|APPLE_APP_SPECIFIC_PASSWORD|APPLE_TEAM_ID)/);
   assert.match(workflow, /needs: \[validate, package\]/);
   assert.doesNotMatch(workflow, /continue-on-error: true/);
   const source = await readFile(path.join(__dirname, '../scripts/release-publish.mjs'), 'utf8');
   assert.ok(source.indexOf('verifyUploaded(existing, false)') < source.indexOf("'--draft=false'"));
   assert.match(source, /loadUpdateReceipts\(\[existing\]/);
+});
+
+test('Tauri macOS receipts keep manual downloads while Electron Windows and Linux feeds advance', async () => {
+  const lib = await library;
+  const { createUpdateFeeds } = await feeds;
+  const latest = await fixture('1.5.0');
+  const older = await fixture('1.4.2', true);
+  const mac = latest.manifest.releases[0].assets.filter(item => item.platform === 'macos');
+  assert.ok(mac.every(item => item.runtime === 'tauri' && item.updateSupport === 'manual' && item.signing === 'unsigned'));
+  const manifest = { ...latest.manifest, releases: [...latest.manifest.releases, ...older.manifest.releases] };
+  const generated = createUpdateFeeds(manifest);
+  assert.equal(generated.length, 6);
+  assert.ok(generated.filter(item => item.path.includes('/darwin/')).every(item => item.info.version === '1.4.2'));
+  assert.ok(generated.filter(item => !item.path.includes('/darwin/')).every(item => item.info.version === '1.5.0'));
+  const receipt = latest.receipts.find(item => item.platform === 'darwin');
+  for (const mutate of [item => { delete item.runtime; }, item => { item.runtime = 'electron'; }, item => { item.artifacts[0].updaterConfig = true; }, item => { item.artifacts[0].bundleVerified = false; }, item => { item.artifacts[0].signed = true; item.artifacts[0].notarized = true; item.artifacts[0].packageType = 'mac-signed'; }]) {
+    const broken = structuredClone(receipt); mutate(broken);
+    assert.throws(() => lib.validateReceipt(broken, '1.5.0'));
+  }
+  const injected = structuredClone(latest.manifest);
+  const injectedMac = injected.releases[0].assets.find(item => item.platform === 'macos');
+  injectedMac.updateSupport = 'mac-signed';
+  injectedMac.signing = 'signed-notarized';
+  assert.throws(() => createUpdateFeeds(injected), /Unsafe package/);
+});
+
+test('1.5.0 publication gate requires Tauri bundle verification and exact package bytes', async () => {
+  const lib = await library;
+  const fixtureData = await fixture('1.5.0');
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-tauri-receipt-gate-'));
+  try {
+    for (const [name, bytes] of fixtureData.files) await writeFile(path.join(directory, name), bytes);
+    assert.equal((await lib.inspectArtifacts(directory, '1.5.0')).length, 16);
+    const receipt = fixtureData.receipts.find(item => item.platform === 'darwin');
+    const receiptPath = path.join(directory, lib.receiptName('1.5.0', receipt.platform, receipt.arch));
+    for (const mutate of [item => { item.runtime = 'electron'; }, item => { delete item.artifacts[0].bundleVerified; }, item => { item.artifacts[0].updaterConfig = true; }, item => { item.artifacts[0].notarized = true; }, item => { item.artifacts[0].sha512 = Buffer.alloc(64).toString('base64'); }]) {
+      const changed = structuredClone(receipt); mutate(changed);
+      await writeFile(receiptPath, JSON.stringify(changed));
+      await assert.rejects(lib.inspectArtifacts(directory, '1.5.0'));
+    }
+    await writeFile(receiptPath, JSON.stringify(receipt));
+    await writeFile(path.join(directory, receipt.artifacts[0].name), 'tampered Tauri ZIP');
+    await assert.rejects(lib.inspectArtifacts(directory, '1.5.0'), /differs from package bytes/);
+    await writeFile(path.join(directory, receipt.artifacts[0].name), fixtureData.files.get(receipt.artifacts[0].name));
+    await rm(receiptPath);
+    await assert.rejects(lib.inspectArtifacts(directory, '1.5.0'), /ENOENT/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 

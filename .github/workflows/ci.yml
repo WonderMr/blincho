@@ -24,3 +24,40 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: node site/build.mjs
+
+  tauri-macos:
+    name: Check Tauri macOS ${{ matrix.architecture }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, architecture: arm64, rust-target: aarch64-apple-darwin }
+          - { os: macos-15-intel, architecture: x64, rust-target: x86_64-apple-darwin }
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          architecture: ${{ matrix.architecture }}
+          cache: npm
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.92.0 --profile minimal --component rustfmt --target ${{ matrix.rust-target }}
+          rustup override set 1.92.0
+      - name: Install pinned CMake for native history migration
+        run: |
+          python3 -m venv "$RUNNER_TEMP/blincho-build-tools"
+          "$RUNNER_TEMP/blincho-build-tools/bin/python" -m pip install --disable-pip-version-check --no-input cmake==3.31.10
+          "$RUNNER_TEMP/blincho-build-tools/bin/python" -c 'import cmake; from pathlib import Path; print(Path(cmake.__file__).parent / "data" / "bin")' >> "$GITHUB_PATH"
+      - run: npm ci
+      - run: npm run build
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Check locked Tauri sources
+        run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked

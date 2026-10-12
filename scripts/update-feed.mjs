@@ -24,7 +24,7 @@ export function createUpdateFeeds(manifest) {
       const description = describeArtifact(asset.name, release.version);
       const expectedUrl = `https://github.com/${REPOSITORY}/releases/download/${release.tag}/${asset.name}`;
       if (!description || description.platform !== SITE_PLATFORMS[platform] || description.architecture !== arch || asset.url !== expectedUrl || !Number.isSafeInteger(asset.size) || asset.size <= 0 || !/^[a-f0-9]{64}$/.test(asset.sha256) || !/^[A-Za-z0-9+/]{86}==$/.test(asset.sha512) || Buffer.from(asset.sha512, 'base64').toString('base64') !== asset.sha512) throw new Error('Invalid verified update asset');
-      if ((platform === 'darwin' && (asset.signing !== 'signed-notarized' || description.format !== 'zip')) || (platform === 'win32' && !asset.name.endsWith('-setup.exe')) || (platform === 'linux' && description.format !== 'AppImage')) throw new Error('Unsafe package in update feed');
+      if ((asset.runtime != null && asset.runtime !== 'electron') || (platform === 'darwin' && (asset.signing !== 'signed-notarized' || description.format !== 'zip')) || (platform === 'win32' && !asset.name.endsWith('-setup.exe')) || (platform === 'linux' && description.format !== 'AppImage')) throw new Error('Unsafe package in update feed');
       const info = { version: release.version, files: [{ url: asset.url, sha512: asset.sha512, size: asset.size }], path: asset.url, sha512: asset.sha512, releaseDate: release.publishedAt };
       feeds.push({ path: `updates/${platform}/${arch}/${channelFilename(platform, arch)}`, info });
       break;

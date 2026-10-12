@@ -2,12 +2,15 @@
 
 A free screen-break companion for macOS, Windows and Linux. Every feature is free.
 
+From version 1.5.0, the primary macOS app uses Tauri, Rust and the system WKWebView. Windows and Linux use Electron. All desktop versions share the same React interface, local statistics and 30 languages.
+
 Website: https://blincho.app
 
 ## What it does
 
 - Reminds you to take short breaks and supports configurable work/break intervals.
 - Pauses timing when you are away, the screen locks or the computer sleeps.
+- Keeps the macOS timer running in Rust when the window is hidden or minimized.
 - Includes exercises, a personal comfort journal and local statistics.
 - Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
 - Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.
@@ -16,16 +19,18 @@ Blincho is a general wellness tool. It does not diagnose or treat eye conditions
 
 ## Development
 
-Use Node.js 22.12 or newer.
+Use Node.js 22.12 or newer. Building the macOS app also needs Xcode Command Line Tools, Rust and CMake. CI pins Rust 1.92.0 and CMake 3.31.10; CMake 4 is incompatible with the bundled LevelDB history migration dependency. The macOS bundle targets macOS 14 or newer.
 
 ```sh
 npm ci
 npm test
 npm run build
-npm run electron:dev
+npm start
 ```
 
-The browser build only sees activity within its own page and pauses when hidden. System-wide activity, lock and sleep integration belongs to the Electron desktop app.
+`npm start` launches Tauri on macOS and Electron on Windows or Linux. For Electron development with live reloading, use `npm run electron:dev`. Use `npm run dev` for the browser interface. The browser build only sees activity within its own page and pauses when hidden. Both desktop runtimes provide system-wide activity, lock and sleep integration.
+
+On macOS, run `npm run tauri:test` for Rust and history migration checks, `npm run tauri:build:mac` to build `release/tauri-macos/Blincho.app`, or `npm run tauri:test:mac` for an isolated native smoke test. Install Blincho in `/Applications` before using its login startup feature so the registered executable has a stable path. Windows and Linux builds continue to use `npm run electron:build:win` and `npm run electron:build:linux`.
 
 ## Website
 
@@ -40,13 +45,15 @@ The static site is generated in 30 languages from `site/locales`. It follows the
 
 See [RELEASE.md](RELEASE.md) for the tag-driven build and publication pipeline. Update the package version, lockfile, changelog and localized release summary together. A pushed `vX.Y.Z` tag builds release packages, publishes checksums and updates the website and desktop update feeds after successful validation. Production deployment requires the configured Cloudflare Actions secret.
 
-Supported desktop packages ask before downloading updates by default. Users can explicitly allow background downloads and installation when they quit Blincho, or turn off background checks and prompts. Manual checks remain available. No update forces an immediate restart. Signed and notarized macOS packages, installed Windows NSIS packages and Linux AppImages support this flow; unsigned macOS, portable Windows and Linux archives use manual downloads. Unsigned macOS builds check for newer releases after one minute and every six hours while running, and offer a website download. Choosing not to show updates again disables background checks persistently; manual checking remains available in settings.
+Installed Windows NSIS packages and Linux AppImages ask before downloading updates by default. Users can explicitly allow background downloads and installation when they quit Blincho, or turn off background checks and prompts. Manual checks remain available. No update forces an immediate restart. Current Tauri macOS packages are unsigned and use manual download and installation. They check for newer releases after one minute and every six hours while running, and offer a website download. Choosing not to show updates again disables background checks persistently; manual checking remains available in settings. Portable Windows and Linux archives also use manual downloads. Historical signed and notarized Electron macOS releases keep their existing verified update feeds.
 
 Primary domain: `blincho.app`. Aliases `blincho.com`, `www.blincho.com` and `www.blincho.app` redirect to it, preserving the path and query.
 
 ## Data and compatibility
 
-Settings, journal answers and statistics remain on the device. Unless background update checks are turned off, supported packages contact `blincho.app` for update metadata. Downloads come from GitHub. These requests do not send journal answers or activity history. Existing desktop profiles use the legacy `myeyes` data directory to preserve upgrades. No account is required.
+Settings, journal answers and statistics remain on the device. Unless background update checks are turned off, packages contact `blincho.app` for update metadata. Downloads come from GitHub. These requests do not send journal answers or activity history. No account is required.
+
+The application identity remains `com.myeyes.app`. Electron keeps its legacy `myeyes` profile. On the first Tauri macOS launch, Blincho imports settings, journal answers and statistics from a private copy of that profile into WKWebView storage. It does not change the original Electron database or overwrite an existing Tauri profile. Quit the old Electron app before the first migration so its database is stable. Later launches use the migrated profile without importing it again.
 
 ## Contributing
 
