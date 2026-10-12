@@ -37,6 +37,20 @@ jobs:
           cache: npm
       - run: node scripts/release-check.mjs
       - run: npm ci
+      - name: Repair Windows test import for immutable v1.4.2 retry
+        if: github.event_name == 'workflow_dispatch' && env.RELEASE_TAG == 'v1.4.2'
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "c77cca3653171ecf84818039ca95913573709b9e"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const file = 'tests/update-feed.test.cjs';
+          const source = fs.readFileSync(file, 'utf8');
+          const before = "'--import', path.join(directory, 'mock-github.mjs'),";
+          const after = "'--import', require('node:url').pathToFileURL(path.join(directory, 'mock-github.mjs')).href,";
+          if (source.split(before).length !== 2) throw new Error('Expected exactly one v1.4.2 fixture import');
+          fs.writeFileSync(file, source.replace(before, after));
+          NODE
       - run: npm test
       - run: npm run build
 
@@ -68,6 +82,20 @@ jobs:
       - name: Validate tag and lockfile
         run: node scripts/release-check.mjs
       - run: npm ci
+      - name: Repair Windows test import for immutable v1.4.2 retry
+        if: github.event_name == 'workflow_dispatch' && env.RELEASE_TAG == 'v1.4.2'
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "c77cca3653171ecf84818039ca95913573709b9e"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const file = 'tests/update-feed.test.cjs';
+          const source = fs.readFileSync(file, 'utf8');
+          const before = "'--import', path.join(directory, 'mock-github.mjs'),";
+          const after = "'--import', require('node:url').pathToFileURL(path.join(directory, 'mock-github.mjs')).href,";
+          if (source.split(before).length !== 2) throw new Error('Expected exactly one v1.4.2 fixture import');
+          fs.writeFileSync(file, source.replace(before, after));
+          NODE
       - run: npm test
       - run: npm run build
       - name: Build native packages
