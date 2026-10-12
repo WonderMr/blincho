@@ -125,5 +125,6 @@
   "download.manualUpdates": "Actualizări manuale",
   "release.1.4.1": "30 de limbi pentru interfață, inclusiv armeana, și preferințe de actualizare pentru pachetele desktop compatibile. Alege actualizări automate, solicitarea acordului înainte de descărcare sau dezactivează căutarea actualizărilor în fundal.",
   "release.1.5.0": "macOS folosește acum Tauri cu un temporizator nativ și importă istoricul local existent. Windows și Linux păstrează Electron. Actualizările macOS rămân manuale.",
-  "release.1.5.1": "macOS folosește acum Tauri cu un temporizator nativ și importă istoricul local existent. Windows și Linux păstrează Electron. Actualizările macOS rămân manuale."
+  "release.1.5.1": "macOS folosește acum Tauri cu un temporizator nativ și importă istoricul local existent. Windows și Linux păstrează Electron. Actualizările macOS rămân manuale.",
+  "release.1.5.2": "macOS folosește acum Tauri cu un temporizator nativ și importă istoricul local existent. Windows și Linux păstrează Electron. Actualizările macOS rămân manuale."
 }

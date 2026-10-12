@@ -125,5 +125,6 @@
   "download.manualUpdates": "手动更新",
   "release.1.4.1": "支持包括亚美尼亚语在内的 30 种界面语言，并为受支持的桌面安装包提供更新偏好设置。你可以选择自动更新、下载前询问，或关闭后台更新检查。",
   "release.1.5.0": "macOS 现已使用 Tauri，配备原生计时器并导入现有的本地历史记录。Windows 和 Linux 继续使用 Electron。macOS 更新仍需手动安装。",
-  "release.1.5.1": "macOS 现已使用 Tauri，配备原生计时器并导入现有的本地历史记录。Windows 和 Linux 继续使用 Electron。macOS 更新仍需手动安装。"
+  "release.1.5.1": "macOS 现已使用 Tauri，配备原生计时器并导入现有的本地历史记录。Windows 和 Linux 继续使用 Electron。macOS 更新仍需手动安装。",
+  "release.1.5.2": "macOS 现已使用 Tauri，配备原生计时器并导入现有的本地历史记录。Windows 和 Linux 继续使用 Electron。macOS 更新仍需手动安装。"
 }
