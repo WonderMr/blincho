@@ -123,5 +123,6 @@
   "download.signingUnknown": "Signature non vérifiée",
   "download.inAppUpdates": "Mises à jour dans l’application",
   "download.manualUpdates": "Mises à jour manuelles",
-  "release.1.4.1": "30 langues d’interface, dont l’arménien, et des préférences de mise à jour pour les paquets de bureau compatibles. Choisissez les mises à jour automatiques, une demande d’accord avant le téléchargement ou la désactivation des recherches de mises à jour en arrière-plan."
+  "release.1.4.1": "30 langues d’interface, dont l’arménien, et des préférences de mise à jour pour les paquets de bureau compatibles. Choisissez les mises à jour automatiques, une demande d’accord avant le téléchargement ou la désactivation des recherches de mises à jour en arrière-plan.",
+  "release.1.5.0": "macOS utilise désormais Tauri avec un minuteur natif et importe l’historique local existant. Windows et Linux conservent Electron. Les mises à jour macOS restent manuelles."
 }

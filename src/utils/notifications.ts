@@ -4,6 +4,7 @@ import type { UpdateBridge } from './updates';
 declare global {
   interface Window {
     electronAPI?: UpdateBridge & {
+      requestNotificationPermission?: () => Promise<boolean>;
       showNotification: (title: string, body: string) => void;
       flashWindow: () => void;
       setAlwaysOnTop: (flag: boolean) => void;
@@ -20,11 +21,15 @@ declare global {
       isElectron: boolean;
       getPreferredLanguages?: () => Promise<string[]>;
       setLocale?: (locale: string) => Promise<void>;
+      exportLegacyHistory?: (entries: Record<string, string>) => Promise<{ exportedAt: string; entryCount: number }>;
     };
   }
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (window.electronAPI?.requestNotificationPermission) {
+    try { return await window.electronAPI.requestNotificationPermission(); } catch { return false; }
+  }
   if (window.electronAPI?.isElectron) {
     return true;
   }
