@@ -125,5 +125,6 @@
   "download.manualUpdates": "Cập nhật thủ công",
   "release.1.4.1": "30 ngôn ngữ giao diện, bao gồm tiếng Armenia, cùng tùy chọn cập nhật cho các gói máy tính được hỗ trợ. Chọn tự động cập nhật, hỏi trước khi tải xuống hoặc tắt kiểm tra bản cập nhật ở chế độ nền.",
   "release.1.5.0": "macOS hiện dùng Tauri với bộ hẹn giờ gốc và nhập lịch sử cục bộ hiện có. Windows và Linux tiếp tục dùng Electron. Cập nhật macOS vẫn được cài đặt thủ công.",
-  "release.1.5.1": "macOS hiện dùng Tauri với bộ hẹn giờ gốc và nhập lịch sử cục bộ hiện có. Windows và Linux tiếp tục dùng Electron. Cập nhật macOS vẫn được cài đặt thủ công."
+  "release.1.5.1": "macOS hiện dùng Tauri với bộ hẹn giờ gốc và nhập lịch sử cục bộ hiện có. Windows và Linux tiếp tục dùng Electron. Cập nhật macOS vẫn được cài đặt thủ công.",
+  "release.1.5.2": "macOS hiện dùng Tauri với bộ hẹn giờ gốc và nhập lịch sử cục bộ hiện có. Windows và Linux tiếp tục dùng Electron. Cập nhật macOS vẫn được cài đặt thủ công."
 }
