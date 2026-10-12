@@ -441,5 +441,13 @@
   "Больше не показывать обновления": "Do not show updates again",
   "Уведомлять о новых версиях": "Notify me about new versions",
   "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "Blincho checks for new versions and shows notifications. Download the new version from the website and install it manually.",
-  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Download the new version from the Blincho website and install it manually."
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Download the new version from the Blincho website and install it manually.",
+  "Не удалось перенести историю": "Could not import history",
+  "Закройте прежнее приложение Blincho (Electron), затем повторите перенос.": "Close the old Blincho app (Electron), then retry the import.",
+  "Исходная история в прежнем приложении сохранена. До вашего выбора новые записи не создаются.": "Your original history in the old app is preserved. No new records are created until you choose how to continue.",
+  "Если продолжить без истории, её автоматический перенос будет отключён для этого профиля. Новые записи сохранятся в этом приложении.": "Continuing without history turns off its automatic import for this profile. New records will be saved in this app.",
+  "Повторить перенос": "Retry import",
+  "Продолжить без истории": "Continue without history",
+  "Подготавливаем приложение…": "Preparing the app…",
+  "Причина не указана.": "No reason was provided."
 }

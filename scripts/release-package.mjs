@@ -20,15 +20,17 @@ if (platform === 'macos') {
   if (!usesTauriMac(version)) throw new Error('This pipeline packages Tauri macOS releases from 1.5.0 onward');
   const config = JSON.parse(await readFile('src-tauri/tauri.conf.json', 'utf8'));
   if (config.identifier !== 'com.myeyes.app' || config.productName !== 'Blincho' || config.version !== version) throw new Error('Tauri project identity or version does not match the release');
+  const expectedRustTarget = { arm64: 'aarch64-apple-darwin', x64: 'x86_64-apple-darwin' }[architecture];
+  const rustTarget = process.env.RUST_TARGET || expectedRustTarget;
+  if (rustTarget !== expectedRustTarget) throw new Error('Invalid native macOS Rust target');
   const run = (command, args) => {
     const result = spawnSync(command, args, { stdio: 'inherit', shell: false });
     if (result.error || result.status !== 0) throw new Error(`Tauri macOS build failed: ${command}`);
   };
-  // Rebuild the current locked Cargo project and remove stale bundles before
-  // running the shared bundler. Windows and Linux do not execute this branch.
-  await rm('release/tauri-macos', { recursive: true, force: true });
-  run('cargo', ['build', '--manifest-path', 'src-tauri/Cargo.toml', '--release', '--locked']);
-  run(process.execPath, ['scripts/bundle-tauri-macos.cjs']);
+  // The shared bundler replaces its own output after validating build inputs.
+  // Windows and Linux do not execute this branch.
+  run('cargo', ['build', '--manifest-path', 'src-tauri/Cargo.toml', '--release', '--locked', '--target', rustTarget]);
+  run(process.execPath, ['scripts/bundle-tauri-macos.cjs', '--target', rustTarget]);
   const bundle = path.resolve('release/tauri-macos/Blincho.app');
   await verifyTauriMacBundle(bundle, version, architecture);
   const name = `Blincho-${version}-macos-${architecture}.zip`;

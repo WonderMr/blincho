@@ -441,5 +441,13 @@
   "Больше не показывать обновления": "Não mostrar atualizações novamente",
   "Уведомлять о новых версиях": "Avisar sobre novas versões",
   "Blincho проверяет новые версии и показывает уведомления. Новую версию нужно скачать с сайта и установить вручную.": "O Blincho verifica se há novas versões e mostra notificações. Baixe a nova versão pelo site e instale-a manualmente.",
-  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Baixe a nova versão pelo site do Blincho e instale-a manualmente."
+  "Скачайте новую версию с сайта Blincho и установите её вручную.": "Baixe a nova versão pelo site do Blincho e instale-a manualmente.",
+  "Не удалось перенести историю": "Não foi possível importar o histórico",
+  "Закройте прежнее приложение Blincho (Electron), затем повторите перенос.": "Feche o aplicativo antigo do Blincho (Electron) e tente importar novamente.",
+  "Исходная история в прежнем приложении сохранена. До вашего выбора новые записи не создаются.": "Seu histórico original no aplicativo antigo está preservado. Nenhum novo registro será criado até você escolher como continuar.",
+  "Если продолжить без истории, её автоматический перенос будет отключён для этого профиля. Новые записи сохранятся в этом приложении.": "Continuar sem histórico desativa a importação automática dele para este perfil. Novos registros serão salvos neste aplicativo.",
+  "Повторить перенос": "Tentar importar novamente",
+  "Продолжить без истории": "Continuar sem histórico",
+  "Подготавливаем приложение…": "Preparando o aplicativo…",
+  "Причина не указана.": "Nenhum motivo foi informado."
 }

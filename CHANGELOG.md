@@ -2,6 +2,13 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.5.1]
+
+- Recover from failed Electron history imports with localized Retry and Continue without history actions, preserving original data and keeping app defaults out of failed imports.
+- Preserve manual skipped-version checks when they join a background update request.
+- Avoid timer-triggered compatibility exports, clean stale local bundles and bind macOS packages to their explicit Rust architecture.
+- Accept an existing release tag after a concurrent creation only when it resolves to the expected commit.
+
 ## [1.5.0]
 
 - Make Tauri the primary macOS app with a Rust timer and the system WKWebView. Windows and Linux continue to use Electron with the same React interface and 30 languages.
@@ -36,3 +43,5 @@ Earlier versions were developed before this public release process. Their local 
 Release preparation note: the v1.3.2 build stopped before publication because the Linux AppImage architecture filename differed. The packaging script now normalizes that filename. The v1.3.3 attempt was cancelled before publication to include the expanded language set. Neither tag has public release files.
 
 The v1.4.0 preparation build stopped before publication because a test fixture compared Windows paths with Unix separators. The fixture now uses portable path handling; the existing tag remains unchanged.
+
+The v1.5.0 release was cancelled before publication to handle review findings. Its tag remains unchanged; the corrected release is v1.5.1.
