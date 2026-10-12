@@ -25,6 +25,21 @@ jobs:
       - run: npm run build
       - run: node site/build.mjs
 
+  validate-windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
   tauri-macos:
     name: Check Tauri macOS ${{ matrix.architecture }}
     runs-on: ${{ matrix.os }}

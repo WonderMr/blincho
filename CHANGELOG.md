@@ -2,6 +2,11 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.5.2]
+
+- Make macOS package fixtures portable on Windows without relaxing real bundle permission checks.
+- Validate the full Node suite and React build on Windows before merging.
+
 ## [1.5.1]
 
 - Recover from failed Electron history imports with localized Retry and Continue without history actions, preserving original data and keeping app defaults out of failed imports.
@@ -45,3 +50,5 @@ Release preparation note: the v1.3.2 build stopped before publication because th
 The v1.4.0 preparation build stopped before publication because a test fixture compared Windows paths with Unix separators. The fixture now uses portable path handling; the existing tag remains unchanged.
 
 The v1.5.0 release was cancelled before publication to handle review findings. Its tag remains unchanged; the corrected release is v1.5.1.
+
+The v1.5.1 release stopped before publication because synthetic macOS package tests assumed POSIX file mode bits on Windows. Its tag remains unchanged; v1.5.2 contains the portable fixtures.
