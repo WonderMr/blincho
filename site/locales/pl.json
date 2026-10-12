@@ -105,5 +105,6 @@
   "footer.privacy": "Prywatność",
   "privacy.title": "Twoje dane pozostają Twoje",
   "privacy.body": "Blincho przechowuje ustawienia i historię aktywności na Twoim urządzeniu. Ta strona zapisuje w przeglądarce tylko wybór języka i motywu. Nie używa skryptów reklamowych ani analitycznych. Dostawcy hostingu i plików do pobrania otrzymują standardowe dane połączenia. Darowizny są przetwarzane oddzielnie przez Buy Me a Coffee.",
-  "footer.contact": "Zgłoś problem"
+  "footer.contact": "Zgłoś problem",
+  "release.1.3.3": "Spokojniejszy, kompaktowy interfejs, 15 języków, jasny i ciemny motyw oraz czytelniejsze powiadomienia o przerwach. Obsługa aktywności, blokady i uśpienia jest objęta automatycznymi testami regresji."
 }

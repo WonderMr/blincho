@@ -32,7 +32,10 @@ await mkdir('release-upload', { recursive: true });
 for (const name of expectedArtifacts(version)) {
   const artifact = describeArtifact(name, version);
   if (artifact.platform !== platform || artifact.architecture !== architecture) continue;
-  const source = path.join(packageJson.build.directories.output, name);
+  // AppImage uses the architecture name x86_64 internally, unlike tar.gz.
+  const builderName = platform === 'linux' && architecture === 'x64' && name.endsWith('.AppImage')
+    ? name.replace('-x64.AppImage', '-x86_64.AppImage') : name;
+  const source = path.join(packageJson.build.directories.output, builderName);
   if (!(await stat(source)).size) throw new Error(`Empty release artifact: ${name}`);
   await copyFile(source, path.join('release-upload', name));
 }

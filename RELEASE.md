@@ -59,18 +59,18 @@ Only these ten packages and the checksum document are uploaded. Unpacked apps, b
 For example, after making and reviewing the release changes:
 
 ```sh
-npm version 1.3.2 --no-git-tag-version
+npm version 1.3.3 --no-git-tag-version
 # Edit CHANGELOG.md and commit all intended release changes to main first.
 npm test
 npm run build
 node site/build.mjs
-node scripts/release-check.mjs v1.3.2
-git tag -a v1.3.2 -m "Blincho 1.3.2 unsigned beta"
+node scripts/release-check.mjs v1.3.3
+git tag -a v1.3.3 -m "Blincho 1.3.3 unsigned beta"
 git push origin main
-git push origin v1.3.2
+git push origin v1.3.3
 ```
 
-Choose a new version rather than repeating this example after `1.3.2` is released. `npm version` updates both package files. The tag must point at the reviewed commit on the public repository's main branch.
+Choose a new version rather than repeating this example after `1.3.3` is released. `npm version` updates both package files. The tag must point at the reviewed commit on the public repository's main branch.
 
 The workflow has four stages:
 
@@ -94,7 +94,7 @@ Each asset has `name`, `url`, `size`, `platform` (`macos`, `windows`, `linux`), 
 To build a manifest locally after a release is public:
 
 ```sh
-node scripts/release-manifest.mjs v1.3.2 site/releases.json
+node scripts/release-manifest.mjs v1.3.3 site/releases.json
 npm run build
 node site/build.mjs
 ```

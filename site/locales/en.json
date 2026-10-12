@@ -105,5 +105,6 @@
   "footer.privacy": "Privacy",
   "privacy.title": "Your data stays yours",
   "privacy.body": "Blincho stores settings and activity history on your device. This website stores only your language and theme choices in your browser. No advertising or analytics scripts are used. Hosting and download providers receive ordinary connection data. Donations are processed separately by Buy Me a Coffee.",
-  "footer.contact": "Report an issue"
+  "footer.contact": "Report an issue",
+  "release.1.3.3": "A calmer compact interface, 15 languages, light and dark themes, and clearer break notifications. Activity, lock and sleep handling includes automated regression checks."
 }

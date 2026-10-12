@@ -105,5 +105,6 @@
   "footer.privacy": "Privacidade",
   "privacy.title": "Seus dados continuam sendo seus",
   "privacy.body": "O Blincho salva as configurações e o histórico de atividade no seu dispositivo. Este site armazena no navegador apenas suas escolhas de idioma e tema. Não são usados scripts de publicidade ou análise. Os provedores de hospedagem e download recebem os dados normais de conexão. As doações são processadas separadamente pelo Buy Me a Coffee.",
-  "footer.contact": "Relatar um problema"
+  "footer.contact": "Relatar um problema",
+  "release.1.3.3": "Uma interface compacta mais tranquila, 15 idiomas, temas claro e escuro e notificações de pausa mais claras. O tratamento de atividade, bloqueio e repouso inclui verificações automatizadas de regressão."
 }

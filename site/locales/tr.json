@@ -105,5 +105,6 @@
   "footer.privacy": "Gizlilik",
   "privacy.title": "Verileriniz size ait kalır",
   "privacy.body": "Blincho, ayarları ve etkinlik geçmişini cihazınızda saklar. Bu site tarayıcınızda yalnızca dil ve tema seçimlerinizi saklar. Reklam veya analiz betikleri kullanılmaz. Barındırma ve indirme sağlayıcıları olağan bağlantı verilerini alır. Bağışlar Buy Me a Coffee tarafından ayrı olarak işlenir.",
-  "footer.contact": "Sorun bildirin"
+  "footer.contact": "Sorun bildirin",
+  "release.1.3.3": "Daha sakin ve kompakt bir arayüz, 15 dil, açık ve koyu temalar ve daha anlaşılır mola bildirimleri. Etkinlik, kilit ve uyku yönetimi için otomatik regresyon kontrolleri bulunur."
 }
