@@ -1,0 +1,103 @@
+#import <AppKit/AppKit.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+// A normal work-app window for focus regression tests. Only local control files
+// activate it; no Accessibility access or synthesized input is involved.
+static void writeJSON(NSString *path, NSDictionary *value) {
+    NSError *error = nil;
+    NSData *bytes = [NSJSONSerialization dataWithJSONObject:value options:0 error:&error];
+    if (!bytes || ![bytes writeToFile:path options:NSDataWritingAtomic error:&error]) {
+        fprintf(stderr, "Focus fixture JSON: %s\n", error.localizedDescription.UTF8String);
+        exit(EXIT_FAILURE);
+    }
+}
+
+static void finish(int status) {
+    for (NSWindow *window in NSApp.windows.copy) [window close];
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyProhibited];
+    [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+    if (status == EXIT_SUCCESS) [NSApp terminate:nil];
+    exit(status);
+}
+
+static NSNumber *requestID(NSString *path) {
+    NSData *bytes = [NSData dataWithContentsOfFile:path];
+    if (!bytes) return nil;
+    NSError *error = nil;
+    id request = [NSJSONSerialization JSONObjectWithData:bytes options:0 error:&error];
+    if (bytes.length > 1024 || ![request isKindOfClass:NSDictionary.class] ||
+        ![request[@"id"] isKindOfClass:NSNumber.class]) {
+        fprintf(stderr, "Focus fixture invalid request: %s\n", path.UTF8String);
+        finish(EXIT_FAILURE);
+    }
+    if (![NSFileManager.defaultManager removeItemAtPath:path error:&error]) {
+        fprintf(stderr, "Focus fixture control: %s\n", error.localizedDescription.UTF8String);
+        finish(EXIT_FAILURE);
+    }
+    return request[@"id"];
+}
+
+int main(int argc, const char **argv) {
+    @autoreleasepool {
+        if (argc != 3) {
+            fprintf(stderr, "Usage: focus-fixture CONTROL_DIRECTORY WINDOW_TITLE\n");
+            return EXIT_FAILURE;
+        }
+        NSString *directory = [NSString stringWithUTF8String:argv[1]];
+        NSString *title = [NSString stringWithUTF8String:argv[2]];
+        BOOL isDirectory = NO;
+        if (![NSFileManager.defaultManager fileExistsAtPath:directory isDirectory:&isDirectory] || !isDirectory) {
+            fprintf(stderr, "Focus fixture requires an existing isolated control directory\n");
+            return EXIT_FAILURE;
+        }
+        [NSApplication sharedApplication];
+        [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+        if (NSApp.activationPolicy != NSApplicationActivationPolicyRegular) {
+            fprintf(stderr, "Focus fixture could not register a regular application (policy %ld)\n", (long)NSApp.activationPolicy);
+            return EXIT_FAILURE;
+        }
+        NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(120, 120, 360, 220)
+            styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
+            backing:NSBackingStoreBuffered defer:NO];
+        window.releasedWhenClosed = NO;
+        window.title = title;
+        NSTextField *label = [NSTextField labelWithString:title];
+        label.frame = NSMakeRect(24, 90, 312, 30);
+        [window.contentView addSubview:label];
+        [NSApp finishLaunching];
+        [window orderFront:nil];
+        pid_t parent = getppid();
+        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:240];
+        __block unsigned long long sequence = 0;
+        void (^report)(void) = ^{
+            NSRunningApplication *frontmost = NSWorkspace.sharedWorkspace.frontmostApplication;
+            writeJSON([directory stringByAppendingPathComponent:@"state.json"], @{
+                @"pid": @(getpid()), @"windowNumber": @(window.windowNumber),
+                @"frontmostPID": @(frontmost ? frontmost.processIdentifier : 0),
+                @"visible": @(window.visible), @"key": @(window.keyWindow),
+                @"active": @(NSApp.active), @"sample": @(++sequence),
+                @"reportedAtMs": @((long long)(NSDate.date.timeIntervalSince1970 * 1000))
+            });
+        };
+        report();
+        [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer) {
+            (void)timer;
+            if (getppid() != parent || [deadline timeIntervalSinceNow] <= 0) finish(EXIT_SUCCESS);
+            NSNumber *stop = requestID([directory stringByAppendingPathComponent:@"stop"]);
+            if (stop) {
+                writeJSON([directory stringByAppendingPathComponent:@"response.json"], @{@"id": stop, @"ok": @YES});
+                finish(EXIT_SUCCESS);
+            }
+            NSNumber *activate = requestID([directory stringByAppendingPathComponent:@"activate"]);
+            if (activate) {
+                [window makeKeyAndOrderFront:nil];
+                [NSApp activateIgnoringOtherApps:YES];
+                writeJSON([directory stringByAppendingPathComponent:@"response.json"], @{@"id": activate, @"ok": @YES});
+            }
+            report();
+        }];
+        [NSApp run];
+    }
+    return EXIT_SUCCESS;
+}

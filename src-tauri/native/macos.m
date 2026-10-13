@@ -5,6 +5,53 @@
 static _Atomic int strictShieldCount;
 int blincho_strict_shield_count(void) { return atomic_load(&strictShieldCount); }
 
+@interface BlinchoFocusTarget : NSObject
+@property(nonatomic, strong) NSRunningApplication *application;
+@property(nonatomic) pid_t processIdentifier;
+@property(nonatomic, copy) NSDate *launchDate;
+@end
+@implementation BlinchoFocusTarget
+@end
+
+void *blincho_capture_focus(void) {
+    @autoreleasepool {
+        if (!NSThread.isMainThread) return NULL;
+        NSRunningApplication *application = NSWorkspace.sharedWorkspace.frontmostApplication;
+        if (!application || application.terminated || application.processIdentifier <= 0 ||
+            [application isEqual:NSRunningApplication.currentApplication]) return NULL;
+        BlinchoFocusTarget *target = [BlinchoFocusTarget new];
+        target.application = application;
+        target.processIdentifier = application.processIdentifier;
+        target.launchDate = application.launchDate;
+        return (__bridge_retained void *)target;
+    }
+}
+int blincho_restore_focus(void *pointer) {
+    @autoreleasepool {
+        if (!NSThread.isMainThread) return -2;
+        BlinchoFocusTarget *target = (__bridge BlinchoFocusTarget *)pointer;
+        NSRunningApplication *application = target.application;
+        NSRunningApplication *own = NSRunningApplication.currentApplication;
+        if (!application || application.terminated || [application isEqual:own] ||
+            application.processIdentifier != target.processIdentifier) return 0;
+        // NSRunningApplication represents an application instance, unlike a PID.
+        // Retaining it and comparing isEqual: avoids activating a reused process.
+        NSRunningApplication *current = [NSRunningApplication
+            runningApplicationWithProcessIdentifier:target.processIdentifier];
+        if (!current || ![current isEqual:application] ||
+            (target.launchDate && ![target.launchDate isEqual:current.launchDate])) return 0;
+        if (![NSWorkspace.sharedWorkspace.frontmostApplication isEqual:own]) return 0;
+        if (@available(macOS 14.0, *)) {
+            [NSApp yieldActivationToApplication:application];
+            return [application activateFromApplication:own options:0] ? 1 : -1;
+        }
+        return [application activateWithOptions:0] ? 1 : -1;
+    }
+}
+void blincho_release_focus(void *pointer) {
+    if (pointer) CFRelease(pointer);
+}
+
 // Retain observer tokens for the process lifetime. All AppKit calls run on its main thread.
 static NSMutableArray *observers;
 void blincho_observe_power(void (*callback)(int)) {

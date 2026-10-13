@@ -152,6 +152,11 @@ jobs:
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-session-openbox.log 2>&1 & node tests/tauri-session-smoke.cjs'
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test macOS break completion and actual work app focus
+        if: runner.os == 'macOS'
+        run: node tests/tauri-break-focus-smoke.cjs
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
       - name: Select package version without creating a release tag
         run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_ENV, "RELEASE_TAG=v" + require("./package.json").version + "\n")'
       - name: Build and verify native release packages before tagging
