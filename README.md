@@ -19,7 +19,7 @@ Blincho is a general wellness tool. It does not diagnose or treat eye conditions
 
 ## Development
 
-Use Node.js 22.12 or newer. Desktop builds need Rust and CMake. macOS also needs Xcode Command Line Tools. Windows needs the MSVC build tools and WebView2. Linux needs WebKitGTK 4.1, GTK 3, AppIndicator, X11/Xss and D-Bus development libraries. Linux packages use the Ubuntu 24.04 build baseline. Portable Windows packages require an installed WebView2 runtime. CI pins Rust 1.92.0 and CMake 3.31.10; CMake 4 is incompatible with the bundled LevelDB history migration dependency. The macOS bundle targets macOS 14 or newer. Release builds select `aarch64-apple-darwin` for ARM64 or `x86_64-apple-darwin` for Intel explicitly and verify the packaged executable architecture.
+Use Node.js 22.12 or newer. Desktop builds need Rust and CMake. macOS also needs Xcode Command Line Tools. Windows needs the MSVC build tools and WebView2. Linux needs Clang, WebKitGTK 4.1, GTK 3, AppIndicator, X11/Xss and D-Bus development libraries. Linux packages use the Ubuntu 24.04 build baseline. Portable Windows packages require an installed WebView2 runtime. CI pins Rust 1.92.0 and CMake 3.31.10; CMake 4 is incompatible with the bundled LevelDB history migration dependency. The macOS bundle targets macOS 14 or newer. Release builds select `aarch64-apple-darwin` for ARM64 or `x86_64-apple-darwin` for Intel explicitly and verify the packaged executable architecture.
 
 ```sh
 npm ci
