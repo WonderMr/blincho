@@ -2,13 +2,18 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'The SDK tray diagnostic requires Windows.' }
 Write-Host "Apartment=$([Threading.Thread]::CurrentThread.GetApartmentState()) OS=$([Environment]::OSVersion)"
+function Read-RegistryValue([Microsoft.Win32.RegistryKey]$Hive, [string]$Path, [string]$Name) {
+    $key = $Hive.OpenSubKey($Path)
+    if ($null -eq $key) { return $null }
+    try { return $key.GetValue($Name, $null) } finally { $key.Dispose() }
+}
 foreach ($scope in 'HKCU', 'HKLM') {
-    $key = "${scope}:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
-    $value = Get-ItemPropertyValue $key -Name NoTrayItemsDisplay -ErrorAction SilentlyContinue
+    $hive = if ($scope -eq 'HKCU') { [Microsoft.Win32.Registry]::CurrentUser } else { [Microsoft.Win32.Registry]::LocalMachine }
+    $value = Read-RegistryValue $hive 'Software\Microsoft\Windows\CurrentVersion\Policies\Explorer' 'NoTrayItemsDisplay'
     Write-Host "${scope} NoTrayItemsDisplay=$(if ($null -eq $value) { 'absent' } else { $value })"
 }
 foreach ($name in 'EnableLUA', 'ConsentPromptBehaviorAdmin', 'FilterAdministratorToken') {
-    $value = Get-ItemPropertyValue 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\System' -Name $name -ErrorAction SilentlyContinue
+    $value = Read-RegistryValue ([Microsoft.Win32.Registry]::LocalMachine) 'Software\Microsoft\Windows\CurrentVersion\Policies\System' $name
     Write-Host "${name}=$(if ($null -eq $value) { 'absent' } else { $value })"
 }
 Get-Service -Name StateRepository, AppXSvc, WpnService, 'WpnUserService*' -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table
