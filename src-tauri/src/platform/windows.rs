@@ -1,4 +1,4 @@
-use super::{parsing, MeetingStatus, Presence};
+use super::{may_restore_focus, parsing, MeetingStatus, Presence};
 use std::{
     os::windows::ffi::OsStrExt,
     path::{Path, PathBuf},
@@ -33,13 +33,16 @@ use windows::{
     UI::Notifications::{NotificationSetting, ToastNotification, ToastNotificationManager},
 };
 use windows_sys::Win32::{
-    Foundation::{CloseHandle, GetLastError, HWND, LPARAM, LRESULT, WPARAM},
+    Foundation::{CloseHandle, GetLastError, FILETIME, HWND, LPARAM, LRESULT, WPARAM},
     Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME},
     System::{
         LibraryLoader::GetModuleHandleW,
         RemoteDesktop::*,
         SystemInformation::GetTickCount,
-        Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION},
+        Threading::{
+            GetProcessTimes, OpenProcess, QueryFullProcessImageNameW,
+            PROCESS_QUERY_LIMITED_INFORMATION,
+        },
     },
     UI::{
         Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO},
@@ -47,6 +50,64 @@ use windows_sys::Win32::{
         WindowsAndMessaging::*,
     },
 };
+
+#[derive(Clone, Debug)]
+pub struct FocusTarget {
+    window: usize,
+    process: u32,
+    created: u64,
+}
+fn window_process(window: HWND) -> Option<u32> {
+    if window.is_null() || unsafe { IsWindow(window) } == 0 {
+        return None;
+    }
+    let mut process = 0;
+    (unsafe { GetWindowThreadProcessId(window, &mut process) } != 0 && process != 0)
+        .then_some(process)
+}
+fn process_created(process: u32) -> Option<u64> {
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process) };
+    if handle.is_null() {
+        return None;
+    }
+    let mut created = FILETIME::default();
+    let mut exited = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    let success =
+        unsafe { GetProcessTimes(handle, &mut created, &mut exited, &mut kernel, &mut user) != 0 };
+    unsafe { CloseHandle(handle) };
+    success.then_some((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
+}
+pub fn capture_focus() -> Option<FocusTarget> {
+    let window = unsafe { GetForegroundWindow() };
+    let process = window_process(window)?;
+    if process == std::process::id() {
+        return None;
+    }
+    let created = process_created(process)?;
+    Some(FocusTarget {
+        window: window as usize,
+        process,
+        created,
+    })
+}
+pub fn restore_focus(target: &FocusTarget) -> Result<(), String> {
+    let window = target.window as HWND;
+    // Recheck both HWND ownership and process creation time: either identifier
+    // may have been reused after the original application closed.
+    let original = window_process(window) == Some(target.process)
+        && process_created(target.process) == Some(target.created);
+    let foreground = window_process(unsafe { GetForegroundWindow() });
+    if !may_restore_focus(std::process::id(), foreground, target.process, original) {
+        return Ok(());
+    }
+    if unsafe { SetForegroundWindow(window) } != 0 {
+        Ok(())
+    } else {
+        Err("Could not restore window focus".into())
+    }
+}
 
 static POWER_CALLBACK: OnceLock<extern "C" fn(i32)> = OnceLock::new();
 static CLICKED: OnceLock<extern "C" fn()> = OnceLock::new();

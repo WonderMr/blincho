@@ -166,24 +166,86 @@ struct Session {
     absent: bool,
     ready_at: Option<Instant>,
     break_placement: Option<Placement>,
+    break_window: Option<SavedWindow>,
+    break_focus: Option<crate::platform::FocusTarget>,
+    deferred_focus: Option<crate::platform::FocusTarget>,
+    focus_ready_at: Option<Instant>,
     deferred_placement: Option<Placement>,
 }
 impl Session {
     fn begin_absence(&mut self) {
         if self.saved.is_none() {
-            self.saved = self.current.clone();
+            self.saved = self
+                .break_window
+                .as_ref()
+                .or(self.current.as_ref())
+                .cloned();
         }
         self.absent = true;
         self.ready_at = None;
     }
 
     fn background_action(&mut self, hidden: bool, minimized: bool) {
-        for saved in [&mut self.current, &mut self.saved].into_iter().flatten() {
+        for saved in [&mut self.current, &mut self.saved, &mut self.break_window]
+            .into_iter()
+            .flatten()
+        {
             if hidden {
                 saved.visible = false;
             }
             if minimized {
                 saved.minimized = true;
+            }
+        }
+    }
+
+    fn begin_break(&mut self, saved: SavedWindow, focus: Option<crate::platform::FocusTarget>) {
+        if self.break_window.is_none() {
+            self.break_placement = Some(saved.placement.clone());
+            self.break_window = Some(saved.clone());
+            self.break_focus = focus;
+            self.current = Some(saved);
+        }
+    }
+
+    fn finish_break(&mut self) {
+        self.break_placement = None;
+        if let Some(saved) = self.break_window.take() {
+            // An overlapping absence already owns the original snapshot.
+            if self.saved.is_none() {
+                self.saved = Some(saved);
+                self.ready_at = None;
+            }
+            self.deferred_focus = self.break_focus.take();
+            self.focus_ready_at = None;
+        }
+    }
+
+    fn keep_open(&mut self) {
+        for saved in [&mut self.current, &mut self.saved, &mut self.break_window]
+            .into_iter()
+            .flatten()
+        {
+            saved.visible = true;
+            saved.minimized = false;
+        }
+        self.break_focus = None;
+        self.deferred_focus = None;
+        self.focus_ready_at = None;
+    }
+
+    fn capture_cleanup_focus(
+        &mut self,
+        capture: impl FnOnce() -> Option<crate::platform::FocusTarget>,
+    ) {
+        if self.absent || (self.break_window.is_none() && self.deferred_focus.is_none()) {
+            return;
+        }
+        if let Some(focus) = capture() {
+            if self.break_window.is_some() {
+                self.break_focus = Some(focus);
+            } else {
+                self.deferred_focus = Some(focus);
             }
         }
     }
@@ -200,6 +262,8 @@ impl Session {
         // Reopening supersedes background state even if native geometry is
         // temporarily unavailable. Only placement may be retried afterward.
         self.ready_at = None;
+        self.deferred_focus = None;
+        self.focus_ready_at = None;
         if let Some(current) = &mut self.current {
             current.visible = true;
             current.minimized = false;
@@ -277,7 +341,8 @@ fn restore_placement(
         return Ok(true);
     }
     #[cfg(target_os = "linux")]
-    if !window.is_visible().map_err(|e| e.to_string())?
+    if !can_present
+        || !window.is_visible().map_err(|e| e.to_string())?
         || window.is_minimized().map_err(|e| e.to_string())?
     {
         // GTK queues geometry requests for unmapped windows without confirming
@@ -456,6 +521,13 @@ pub fn synchronize(app: &tauri::AppHandle) -> Result<(), String> {
         {
             return Ok(());
         }
+        // Native fullscreen/zoom cleanup can activate this window on Windows.
+        // Preserve a work app selected since the break began before changing it.
+        if session.deferred_focus.is_some() {
+            if let Some(focus) = crate::platform::capture_focus() {
+                session.deferred_focus = Some(focus);
+            }
+        }
         let restored = restore_placement(
             &window,
             &saved.placement,
@@ -464,6 +536,16 @@ pub fn synchronize(app: &tauri::AppHandle) -> Result<(), String> {
         )?;
         if !restored {
             session.deferred_placement = Some(saved.placement.clone());
+        }
+        // Return work focus before hiding/minimizing: native focus helpers
+        // restore only while Blincho is still active, never over a newer app.
+        if !saved.visible || saved.minimized {
+            if let Some(focus) = session.deferred_focus.take() {
+                if let Err(error) = crate::platform::restore_focus(&focus) {
+                    eprintln!("Work focus: {error}");
+                }
+            }
+            session.focus_ready_at = None;
         }
         // Geometry changes must not turn a tray window into a foreground app.
         // Visible windows already belong to the desktop; no show/focus is needed.
@@ -476,12 +558,35 @@ pub fn synchronize(app: &tauri::AppHandle) -> Result<(), String> {
         session.saved = None;
         session.ready_at = None;
     }
-    if let Some(placement) = &session.deferred_placement {
+    if session.saved.is_none()
+        && session.deferred_placement.is_none()
+        && session.deferred_focus.is_some()
+    {
+        // Finish queued fullscreen/zoom operations before transferring focus.
+        let elapsed = session
+            .focus_ready_at
+            .get_or_insert_with(Instant::now)
+            .elapsed();
+        if elapsed >= Duration::from_millis(250) {
+            if let Some(focus) = session.deferred_focus.take() {
+                if let Err(error) = crate::platform::restore_focus(&focus) {
+                    eprintln!("Work focus: {error}");
+                }
+            }
+            session.focus_ready_at = None;
+        }
+    }
+    if let Some(placement) = session.deferred_placement.clone() {
         if !restoring_absence
             && window.is_visible().map_err(|e| e.to_string())?
             && !window.is_minimized().map_err(|e| e.to_string())?
         {
-            if restore_placement(&window, placement, &displays(&window)?, true)? {
+            if session.deferred_focus.is_some() {
+                if let Some(focus) = crate::platform::capture_focus() {
+                    session.deferred_focus = Some(focus);
+                }
+            }
+            if restore_placement(&window, &placement, &displays(&window)?, true)? {
                 session.deferred_placement = None;
             }
         }
@@ -503,16 +608,63 @@ pub fn prepare_show(window: &tauri::WebviewWindow) -> Result<(), String> {
     session.prepare_show(|placement| restore_placement(window, placement, &displays(window)?, true))
 }
 
+pub fn begin_break(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let state = window.state::<WindowSession>();
+    let mut session = state.0.lock().map_err(|e| e.to_string())?;
+    if session.break_window.is_none() {
+        let saved = match &session.saved {
+            Some(saved) => saved.clone(),
+            None => capture(
+                window,
+                session.current.as_ref(),
+                session.deferred_placement.as_ref(),
+            )?,
+        };
+        session.begin_break(saved, crate::platform::capture_focus());
+    }
+    Ok(())
+}
+
+pub fn keep_open(window: &tauri::WebviewWindow) -> Result<(), String> {
+    window
+        .state::<WindowSession>()
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .keep_open();
+    Ok(())
+}
+
+pub fn preserve_work_focus(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let present = window
+        .state::<crate::Runtime>()
+        .timer
+        .lock()
+        .map_err(|e| e.to_string())?
+        .snapshot
+        .reasons
+        .is_empty();
+    if present {
+        window
+            .state::<WindowSession>()
+            .0
+            .lock()
+            .map_err(|e| e.to_string())?
+            .capture_cleanup_focus(crate::platform::capture_focus);
+    }
+    Ok(())
+}
+
 pub fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    if enabled {
+        begin_break(window)?;
+    } else {
+        preserve_work_focus(window)?;
+    }
     let state = window.state::<WindowSession>();
     let mut session = state.0.lock().map_err(|e| e.to_string())?;
     if !enabled && session.break_placement.is_none() {
         return Ok(());
-    }
-    if enabled && session.break_placement.is_none() {
-        let saved = capture(window, session.current.as_ref(), None)?;
-        session.break_placement = Some(saved.placement.clone());
-        session.current = Some(saved);
     }
     #[cfg(target_os = "macos")]
     window
@@ -521,22 +673,7 @@ pub fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<()
     #[cfg(not(target_os = "macos"))]
     window.set_fullscreen(enabled).map_err(|e| e.to_string())?;
     if !enabled {
-        if let Some(placement) = session.break_placement.take() {
-            // During absence the session snapshot owns restoration, after all
-            // monitors are available. Ordinary break completion restores now.
-            if session.saved.is_none() && !session.absent {
-                let restored = restore_placement(
-                    window,
-                    &placement,
-                    &displays(window)?,
-                    window.is_visible().map_err(|e| e.to_string())?
-                        && !window.is_minimized().map_err(|e| e.to_string())?,
-                )?;
-                if !restored {
-                    session.deferred_placement = Some(placement);
-                }
-            }
-        }
+        session.finish_break();
     }
     Ok(())
 }
@@ -654,6 +791,117 @@ mod tests {
         let saved = session.saved.unwrap();
         assert!(!saved.visible);
         assert!(saved.minimized);
+    }
+
+    #[test]
+    fn break_restore_keeps_first_tray_snapshot_and_is_consumed_once() {
+        let original = SavedWindow {
+            placement: placement(),
+            visible: false,
+            minimized: false,
+        };
+        let mut session = Session::default();
+        session.begin_break(original.clone(), None);
+        let mut foreground = original;
+        foreground.visible = true;
+        foreground.placement.position.x = 10;
+        session.begin_break(foreground, None);
+        session.finish_break();
+        assert!(session.break_window.is_none());
+        assert!(session.break_placement.is_none());
+        let saved = session.saved.as_ref().unwrap();
+        assert!(!saved.visible);
+        assert_eq!(saved.placement.position.x, -1800);
+        session.saved = None;
+        session.finish_break();
+        assert!(session.saved.is_none());
+    }
+
+    #[test]
+    fn absence_during_break_preserves_pre_break_visibility_and_minimization() {
+        for (visible, minimized) in [(false, false), (true, true), (true, false)] {
+            let mut session = Session::default();
+            session.begin_break(
+                SavedWindow {
+                    placement: placement(),
+                    visible,
+                    minimized,
+                },
+                None,
+            );
+            session.current.as_mut().unwrap().visible = true;
+            session.current.as_mut().unwrap().minimized = false;
+            session.begin_absence();
+            session.finish_break();
+            let saved = session.saved.unwrap();
+            assert_eq!(saved.visible, visible);
+            assert_eq!(saved.minimized, minimized);
+        }
+    }
+
+    #[test]
+    fn explicit_hide_during_break_supersedes_original_visible_state() {
+        let mut session = Session::default();
+        session.begin_break(
+            SavedWindow {
+                placement: placement(),
+                visible: true,
+                minimized: false,
+            },
+            None,
+        );
+        session.background_action(true, false);
+        session.finish_break();
+        assert!(!session.saved.as_ref().unwrap().visible);
+    }
+
+    #[test]
+    fn cleanup_never_captures_lock_screen_or_unrelated_window_focus() {
+        let mut session = Session::default();
+        session.capture_cleanup_focus(|| panic!("No break is being cleaned up"));
+        session.begin_break(
+            SavedWindow {
+                placement: placement(),
+                visible: false,
+                minimized: false,
+            },
+            None,
+        );
+        let mut sampled = false;
+        session.capture_cleanup_focus(|| {
+            sampled = true;
+            None
+        });
+        assert!(sampled);
+        session.begin_absence();
+        session.capture_cleanup_focus(|| panic!("Lock screen must not replace the work app"));
+        session.finish_break();
+        assert!(!session.saved.as_ref().unwrap().visible);
+    }
+
+    #[test]
+    fn choosing_an_exercise_keeps_the_app_open_before_or_after_break_cleanup() {
+        for cleanup_first in [false, true] {
+            let mut session = Session::default();
+            session.begin_break(
+                SavedWindow {
+                    placement: placement(),
+                    visible: false,
+                    minimized: false,
+                },
+                None,
+            );
+            if cleanup_first {
+                session.finish_break();
+            }
+            session.keep_open();
+            if !cleanup_first {
+                session.finish_break();
+            }
+            assert!(session.saved.as_ref().unwrap().visible);
+            assert!(!session.saved.as_ref().unwrap().minimized);
+            assert!(session.deferred_focus.is_none());
+        }
     }
 
     #[test]

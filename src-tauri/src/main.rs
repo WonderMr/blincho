@@ -101,6 +101,10 @@ fn foreground_expiry(
             return;
         }
         if let Ok(window) = window(&handle) {
+            if let Err(error) = window_session::begin_break(&window) {
+                eprintln!("Break session: {error}");
+                return;
+            }
             if let Err(error) = window_session::prepare_show(&window) {
                 eprintln!("Window placement: {error}");
             }
@@ -157,6 +161,9 @@ fn presentation(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(
 }
 fn presentation_on_main(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(), String> {
     let window = window(app)?;
+    if !strict {
+        window_session::preserve_work_focus(&window)?;
+    }
     ui::set_strict(app, strict)?;
     window.set_closable(!strict).map_err(|e| e.to_string())?;
     window.set_minimizable(!strict).map_err(|e| e.to_string())?;
@@ -196,6 +203,9 @@ fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), St
 fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
     ui::finish_hidden_startup(app)?;
     let window = window(app)?;
+    if let Err(error) = window_session::keep_open(&window) {
+        eprintln!("Window session: {error}");
+    }
     if let Err(error) = window_session::prepare_show(&window) {
         eprintln!("Window placement: {error}");
     }
@@ -208,15 +218,31 @@ fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 fn foreground(app: &tauri::AppHandle) -> Result<(), String> {
+    foreground_with_break(app, false)
+}
+fn foreground_break(app: &tauri::AppHandle) -> Result<(), String> {
+    foreground_with_break(app, true)
+}
+fn request_tray_break(app: &tauri::AppHandle) -> Result<(), String> {
+    foreground_break(app)?;
+    app.emit("trigger-break", ()).map_err(|e| e.to_string())
+}
+fn foreground_with_break(app: &tauri::AppHandle, begin_break: bool) -> Result<(), String> {
     let runtime = app.state::<Runtime>();
     let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
     sample(&mut timer);
     if !timer.snapshot.reasons.is_empty() {
         return Err("Presence is not confirmed".into());
     }
+    // The renderer rejects a new break while an exercise is already active.
+    // Reopen that exercise without retaining a break snapshot it cannot release.
+    let begin_break = begin_break && !timer.snapshot.exercising;
     drop(timer);
     ui::finish_hidden_startup(app)?;
     let window = window(app)?;
+    if begin_break {
+        window_session::begin_break(&window)?;
+    }
     if let Err(error) = window_session::prepare_show(&window) {
         eprintln!("Window placement: {error}");
     }
@@ -234,9 +260,13 @@ fn configure_timer(input: TimerInput, app: tauri::AppHandle) -> Result<Snapshot,
     let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
     // Account for native elapsed time before accepting an explicit UI transition.
     sample(&mut timer);
+    let open_exercise = input.exercising && !timer.snapshot.exercising;
     timer.configure(input, Utc::now().timestamp_millis())?;
     let snapshot = timer.snapshot.clone();
     drop(timer);
+    if open_exercise && snapshot.reasons.is_empty() {
+        window_session::keep_open(&window(&app)?)?;
+    }
     ui::finish_hidden_startup(&app)?;
     Ok(snapshot)
 }
@@ -275,11 +305,11 @@ fn desktop_command(
             window_session::background_action(&window, false, true)?;
             window_session::remember(&window)
         }
-        "show" => foreground(&app),
+        "show" => show_manual(&app),
+        "show-break" => foreground(&app),
         "fullscreen" => {
             if flag == Some(true) {
-                window_session::remember(&window(&app)?)?;
-                foreground(&app)?;
+                foreground_break(&app)?;
             }
             set_fullscreen(&window(&app)?, flag.unwrap_or(false))
         }
@@ -526,7 +556,8 @@ fn test_control_on_main(app: &tauri::AppHandle) {
             }
             "hide" => desktop_command("hide".into(), None, app.clone())?,
             "minimize" => desktop_command("minimize".into(), None, app.clone())?,
-            "show" => foreground(app)?,
+            "show" => show_manual(app)?,
+            "tray-rest" => request_tray_break(app)?,
             "maximize" => {
                 let window = window(app)?;
                 window_session::remember(&window)?;
@@ -766,9 +797,7 @@ fn main() {
                         }
                     }
                     "rest" => {
-                        if foreground(app).is_ok() {
-                            let _ = app.emit("trigger-break", ());
-                        }
+                        let _ = request_tray_break(app);
                     }
                     "quit" => {
                         app.state::<Runtime>()

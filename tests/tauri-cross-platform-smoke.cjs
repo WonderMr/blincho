@@ -6,11 +6,13 @@ const os = require('node:os');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
+const breakSeconds = Number(process.env.BLINCHO_BREAK_SMOKE_SECONDS || 4);
+assert(Number.isFinite(breakSeconds) && breakSeconds >= 1 && breakSeconds <= 120);
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-native-smoke-'));
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.join(root, 'src-tauri/target', ...(process.env.RUST_TARGET ? [process.env.RUST_TARGET] : []), 'debug', process.platform === 'win32' ? 'blincho.exe' : 'blincho');
 const source = path.join(directory, 'legacy.json');
 fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
-  myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 10, breakSeconds: 4, idleDetectionEnabled: false, meetingDetectionEnabled: false, strictMode: false, soundEnabled: false, notificationsEnabled: false }),
+  myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 10, breakSeconds, idleDetectionEnabled: false, meetingDetectionEnabled: false, strictMode: false, soundEnabled: false, notificationsEnabled: false }),
   myeyes_stats_v1: JSON.stringify([{ date: '2026-10-11', breaksCompleted: 7, exercisesCompleted: 3, focusMinutes: 42, techniqueCounts: { blink: 3 }, completedEventIds: ['legacy-break'] }]),
   'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
 } }));
@@ -81,7 +83,7 @@ async function stop() {
   assert.equal(history.renderer.stats.find(day => day.date === '2026-10-11').focusMinutes, 42);
   assert.ok(history.renderer.text.includes('Blincho'));
   assert.equal(history.renderer.platform, process.platform);
-  const input = { totalMs: 10_000, remainingMs: 10_000, manualPaused: false, breakActive: false, exercising: false, expiryPending: false, version: read().timer.version + 1, breakSeconds: 4, strictMode: false, idleEnabled: false, idleThresholdSeconds: 60, autoTakeover: true };
+  const input = { totalMs: 10_000, remainingMs: 10_000, manualPaused: false, breakActive: false, exercising: false, expiryPending: false, version: read().timer.version + 1, breakSeconds, strictMode: false, idleEnabled: false, idleThresholdSeconds: 60, autoTakeover: true };
   await control('configure', { input });
   await control('hide');
   const hidden = await until(value => value.visible === false);
@@ -92,7 +94,13 @@ async function stop() {
   await until(value => value.visible && value.timer.breakActive, 15_000);
   const overlay = await inspectRenderer();
   assert.equal(overlay.renderer.dialog, true);
-  await until(value => !value.timer.breakActive, 12_000);
+  await until(value => !value.timer.breakActive, breakSeconds * 1000 + 8000);
+  await sleep(1200); // Include the renderer's final cleanup and following native ticks.
+  const restored = read();
+  assert.equal(restored.visible, false, 'A break that began from the tray must return to the tray');
+  assert.equal(restored.focused, false, 'A completed tray break must release native window focus');
+  await sleep(1000);
+  assert.equal(read().visible, false, 'Later timer ticks must not reopen the restored tray window');
   await stop();
   fs.writeFileSync(source, '{corrupted old history');
   const restart = await launch(['--autostart']);
@@ -113,7 +121,7 @@ async function stop() {
   const reopened = await until(value => value.visible);
   if (process.platform === 'win32') assert.deepEqual(reopened.position, initial.position);
   await stop();
-  const result = { status: 'passed', platform: process.platform, architecture: process.arch, checks: ['native renderer launch', 'history import fidelity', 'hidden Rust timer', 'timer expiry and React break', 'hidden autostart launch', 'history survives restart'], profile: directory, presence: 'modeled idle and unlocked state in isolated test profile; physical idle, lock and sleep are not tested' };
+  const result = { status: 'passed', platform: process.platform, architecture: process.arch, breakSeconds, checks: ['native renderer launch', 'history import fidelity', 'hidden Rust timer', 'timer expiry and React break', 'break restores tray visibility and focus', 'hidden autostart launch', 'history survives restart'], profile: directory, presence: 'modeled idle and unlocked state in isolated test profile; physical idle, lock and sleep are not tested' };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 })().catch(error => { console.error(error); child?.kill(); process.exitCode = 1; });

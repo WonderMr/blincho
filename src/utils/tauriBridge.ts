@@ -111,7 +111,7 @@ async function installTauriBridge(): Promise<void> {
     skipUpdate: version => api.core.invoke<UpdateState>('update_skip', {version}),
     onUpdateState: callback => { updateListeners.add(callback); return () => updateListeners.delete(callback); },
     openUpdateDownload: () => api.core.invoke<boolean>('update_open_download'),
-    setAlwaysOnTop: flag => command('alwaysOnTop', flag), bringToFront: () => command('show'),
+    setAlwaysOnTop: flag => command('alwaysOnTop', flag), bringToFront: () => command('show-break'),
     setBreakFullscreen: flag => command('fullscreen', flag), minimizeToTray: () => command('hide'),
     setStrictLock: flag => command('strict', flag),
     getSystemIdleTime: async () => (await readNativeTimer())!.idleSeconds,
