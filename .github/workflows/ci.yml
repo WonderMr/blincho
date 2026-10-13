@@ -74,6 +74,14 @@ jobs:
         run: |
           rustup toolchain install 1.92.0 --profile minimal --component rustfmt --target ${{ matrix.rust-target }}
           rustup override set 1.92.0
+      - name: Cache native Rust dependencies and build outputs
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: blincho-rust-${{ runner.os }}-${{ matrix.rust-target }}-1.92-cmake3.31-macos14-${{ hashFiles('src-tauri/Cargo.lock', '.cargo/config.toml') }}
       - name: Install pinned CMake for native history migration
         shell: bash
         run: |
