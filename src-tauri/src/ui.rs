@@ -12,6 +12,70 @@ pub struct NativeUi {
     pub autostart: CheckMenuItem<tauri::Wry>,
     pub guards: Mutex<Vec<MenuItem<tauri::Wry>>>,
 }
+
+#[cfg(target_os = "windows")]
+struct HiddenStartup {
+    position: tauri::PhysicalPosition<i32>,
+    skip_taskbar: bool,
+    focusable: bool,
+}
+#[cfg(target_os = "windows")]
+struct HiddenStartupState(Mutex<Option<HiddenStartup>>);
+
+#[cfg(target_os = "windows")]
+pub fn initialize_hidden_startup(
+    window: &tauri::WebviewWindow,
+    skip_taskbar: bool,
+    focusable: bool,
+) -> tauri::Result<()> {
+    let position = window.outer_position()?;
+    let size = window.outer_size()?;
+    let monitors = window.available_monitors()?;
+    let left = monitors.iter().map(|m| m.position().x).min().unwrap_or(0);
+    let top = monitors.iter().map(|m| m.position().y).min().unwrap_or(0);
+    let offscreen = tauri::PhysicalPosition::new(
+        left.saturating_sub(i32::try_from(size.width).unwrap_or(i32::MAX))
+            .saturating_sub(64),
+        top.saturating_sub(i32::try_from(size.height).unwrap_or(i32::MAX))
+            .saturating_sub(64),
+    );
+    window
+        .app_handle()
+        .manage(HiddenStartupState(Mutex::new(Some(HiddenStartup {
+            position,
+            skip_taskbar,
+            focusable,
+        }))));
+    window.set_position(offscreen)?;
+    // WebView2 can stall its first navigation under a hidden native HWND.
+    // Warm up outside every monitor without a taskbar icon or activation.
+    window.show()
+}
+
+pub fn finish_hidden_startup(_app: &tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    if let Some(state) = _app.try_state::<HiddenStartupState>() {
+        let mut startup = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(saved) = startup.as_ref() {
+            let window = _app
+                .get_webview_window("main")
+                .ok_or("Main window unavailable")?;
+            window.hide().map_err(|e| e.to_string())?;
+            window
+                .set_position(saved.position)
+                .map_err(|e| e.to_string())?;
+            window
+                .set_skip_taskbar(saved.skip_taskbar)
+                .map_err(|e| e.to_string())?;
+            window
+                .set_focusable(saved.focusable)
+                .map_err(|e| e.to_string())?;
+            *startup = None;
+        }
+    }
+    Ok(())
+}
+
 pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
     static STRINGS: OnceLock<Value> = OnceLock::new();
     let strings = STRINGS.get_or_init(|| {

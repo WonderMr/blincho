@@ -7,6 +7,8 @@ CC_x86_64_unknown_linux_gnu = "clang"
 CXX_x86_64_unknown_linux_gnu = "clang++"
 CC_aarch64_unknown_linux_gnu = "clang"
 CXX_aarch64_unknown_linux_gnu = "clang++"
+# Ninja otherwise adds /MD or /MDd after cmake-rs passes Rust's /MT.
+CMAKE_TOOLCHAIN_FILE_aarch64_pc_windows_msvc = { value = ".cargo/windows-static-crt.cmake", relative = true }
 
 [target.aarch64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
