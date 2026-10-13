@@ -13,6 +13,33 @@ use regex::Regex;
 #[cfg(target_os = "windows")]
 use windows as native;
 
+pub use native::FocusTarget;
+
+/// Capture the external application/window before the break takes foreground focus.
+/// Native window operations, including these helpers, run on the UI thread.
+pub fn capture_focus() -> Option<FocusTarget> {
+    native::capture_focus()
+}
+
+/// Return focus only while Blincho still owns it. A user-selected app or a stale
+/// target is an intentional no-op. Call before hiding/minimizing our window.
+pub fn restore_focus(target: &FocusTarget) -> Result<(), String> {
+    native::restore_focus(target)
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
+fn may_restore_focus(
+    own_process: u32,
+    foreground_process: Option<u32>,
+    target_process: u32,
+    target_is_original: bool,
+) -> bool {
+    foreground_process == Some(own_process)
+        && target_process != 0
+        && target_process != own_process
+        && target_is_original
+}
+
 /// A failed native probe stays unknown. The timer deliberately pauses while presence
 /// cannot be confirmed, rather than counting work based on invented zero idle time.
 #[derive(Clone, Copy, Debug, Default)]
@@ -221,6 +248,20 @@ pub fn open_external(url: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn focus_restoration_requires_own_foreground_and_original_external_target() {
+        assert!(may_restore_focus(10, Some(10), 20, true));
+        assert!(!may_restore_focus(10, Some(30), 20, true));
+        assert!(!may_restore_focus(10, None, 20, true));
+        assert!(!may_restore_focus(10, Some(10), 10, true));
+        assert!(!may_restore_focus(10, Some(10), 0, true));
+        assert!(!may_restore_focus(10, Some(10), 20, false));
+    }
+    #[test]
+    fn focus_target_can_be_cloned_and_stored_in_window_session() {
+        fn requires_traits<T: Clone + Send + Sync>() {}
+        requires_traits::<FocusTarget>();
+    }
     fn assertion(owner: &str, kind: &str, name: &str) -> String {
         format!("PreventUserIdleDisplaySleep 1\n pid 42({owner}): [0x1] 00:01:20 {kind} named: \"{name}\"")
     }

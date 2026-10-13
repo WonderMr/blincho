@@ -2,6 +2,12 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.6.3]
+
+- Return to the previous tray-hidden, minimized or visible window state when a screen break ends or is cancelled.
+- Restore the previous work application's focus on macOS, Windows and supported Linux X11 desktops when Blincho still owns the foreground.
+- Preserve a newly chosen application or an explicitly started exercise and check real 20-second breaks with native focus fixtures.
+
 ## [1.6.2]
 
 - Restore the previous monitor, window position and size after screen lock or sleep on macOS, Windows and Linux.
