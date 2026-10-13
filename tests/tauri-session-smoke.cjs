@@ -101,6 +101,8 @@ const samePosition = (value, expected) => Math.abs(value.position.x - expected.x
   assert(samePosition(placed, requested), 'The native baseline must remain at its reachable target');
   const desired = { ...placed.position, scale: target.scaleFactor };
   const originalSize = placed.size;
+  const originalInnerSize = placed.innerSize;
+  assert(originalInnerSize?.width > 0 && originalInnerSize?.height > 0, 'The native baseline must report a positive content size');
   const drift = { x: desired.x + 100, y: desired.y + 100, scale: target.scaleFactor };
   const originalFrame = value => samePosition(value, desired)
     && value.size.width === originalSize.width && value.size.height === originalSize.height
@@ -108,7 +110,9 @@ const samePosition = (value, expected) => Math.abs(value.position.x - expected.x
   const assertBackground = value => {
     assert.equal(value.visible, false);
     assert.equal(value.focused, false);
-    assert.deepEqual(value.size, originalSize);
+    // GTK can omit outer-frame decorations while the window is unmapped.
+    // Content size must stay stable; reopening still checks the full frame.
+    assert.deepEqual(value.innerSize, originalInnerSize);
     assert.equal(value.minimized, false);
     assert.equal(value.maximized, false);
     assert.equal(value.fullscreen, false);

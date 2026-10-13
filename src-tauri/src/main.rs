@@ -469,6 +469,7 @@ fn diagnostics(app: &tauri::AppHandle) {
         "minimizable":window(app).ok().and_then(|w|w.is_minimizable().ok()),
         "position":window(app).ok().and_then(|w|w.outer_position().ok()),
         "size":window(app).ok().and_then(|w|w.outer_size().ok()),
+        "innerSize":window(app).ok().and_then(|w|w.inner_size().ok()),
         "renderer":runtime.renderer.lock().ok().map(|v|v.clone()),"sourceExport":runtime.source,"profile":runtime.profile,
         "pid":std::process::id(),"updates":runtime.updates.get_state(),"autostart":runtime.autostart.lock().ok().map(|v|v.clone())});
     let path = runtime
