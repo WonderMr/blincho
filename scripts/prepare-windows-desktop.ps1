@@ -152,7 +152,20 @@ do {
 if ($AllowUnavailableNotificationArea -and $failure -eq 'NIM_ADD returned false' -and
     $shellWindow -ne [IntPtr]::Zero -and $taskbarWindow -ne [IntPtr]::Zero -and
     @($explorers | ForEach-Object { $_.Id }) -contains $taskbarProcessId) {
-    Write-Warning "ARM64 CI notification area rejected NIM_ADD, including the independent SDK probe. Notification-area display remains unverified. Real application renderer, history, timer and package checks still run. $previousState"
+    $sdkOutput = @(& (Join-Path $PSScriptRoot 'diagnose-windows-tray.ps1') | Tee-Object -Variable sdkLines)
+    foreach ($line in $sdkOutput) { if ($line -is [string]) { Write-Host $line } }
+    $sdkText = ($sdkLines | ForEach-Object { $_.ToString() }) -join "`n"
+    if ($sdkText -notmatch 'SDK pointer=8 size=976 hwnd=8 icon=32 tip=40 guid=952 balloon=968' -or
+        $sdkText -notmatch 'responsive=1 response=0 messagingError=0') {
+        throw 'ARM64 notification-area exception requires matching native SDK layout and a responsive taskbar.'
+    }
+    foreach ($variant in 'A-static-no-message', 'A2-static-message', 'B-registered-message', 'C-registered-message-STA') {
+        if ($sdkText -notmatch "(?m)^$variant window=.+ add=0 durationMs=" -or
+            $sdkText -notmatch "(?m)^$variant addAfterPump=0$") {
+            throw "ARM64 notification-area exception requires native SDK rejection for $variant."
+        }
+    }
+    Write-Warning "ARM64 CI notification area rejected NIM_ADD, independently confirmed by the SDK in this same machine. Notification-area display remains unverified. Real application renderer, history, timer and package checks still run. $previousState"
     return
 }
 throw "Windows desktop was not ready within $TimeoutSeconds seconds: $previousState"

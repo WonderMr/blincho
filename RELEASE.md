@@ -17,6 +17,12 @@ A failed build or verification stops publication. A failed upload leaves a draft
 
 The manual retry for immutable `v1.4.2` repairs one Windows-only test fixture import. Its commit must remain `c77cca3653171ecf84818039ca95913573709b9e`. The `--import` argument changes to a file URL; packaged application sources remain those of the tag. Newer tags do not use this repair.
 
+## Windows CI notification area
+
+Windows desktop preparation normally requires `Shell_NotifyIconW` add, tooltip update and delete operations to succeed. The GitHub Actions ARM64 Windows image can reject `NIM_ADD` even with Explorer and its responsive taskbar in the runner's session. `scripts/prepare-windows-desktop.ps1` permits `-AllowUnavailableNotificationArea` only on that ARM64 CI environment. Before accepting the exception, it compiles and runs the independent native Windows SDK probe on the same VM. The probe must confirm the expected 976-byte ARM64 `NOTIFYICONDATAW` layout, a responsive taskbar, and rejection of all four add variants both initially and after message pumping. Missing evidence or any other desktop preparation failure stops the job. The probe results do not establish the cause of the rejection.
+
+This exception leaves notification-area display unverified. Real renderer, history, hidden timer, break expiry, restart persistence, autostart and release-package launch checks must still pass. CI presence is simulated, so physical idle, lock and suspend behavior and visible tray/notification behavior require separate desktop verification.
+
 ## Packages and verification
 
 | Current package | Build and verification | Updates |

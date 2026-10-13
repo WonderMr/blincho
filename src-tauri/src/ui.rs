@@ -76,13 +76,21 @@ pub fn finish_hidden_startup(_app: &tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
+fn locale_text(locale: &str) -> &'static Value {
     static STRINGS: OnceLock<Value> = OnceLock::new();
     let strings = STRINGS.get_or_init(|| {
         serde_json::from_str(include_str!("../locales.json")).expect("Valid native translations")
     });
     let code = locale.split(['-', '_']).next().unwrap_or("en");
-    let text = strings.get(code).unwrap_or(&strings["en"]);
+    strings.get(code).unwrap_or(&strings["en"])
+}
+
+pub fn tray_title(locale: &str) -> &'static str {
+    locale_text(locale)["title"].as_str().unwrap_or("Blincho")
+}
+
+pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
+    let text = locale_text(locale);
     let label = |key: &str| text[key].as_str().unwrap_or("Blincho");
     let ui = app.state::<NativeUi>();
     ui.show.set_text(label("show")).map_err(|e| e.to_string())?;
