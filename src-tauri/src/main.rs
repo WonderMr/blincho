@@ -87,6 +87,10 @@ fn foreground_expiry(
             return;
         }
         drop(timer);
+        if let Err(error) = ui::finish_hidden_startup(&handle) {
+            eprintln!("Startup window: {error}");
+            return;
+        }
         if let Ok(window) = window(&handle) {
             let _ = window.unminimize();
             let _ = window.show();
@@ -156,6 +160,7 @@ fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), St
 // Explicit tray, notification and reopen actions must remain available even when
 // a desktop cannot supply presence samples. Showing the UI never resumes timing.
 fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
+    ui::finish_hidden_startup(app)?;
     let window = window(app)?;
     window.unminimize().map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
@@ -169,6 +174,7 @@ fn foreground(app: &tauri::AppHandle) -> Result<(), String> {
         return Err("Presence is not confirmed".into());
     }
     drop(timer);
+    ui::finish_hidden_startup(app)?;
     let window = window(app)?;
     window.unminimize().map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
@@ -181,7 +187,10 @@ fn configure_timer(input: TimerInput, app: tauri::AppHandle) -> Result<Snapshot,
     // Account for native elapsed time before accepting an explicit UI transition.
     sample(&mut timer);
     timer.configure(input, Utc::now().timestamp_millis())?;
-    Ok(timer.snapshot.clone())
+    let snapshot = timer.snapshot.clone();
+    drop(timer);
+    ui::finish_hidden_startup(&app)?;
+    Ok(snapshot)
 }
 #[tauri::command]
 fn timer_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
@@ -537,10 +546,15 @@ fn main() {
             let mut builder =
                 tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
                     .visible(!hidden)
+                    .focused(!hidden)
                     .on_navigation(|url| {
                         (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
                             || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost"))
                     });
+            #[cfg(target_os = "windows")]
+            if hidden {
+                builder = builder.skip_taskbar(true).focusable(false);
+            }
             if let Some(path) = &test_dir {
                 #[cfg(target_os = "macos")]
                 {
@@ -650,7 +664,12 @@ fn main() {
                 let _ = desktop_command(operation.into(), None, app.clone());
             });
             ui::set_locale(app.handle(),preferred_languages().first().map(String::as_str).unwrap_or("en"))?;
-            builder.build()?;
+            let _main_window = builder.build()?;
+            #[cfg(target_os = "windows")]
+            if hidden {
+                let config = &app.config().app.windows[0];
+                ui::initialize_hidden_startup(&_main_window, config.skip_taskbar, config.focusable)?;
+            }
             if app.state::<Runtime>().test_dir.is_none() {update_controller.start();}
             let handle = app.handle().clone();
             std::thread::spawn(move || {

@@ -43,19 +43,20 @@ jobs:
   tauri-native:
     env:
       MACOSX_DEPLOYMENT_TARGET: '14.0'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     name: Check Tauri ${{ matrix.os }} ${{ matrix.architecture }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-15, architecture: arm64, rust-target: aarch64-apple-darwin }
-          - { os: macos-15-intel, architecture: x64, rust-target: x86_64-apple-darwin }
-          - { os: windows-11-arm, architecture: arm64, rust-target: aarch64-pc-windows-msvc }
-          - { os: windows-2022, architecture: x64, rust-target: x86_64-pc-windows-msvc }
-          - { os: ubuntu-24.04-arm, architecture: arm64, rust-target: aarch64-unknown-linux-gnu }
-          - { os: ubuntu-24.04, architecture: x64, rust-target: x86_64-unknown-linux-gnu }
+          - { os: macos-15, platform: macos, architecture: arm64, rust-target: aarch64-apple-darwin }
+          - { os: macos-15-intel, platform: macos, architecture: x64, rust-target: x86_64-apple-darwin }
+          - { os: windows-11-arm, platform: windows, architecture: arm64, rust-target: aarch64-pc-windows-msvc }
+          - { os: windows-2022, platform: windows, architecture: x64, rust-target: x86_64-pc-windows-msvc }
+          - { os: ubuntu-24.04-arm, platform: linux, architecture: arm64, rust-target: aarch64-unknown-linux-gnu }
+          - { os: ubuntu-24.04, platform: linux, architecture: x64, rust-target: x86_64-unknown-linux-gnu }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -69,7 +70,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb dbus-x11 openbox
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb dbus-x11 openbox
       - name: Select Ninja for Windows ARM64 native dependencies
         if: runner.os == 'Windows' && matrix.architecture == 'arm64'
         shell: pwsh
@@ -91,7 +92,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
-          key: blincho-rust-${{ runner.os }}-${{ matrix.rust-target }}-1.92-cmake3.31-macos14-${{ hashFiles('src-tauri/Cargo.lock', '.cargo/config.toml') }}
+          key: blincho-rust-${{ runner.os }}-${{ matrix.rust-target }}-1.92-cmake3.31-macos14-${{ hashFiles('src-tauri/Cargo.lock', '.cargo/config.toml', '.cargo/*.cmake') }}
       - name: Install pinned CMake for native history migration
         shell: bash
         run: |
@@ -124,3 +125,15 @@ jobs:
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-openbox.log 2>&1 & node tests/tauri-cross-platform-smoke.cjs'
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Select package version without creating a release tag
+        run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_ENV, "RELEASE_TAG=v" + require("./package.json").version + "\n")'
+      - name: Build and verify native release packages before tagging
+        run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Launch the verified release payload
+        if: runner.os != 'Linux'
+        run: node tests/tauri-package-smoke.cjs
+      - name: Launch the verified Linux AppImage
+        if: runner.os == 'Linux'
+        run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/dev/null 2>&1 & node tests/tauri-package-smoke.cjs'

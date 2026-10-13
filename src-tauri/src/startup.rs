@@ -68,6 +68,7 @@ fn launch_executable(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     // image path, as the Tauri environment captured it before startup.
     app.env()
         .appimage
+        .map(PathBuf::from)
         .or_else(|| std::env::current_exe().ok())
         .filter(|path| path.is_absolute() && path.is_file())
         .ok_or_else(|| "Application executable is unavailable for autostart".into())

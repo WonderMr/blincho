@@ -18,7 +18,7 @@ import { initializeTauriBridge, initializeTauriHistory, continueWithoutTauriHist
 const initialAppearance = loadSettings();
 applyAppearance(initialAppearance.theme, initialAppearance.colorPalette);
 
-if (import.meta.env.PROD && !window.electronAPI && 'serviceWorker' in navigator && ['http:', 'https:'].includes(location.protocol)) {
+if (import.meta.env.PROD && !window.electronAPI && !window.__TAURI__ && 'serviceWorker' in navigator && ['http:', 'https:'].includes(location.protocol)) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => {
       console.warn('Blincho: offline shell registration failed', error);

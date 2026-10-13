@@ -98,8 +98,20 @@ async function stop() {
   const restart = await launch(['--autostart']);
   assert.equal(restart.renderer.history.status, 'already-imported');
   assert.equal(restart.visible, false);
+  assert.equal(restart.autostart.startedHidden, true);
+  if (process.platform === 'win32') {
+    assert.equal(restart.focused, false);
+    assert.deepEqual(restart.position, initial.position, 'hidden WebView warmup restores the window position');
+  }
+  await sleep(1500);
+  const loginProgress = read();
+  assert.equal(loginProgress.visible, false);
+  assert.ok(restart.timer.remainingMs - loginProgress.timer.remainingMs >= 1000);
   const persisted = await inspectRenderer();
   assert.equal(persisted.renderer.stats.find(day => day.date === '2026-10-11').breaksCompleted, 7);
+  await control('show');
+  const reopened = await until(value => value.visible);
+  if (process.platform === 'win32') assert.deepEqual(reopened.position, initial.position);
   await stop();
   const result = { status: 'passed', platform: process.platform, architecture: process.arch, checks: ['native renderer launch', 'history import fidelity', 'hidden Rust timer', 'timer expiry and React break', 'hidden autostart launch', 'history survives restart'], profile: directory, presence: 'modeled idle and unlocked state in isolated test profile; physical idle, lock and sleep are not tested' };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
