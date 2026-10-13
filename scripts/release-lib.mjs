@@ -196,6 +196,8 @@ export const UPDATE_PLATFORMS = ['darwin', 'win32', 'linux'];
 export const SITE_PLATFORMS = { darwin: 'macos', win32: 'windows', linux: 'linux' };
 export function usesUpdateReceipts(version) { return compareVersions(version, '1.4.0') >= 0; }
 export function usesTauriMac(version) { return compareVersions(version, '1.5.0') >= 0; }
+export function usesTauriDesktop(version) { return compareVersions(version, '1.6.0') >= 0; }
+export function usesTauriPlatform(version, platform) { return usesTauriDesktop(version) || (platform === 'darwin' && usesTauriMac(version)); }
 export function compareVersions(left, right) {
   assertVersion(left); assertVersion(right);
   const a = left.split('.').map(Number), b = right.split('.').map(Number);
@@ -214,7 +216,7 @@ export function expectedReleaseFiles(version) {
 }
 export function validateReceipt(receipt, version) {
   requireValue(receipt?.schemaVersion === 1 && receipt.version === version && UPDATE_PLATFORMS.includes(receipt.platform) && ['x64', 'arm64'].includes(receipt.arch), 'Invalid update receipt identity');
-  const tauri = receipt.platform === 'darwin' && usesTauriMac(version);
+  const tauri = usesTauriPlatform(version, receipt.platform);
   requireValue(tauri ? receipt.runtime === 'tauri' : receipt.runtime == null || receipt.runtime === 'electron', 'Invalid package runtime');
   const expected = expectedArtifacts(version).filter(name => {
     const item = describeArtifact(name, version);
@@ -225,7 +227,7 @@ export function validateReceipt(receipt, version) {
     requireValue(item && expected.includes(item.name) && Number.isSafeInteger(item.size) && item.size > 0 && /^[a-f0-9]{64}$/.test(item.sha256) && typeof item.sha512 === 'string' && /^[A-Za-z0-9+/]{86}==$/.test(item.sha512) && Buffer.from(item.sha512, 'base64').toString('base64') === item.sha512, 'Invalid update receipt artifact or hashes');
     requireValue(typeof item.signed === 'boolean' && typeof item.notarized === 'boolean', 'Missing verified signing status');
     if (tauri) {
-      requireValue(item.bundleVerified === true && item.updaterConfig === false && item.packageType === 'manual' && !item.signed && !item.notarized, 'Tauri macOS packages require verified unsigned manual bundle metadata');
+      requireValue(item.bundleVerified === true && item.updaterConfig === false && item.packageType === 'manual' && !item.signed && !item.notarized, 'Tauri packages require verified unsigned manual bundle metadata');
       continue;
     }
     requireValue(item.updaterConfig === true, 'Missing verified package configuration');

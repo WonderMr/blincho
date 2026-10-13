@@ -126,5 +126,6 @@
   "release.1.4.1": "アルメニア語を含む30の表示言語に対応し、対応するデスクトップ用パッケージでアップデート方法を選べます。自動アップデート、ダウンロード前の確認、バックグラウンドでのアップデート確認のオフから選択できます。",
   "release.1.5.0": "macOS版はTauriとネイティブタイマーを採用し、既存のローカル履歴を取り込みます。WindowsとLinuxはElectronを継続します。macOSの更新は引き続き手動です。",
   "release.1.5.1": "macOS版はTauriとネイティブタイマーを採用し、既存のローカル履歴を取り込みます。WindowsとLinuxはElectronを継続します。macOSの更新は引き続き手動です。",
-  "release.1.5.2": "macOS版はTauriとネイティブタイマーを採用し、既存のローカル履歴を取り込みます。WindowsとLinuxはElectronを継続します。macOSの更新は引き続き手動です。"
+  "release.1.5.2": "macOS版はTauriとネイティブタイマーを採用し、既存のローカル履歴を取り込みます。WindowsとLinuxはElectronを継続します。macOSの更新は引き続き手動です。",
+  "release.1.6.0": "Windows と Linux の x64・ARM64 版を含むすべてのデスクトップ版で Rust と Tauri を使用します。既存の履歴は一度だけ取り込みます。更新は手動でインストールします。"
 }

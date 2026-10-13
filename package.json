@@ -1,6 +1,6 @@
 {
   "name": "blincho",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "description": "Screen break reminders and habits for comfortable computer use",
   "main": "electron/main.cjs",
   "scripts": {
@@ -21,7 +21,9 @@
     "tauri:test:mac": "cargo build --locked --manifest-path src-tauri/Cargo.toml && node scripts/bundle-tauri-macos.cjs --debug && node tests/tauri-smoke.cjs --bundle-debug --long",
     "tauri:test": "cargo test --locked --manifest-path src-tauri/Cargo.toml && node --test tests/historyTransfer.test.cjs",
     "electron:start": "npm run build && electron .",
-    "tauri:test:layout": "npm run build && cargo build --locked --manifest-path src-tauri/Cargo.toml && node tests/tauri-layout-smoke.cjs"
+    "tauri:test:layout": "npm run build && cargo build --locked --manifest-path src-tauri/Cargo.toml && node tests/tauri-layout-smoke.cjs",
+    "tauri:build:win": "npm run build && tauri build --bundles nsis --ci --no-sign -- --locked",
+    "tauri:build:linux": "npm run build && tauri build --bundles appimage --ci --no-sign -- --locked"
   },
   "build": {
     "appId": "com.myeyes.app",
@@ -84,6 +86,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.12.2",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",

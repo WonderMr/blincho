@@ -2,6 +2,15 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.6.0]
+
+- Move Windows and Linux desktop packages to Tauri and Rust, alongside macOS, on x64 and ARM64.
+- Run the shared work and break timer in Rust while the window is hidden or minimized, with native activity, session lock and sleep integration.
+- Preserve existing Electron settings and history through a private, one-time import into the system WebView.
+- Keep localized tray controls, notifications, strict breaks and login startup on all supported operating systems.
+- Publish verified native packages and checksums. Current Tauri packages are unsigned and use manual update installation.
+- Preserve compatible historical Electron update feeds for already installed packages.
+
 ## [1.5.3]
 
 - Keep the macOS titlebar and document fixed to the native viewport, removing the small whole-window scrollbar when opening the Timer.

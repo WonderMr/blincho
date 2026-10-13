@@ -8,6 +8,35 @@ export function tauriMacMetadata(version, arch) {
   return { schemaVersion: 1, runtime: 'tauri', platform: 'darwin', arch, version, identifier: 'com.myeyes.app', packageType: 'manual', signed: false, notarized: false, updaterConfig: false };
 }
 
+export function tauriMetadata(version, platform, arch) {
+  if (!['win32', 'linux', 'darwin'].includes(platform) || !['x64', 'arm64'].includes(arch)) throw new Error('Invalid Tauri native target');
+  return { schemaVersion: 1, runtime: 'tauri', platform, arch, version, identifier: 'com.myeyes.app', packageType: 'manual', signed: false, notarized: false, updaterConfig: false };
+}
+
+// A release-only compile-time string is returned by get_runtime_metadata, so it
+// remains in the actual executable and can be checked without launching the app.
+export async function verifyTauriExecutable(file, version, platform, arch) {
+  const info = await lstat(file);
+  if (!info.isFile() || !info.size) throw new Error('Missing or invalid Tauri executable');
+  const bytes = await readFile(file);
+  if (!bytes.includes(Buffer.from(JSON.stringify(tauriMetadata(version, platform, arch))))) throw new Error('Tauri executable metadata does not match the release');
+  if (platform === 'win32') {
+    if (bytes.length < 64 || bytes.toString('ascii', 0, 2) !== 'MZ') throw new Error('Invalid Windows Tauri executable');
+    const offset = bytes.readUInt32LE(60);
+    if (offset > bytes.length - 24 || bytes.toString('ascii', offset, offset + 4) !== 'PE\0\0') throw new Error('Invalid Windows PE header');
+    if (bytes.readUInt16LE(offset + 4) !== (arch === 'x64' ? 0x8664 : 0xaa64)) throw new Error('Tauri executable architecture does not match the release');
+    const optional = offset + 24;
+    if (optional > bytes.length - 2 || bytes.readUInt16LE(optional) !== 0x20b) throw new Error('Expected Windows PE32+ executable');
+    const certificate = optional + 112 + 8 * 4;
+    if (certificate > bytes.length - 8 || bytes.readUInt32LE(certificate) || bytes.readUInt32LE(certificate + 4)) throw new Error('Tauri Windows executable must be unsigned');
+  } else if (platform === 'linux') {
+    if (bytes.length < 64 || bytes.toString('hex', 0, 4) !== '7f454c46' || bytes[4] !== 2 || bytes[5] !== 1) throw new Error('Invalid Linux ELF64 executable');
+    if (bytes.readUInt16LE(18) !== (arch === 'x64' ? 62 : 183)) throw new Error('Tauri executable architecture does not match the release');
+    if (!(info.mode & 0o111)) throw new Error('Tauri executable is not executable');
+  } else throw new Error('Unsupported Tauri executable verification target');
+  return bytes;
+}
+
 // The manual Tauri bundle has no Electron updater configuration. Inspect its
 // actual metadata, executable and ad hoc signature before producing a receipt.
 export async function verifyTauriMacBundle(appPath, version, arch, run = spawnSync) {

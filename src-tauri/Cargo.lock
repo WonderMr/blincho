@@ -297,10 +297,11 @@ dependencies = [
 
 [[package]]
 name = "blincho"
-version = "1.5.3"
+version = "1.6.0"
 dependencies = [
  "cc",
  "chrono",
+ "dirs 6.0.0",
  "leveldb-sys",
  "libc",
  "regex",
@@ -312,6 +313,11 @@ dependencies = [
  "tauri-plugin-autostart",
  "tauri-plugin-single-instance",
  "tempfile",
+ "windows",
+ "windows-sys 0.61.2",
+ "winreg 0.56.0",
+ "x11-dl",
+ "zbus",
 ]
 
 [[package]]

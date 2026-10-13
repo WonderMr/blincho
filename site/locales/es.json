@@ -126,5 +126,6 @@
   "release.1.4.1": "30 idiomas de interfaz, incluido el armenio, y preferencias de actualización para los paquetes de escritorio compatibles. Elige actualizaciones automáticas, preguntar antes de descargar o desactivar la búsqueda de actualizaciones en segundo plano.",
   "release.1.5.0": "macOS ahora usa Tauri con un temporizador nativo e importa el historial local existente. Windows y Linux mantienen Electron. Las actualizaciones de macOS siguen siendo manuales.",
   "release.1.5.1": "macOS ahora usa Tauri con un temporizador nativo e importa el historial local existente. Windows y Linux mantienen Electron. Las actualizaciones de macOS siguen siendo manuales.",
-  "release.1.5.2": "macOS ahora usa Tauri con un temporizador nativo e importa el historial local existente. Windows y Linux mantienen Electron. Las actualizaciones de macOS siguen siendo manuales."
+  "release.1.5.2": "macOS ahora usa Tauri con un temporizador nativo e importa el historial local existente. Windows y Linux mantienen Electron. Las actualizaciones de macOS siguen siendo manuales.",
+  "release.1.6.0": "Todas las versiones de escritorio usan Rust y Tauri, incluidas Windows y Linux para x64 y ARM64. El historial se importa una vez. Las actualizaciones se instalan manualmente."
 }
