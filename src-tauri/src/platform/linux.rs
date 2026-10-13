@@ -36,11 +36,14 @@ pub fn restore_focus(target: &FocusTarget) -> Result<(), String> {
     let Some(connection) = X11Focus::new() else {
         return Ok(());
     };
-    let original = connection.window_process(target.window) == Some(target.process);
     let Some(active) = connection.active_window() else {
         return Ok(());
     };
     let foreground = connection.window_process(active);
+    if foreground != Some(std::process::id()) {
+        return Ok(());
+    }
+    let original = connection.window_process(target.window) == Some(target.process);
     if !may_restore_focus(std::process::id(), foreground, target.process, original) {
         return Ok(());
     }

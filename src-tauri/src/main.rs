@@ -203,6 +203,9 @@ fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), St
 fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
     ui::finish_hidden_startup(app)?;
     let window = window(app)?;
+    if let Err(error) = window_session::keep_open(&window) {
+        eprintln!("Window session: {error}");
+    }
     if let Err(error) = window_session::prepare_show(&window) {
         eprintln!("Window placement: {error}");
     }
@@ -220,6 +223,10 @@ fn foreground(app: &tauri::AppHandle) -> Result<(), String> {
 fn foreground_break(app: &tauri::AppHandle) -> Result<(), String> {
     foreground_with_break(app, true)
 }
+fn request_tray_break(app: &tauri::AppHandle) -> Result<(), String> {
+    foreground_break(app)?;
+    app.emit("trigger-break", ()).map_err(|e| e.to_string())
+}
 fn foreground_with_break(app: &tauri::AppHandle, begin_break: bool) -> Result<(), String> {
     let runtime = app.state::<Runtime>();
     let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
@@ -227,6 +234,9 @@ fn foreground_with_break(app: &tauri::AppHandle, begin_break: bool) -> Result<()
     if !timer.snapshot.reasons.is_empty() {
         return Err("Presence is not confirmed".into());
     }
+    // The renderer rejects a new break while an exercise is already active.
+    // Reopen that exercise without retaining a break snapshot it cannot release.
+    let begin_break = begin_break && !timer.snapshot.exercising;
     drop(timer);
     ui::finish_hidden_startup(app)?;
     let window = window(app)?;
@@ -295,7 +305,8 @@ fn desktop_command(
             window_session::background_action(&window, false, true)?;
             window_session::remember(&window)
         }
-        "show" => foreground(&app),
+        "show" => show_manual(&app),
+        "show-break" => foreground(&app),
         "fullscreen" => {
             if flag == Some(true) {
                 foreground_break(&app)?;
@@ -545,7 +556,8 @@ fn test_control_on_main(app: &tauri::AppHandle) {
             }
             "hide" => desktop_command("hide".into(), None, app.clone())?,
             "minimize" => desktop_command("minimize".into(), None, app.clone())?,
-            "show" => foreground(app)?,
+            "show" => show_manual(app)?,
+            "tray-rest" => request_tray_break(app)?,
             "maximize" => {
                 let window = window(app)?;
                 window_session::remember(&window)?;
@@ -785,9 +797,7 @@ fn main() {
                         }
                     }
                     "rest" => {
-                        if foreground_break(app).is_ok() {
-                            let _ = app.emit("trigger-break", ());
-                        }
+                        let _ = request_tray_break(app);
                     }
                     "quit" => {
                         app.state::<Runtime>()
