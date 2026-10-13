@@ -103,7 +103,6 @@ fn foreground_expiry(
         if let Ok(window) = window(&handle) {
             if let Err(error) = window_session::prepare_show(&window) {
                 eprintln!("Window placement: {error}");
-                return;
             }
             let _ = window.unminimize();
             let _ = window.show();
@@ -197,11 +196,16 @@ fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), St
 fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
     ui::finish_hidden_startup(app)?;
     let window = window(app)?;
-    window_session::prepare_show(&window)?;
+    if let Err(error) = window_session::prepare_show(&window) {
+        eprintln!("Window placement: {error}");
+    }
     window.unminimize().map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
-    window_session::remember(&window)
+    if let Err(error) = window_session::remember(&window) {
+        eprintln!("Window session: {error}");
+    }
+    Ok(())
 }
 fn foreground(app: &tauri::AppHandle) -> Result<(), String> {
     let runtime = app.state::<Runtime>();
@@ -213,11 +217,16 @@ fn foreground(app: &tauri::AppHandle) -> Result<(), String> {
     drop(timer);
     ui::finish_hidden_startup(app)?;
     let window = window(app)?;
-    window_session::prepare_show(&window)?;
+    if let Err(error) = window_session::prepare_show(&window) {
+        eprintln!("Window placement: {error}");
+    }
     window.unminimize().map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
-    window_session::remember(&window)
+    if let Err(error) = window_session::remember(&window) {
+        eprintln!("Window session: {error}");
+    }
+    Ok(())
 }
 #[tauri::command]
 fn configure_timer(input: TimerInput, app: tauri::AppHandle) -> Result<Snapshot, String> {
@@ -494,6 +503,7 @@ fn test_control_on_main(app: &tauri::AppHandle) {
     if !path.exists() {
         return;
     }
+    let mut request_id = Value::Null;
     let result = (|| -> Result<Value, String> {
         let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
@@ -501,6 +511,7 @@ fn test_control_on_main(app: &tauri::AppHandle) {
             return Err("Control too large".into());
         }
         let command: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        request_id = command["id"].clone();
         match command["operation"].as_str().unwrap_or("") {
             "meeting" => {
                 runtime
@@ -595,7 +606,7 @@ fn test_control_on_main(app: &tauri::AppHandle) {
     })();
     let response = match result {
         Ok(value) => value,
-        Err(error) => json!({"ok":false,"error":error}),
+        Err(error) => json!({"ok":false,"error":error,"id":request_id}),
     };
     let _ = std::fs::write(directory.join("response.json"), response.to_string());
 }
@@ -782,7 +793,9 @@ fn main() {
                 let config = &app.config().app.windows[0];
                 ui::initialize_hidden_startup(&_main_window, config.skip_taskbar, config.focusable)?;
             }
-            window_session::remember(&_main_window)?;
+            if let Err(error) = window_session::remember(&_main_window) {
+                eprintln!("Window session: {error}");
+            }
             if app.state::<Runtime>().test_dir.is_none() {update_controller.start();}
             let handle = app.handle().clone();
             std::thread::spawn(move || {
