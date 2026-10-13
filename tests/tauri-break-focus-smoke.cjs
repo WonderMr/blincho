@@ -150,7 +150,7 @@ async function stopApp(app) {
   processes.delete(app.handle);
 }
 
-async function scenario(base, previous, third, { name, mode, strictMode, breakSeconds, chooseThird = false }) {
+async function scenario(base, previous, third, { name, mode, strictMode, breakSeconds, chooseThird = false, explicitShow = false }) {
   const directory = fs.mkdtempSync(path.join(base, name + '-'));
   const source = path.join(directory, 'legacy.json');
   fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
@@ -198,6 +198,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     [handle, previous.handle], 5_000, 'Blincho frontmost during break');
   assert.equal((await inspectRenderer(app)).renderer.dialog, true, 'The real renderer must show the break');
   let expected = previous;
+  if (explicitShow) await control(app, 'show');
   if (chooseThird) {
     assert.equal(strictMode, false);
     await activate(third);
@@ -205,14 +206,15 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       [handle, third.handle], 5_000, 'third work app chosen during non-strict break');
     expected = third;
   }
-  const restored = value => !value.timer.breakActive && !value.focused && !value.strict
+  const expectedPID = explicitShow ? initial.pid : expected.pid;
+  const restored = value => !value.timer.breakActive && value.focused === explicitShow && !value.strict
     && value.strictShieldCount === 0 && !value.fullscreen && !value.maximized
-    && (mode === 'tray' ? !value.visible && !value.minimized
+    && (mode === 'tray' && !explicitShow ? !value.visible && !value.minimized
       : mode === 'minimized' ? value.minimized : value.visible && !value.minimized);
   await until(app.read, restored, [handle, previous.handle, third.handle], breakSeconds * 1000 + 10_000,
     'original presentation after break completion');
   assert(Date.now() - observedStart >= breakSeconds * 1000 - 1500, 'Break must complete through the real countdown');
-  await until(() => fixtureState(expected), value => value.frontmostPID === expected.pid,
+  await until(() => fixtureState(expected), value => value.frontmostPID === expectedPID,
     [handle, expected.handle], 5_000, 'expected work app frontmost after completion');
   assert.equal((await inspectRenderer(app)).renderer.dialog, false, 'Renderer cleanup must remove the overlay');
   async function staysRestored(label) {
@@ -222,7 +224,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       [handle, expected.handle].forEach(alive);
       const state = app.read();
       assert(restored(state), label + ': ' + JSON.stringify(state));
-      assert.equal(fixtureState(expected).frontmostPID, expected.pid, label + ': actual frontmost PID');
+      assert.equal(fixtureState(expected).frontmostPID, expectedPID, label + ': actual frontmost PID');
       await sleep(100);
     }
     assert(app.read().timer.tickCount >= startTick + 4, 'Following native timer ticks must have been observed');
@@ -239,7 +241,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   assert(sameGeometry(reopened, baseline), 'Manual reopen must retain the original normal frame');
   await stopApp(app);
   const result = { name, status: 'passed', mode, strictMode, breakSeconds, profile: directory,
-    blinchoPID: initial.pid, priorPID: previous.pid, expectedFrontmostPID: expected.pid,
+    blinchoPID: initial.pid, priorPID: previous.pid, expectedFrontmostPID: expectedPID,
     baseline: { position: baseline.position, size: baseline.size },
     reopened: { position: reopened.position, size: reopened.size } };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
@@ -254,6 +256,7 @@ async function main() {
   }
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-break-focus-'));
   console.log('Native focus smoke artifacts: ' + base);
+  let primaryError = null;
   try {
     const compiled = path.join(base, 'focus-fixture');
     const compile = spawnSync('/usr/bin/xcrun', ['clang', '-fobjc-arc', '-fblocks', '-mmacosx-version-min=14.0',
@@ -264,12 +267,18 @@ async function main() {
     const previous = await startFixture(base, compiled, 'previous-work-app');
     const third = await startFixture(base, compiled, 'new-work-app');
     const scenarios = [];
-    for (const options of [
+    const cases = [
       { name: 'strict-tray-20-seconds', mode: 'tray', strictMode: true, breakSeconds: 20 },
       { name: 'strict-visible-unfocused', mode: 'visible', strictMode: true, breakSeconds: 4 },
       { name: 'strict-minimized', mode: 'minimized', strictMode: true, breakSeconds: 4 },
       { name: 'non-strict-preserves-new-work-app', mode: 'tray', strictMode: false, breakSeconds: 6, chooseThird: true },
-    ]) scenarios.push(await scenario(base, previous, third, options));
+      { name: 'explicit-show-keeps-open', mode: 'tray', strictMode: false, breakSeconds: 4, explicitShow: true },
+    ];
+    const selected = process.env.BLINCHO_FOCUS_SMOKE_CASE;
+    assert(!selected || cases.some(options => options.name === selected), 'Unknown native focus smoke case');
+    for (const options of cases.filter(options => !selected || options.name === selected)) {
+      scenarios.push(await scenario(base, previous, third, options));
+    }
     await stopFixture(third);
     await stopFixture(previous);
     const result = { status: 'passed', platform: process.platform, architecture: process.arch, scenarios,
@@ -278,15 +287,20 @@ async function main() {
     fs.writeFileSync(path.join(base, 'result.json'), JSON.stringify(result, null, 2));
     console.log(JSON.stringify(result));
   } catch (error) {
-    fs.writeFileSync(path.join(base, 'failure.json'), JSON.stringify({ error: error.stack,
-      nativeOutput: [...processes].map(handle => ({ pid: handle.child.pid, output: handle.output })) }, null, 2));
-    throw error;
-  } finally {
-    const failures = [];
-    for (const handle of processes) {
-      try { await cleanup(handle); } catch (error) { failures.push(error.message); }
-    }
-    if (failures.length) throw new Error(failures.join('\n'));
+    primaryError = error;
+    try {
+      fs.writeFileSync(path.join(base, 'failure.json'), JSON.stringify({ error: error.stack,
+        nativeOutput: [...processes].map(handle => ({ pid: handle.child.pid, output: handle.output })) }, null, 2));
+    } catch (artifactError) { console.error('Failure artifact: ' + artifactError.message); }
   }
+  const failures = [];
+  for (const handle of processes) {
+    try { await cleanup(handle); } catch (error) { failures.push(error.message); }
+  }
+  if (primaryError) {
+    if (failures.length) console.error(failures.join('\n'));
+    throw primaryError;
+  }
+  if (failures.length) throw new Error(failures.join('\n'));
 }
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
