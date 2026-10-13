@@ -1,5 +1,12 @@
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
 
+# LevelDB's bundled thread-safety annotations require Clang on Linux.
+[env]
+CC_x86_64_unknown_linux_gnu = "clang"
+CXX_x86_64_unknown_linux_gnu = "clang++"
+CC_aarch64_unknown_linux_gnu = "clang"
+CXX_aarch64_unknown_linux_gnu = "clang++"
+
 [target.aarch64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]

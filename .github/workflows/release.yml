@@ -123,7 +123,7 @@ jobs:
         if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb dbus-x11 openbox
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb dbus-x11 openbox
       - name: Verify Windows native compiler and package extractor
         if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true'
         shell: pwsh

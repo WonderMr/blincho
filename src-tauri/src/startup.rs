@@ -292,7 +292,7 @@ mod windows {
                     NAME,
                     &RegValue {
                         vtype: REG_BINARY,
-                        bytes: vec![2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                        bytes: vec![2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into(),
                     },
                 )
                 .map_err(|e| e.to_string())?;

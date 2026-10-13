@@ -17,14 +17,47 @@ async function runPackager(platform, arch, scenario = {}) {
     const mock = path.join(directory, 'mock-native.mjs');
     await writeFile(mock, `
       import fs from 'node:fs';
+      import os from 'node:os';
       import path from 'node:path';
       import Module, { syncBuiltinESMExports } from 'node:module';
       import childProcess from 'node:child_process';
       const platform = ${JSON.stringify(platform)};
       const arch = ${JSON.stringify(arch)};
       const scenario = ${JSON.stringify(scenario)};
+      // Node 22 computes tmpdir from process.platform. Keep the real host's
+      // filesystem location when the fixture simulates another target OS.
+      const hostTmpdir = os.tmpdir();
+      os.tmpdir = () => hostTmpdir;
       Object.defineProperty(process, 'platform', { value: platform === 'windows' ? 'win32' : 'linux' });
       Object.defineProperty(process, 'arch', { value: arch });
+      // Windows cannot represent Unix executable bits. Track the permissions
+      // requested by these fixtures through rename and archive extraction.
+      const fixtureModes = new Map();
+      const writeExecutable = (file, bytes, mode = 0o755) => {
+        fs.writeFileSync(file, bytes);
+        fs.chmodSync(file, mode);
+        if (platform === 'linux') fixtureModes.set(path.resolve(file), mode);
+      };
+      const withFixtureMode = original => async (file, ...args) => {
+        const info = await original(file, ...args);
+        const mode = fixtureModes.get(path.resolve(file));
+        if (mode !== undefined) info.mode = (info.mode & ~0o777) | mode;
+        return info;
+      };
+      fs.promises.lstat = withFixtureMode(fs.promises.lstat);
+      fs.promises.stat = withFixtureMode(fs.promises.stat);
+      const originalRename = fs.promises.rename;
+      fs.promises.rename = async (source, destination) => {
+        await originalRename(source, destination);
+        const root = path.resolve(source);
+        for (const [file, mode] of [...fixtureModes]) {
+          if (file === root || file.startsWith(root + path.sep)) {
+            fixtureModes.delete(file);
+            fixtureModes.set(path.resolve(destination) + file.slice(root.length), mode);
+          }
+        }
+      };
+      const archivedModes = new Map();
       const originalRun = childProcess.spawnSync;
       const originalLoad = Module._load;
       Module._load = function(name, ...rest) {
@@ -54,7 +87,8 @@ async function runPackager(platform, arch, scenario = {}) {
           const output = path.resolve('src-tauri/target', target, 'release');
           executable = path.join(output, platform === 'windows' ? 'blincho.exe' : 'blincho');
           nativeBytes = executableBytes(options.env.BLINCHO_RELEASE_METADATA);
-          fs.mkdirSync(output, { recursive: true }); fs.writeFileSync(executable, nativeBytes); fs.chmodSync(executable, 0o755);
+          fs.mkdirSync(output, { recursive: true });
+          writeExecutable(executable, nativeBytes, scenario.executableNotExecutable ? 0o644 : 0o755);
           const bundleDir = path.join(output, 'bundle', platform === 'windows' ? 'nsis' : 'appimage');
           fs.mkdirSync(bundleDir, { recursive: true });
           if (platform === 'linux') {
@@ -63,7 +97,7 @@ async function runPackager(platform, arch, scenario = {}) {
             // Model linuxdeploy's legitimate ELF changes. AppImage contents
             // must match the deployed AppDir, while metadata still matches Cargo.
             nativeBytes = Buffer.concat([nativeBytes, Buffer.from('deployed RPATH')]);
-            fs.writeFileSync(deployed, nativeBytes); fs.chmodSync(deployed, 0o755);
+            writeExecutable(deployed, nativeBytes, scenario.deployedNotExecutable ? 0o644 : 0o755);
           }
           bundle = path.join(bundleDir, platform === 'windows' ? 'Blincho_1.6.0_' + arch + '-setup.exe' : 'Blincho_1.6.0_' + arch + '.AppImage');
           fs.writeFileSync(bundle, platform === 'windows' ? executableBytes('synthetic NSIS installer') : 'synthetic AppImage');
@@ -78,12 +112,27 @@ async function runPackager(platform, arch, scenario = {}) {
         if (command === bundle && args[0] === '--appimage-extract') {
           const root = path.join(options.cwd, 'squashfs-root');
           fs.mkdirSync(path.join(root, 'usr/bin'), { recursive: true }); fs.mkdirSync(path.join(root, 'usr/lib'), { recursive: true });
-          fs.writeFileSync(path.join(root, 'usr/bin/blincho'), scenario.packageTampered ? Buffer.concat([nativeBytes, Buffer.from('tampered')]) : nativeBytes); fs.chmodSync(path.join(root, 'usr/bin/blincho'), 0o755);
-          if (!scenario.launcherMissing) { fs.writeFileSync(path.join(root, 'AppRun'), '#!/bin/sh\\nexec "$APPDIR/usr/bin/blincho"'); fs.chmodSync(path.join(root, 'AppRun'), 0o755); }
+          writeExecutable(path.join(root, 'usr/bin/blincho'), scenario.packageTampered ? Buffer.concat([nativeBytes, Buffer.from('tampered')]) : nativeBytes, scenario.extractedNotExecutable ? 0o644 : 0o755);
+          if (!scenario.launcherMissing) writeExecutable(path.join(root, 'AppRun'), '#!/bin/sh\\nexec "$APPDIR/usr/bin/blincho"', scenario.launcherNotExecutable ? 0o644 : 0o755);
           fs.writeFileSync(path.join(root, 'usr/lib/native-library.fixture'), 'synthetic runtime library');
           return { status: 0 };
         }
-        if (command === 'tar') return originalRun(command, args, options);
+        if (command === 'tar') {
+          const result = originalRun(command, args, options);
+          if (result.status === 0) {
+            const root = path.resolve(args[args.indexOf('-C') + 1]);
+            if (args[0] === '-czf') {
+              for (const [file, mode] of fixtureModes) {
+                if (file.startsWith(root + path.sep)) archivedModes.set(path.relative(root, file), mode);
+              }
+            } else if (args[0] === '-xzf') {
+              for (const [file, mode] of archivedModes) {
+                fixtureModes.set(path.join(root, file), scenario.archivedNotExecutable && path.basename(file) === 'blincho' ? 0o644 : mode);
+              }
+            }
+          }
+          return result;
+        }
         throw new Error('Unexpected packaging command: ' + command);
       };
       syncBuiltinESMExports();
@@ -139,7 +188,14 @@ test('wrong target, failed build, altered metadata, wrong architecture and misma
       ['metadata', { metadataMissing: true }, /metadata does not match/],
       ['architecture', { wrongArch: true }, /architecture does not match/],
       ['payload', { packageTampered: true }, /differs from the verified/],
-      ...(platform === 'windows' ? [['signature', { signed: true }, /must be unsigned/]] : [['launcher', { launcherMissing: true }, /ENOENT/]]),
+      ...(platform === 'windows' ? [['signature', { signed: true }, /must be unsigned/]] : [
+        ['launcher', { launcherMissing: true }, /ENOENT/],
+        ['executable permissions', { executableNotExecutable: true }, /Tauri executable is not executable/],
+        ['deployed permissions', { deployedNotExecutable: true }, /Tauri executable is not executable/],
+        ['extracted permissions', { extractedNotExecutable: true }, /Tauri executable is not executable/],
+        ['launcher permissions', { launcherNotExecutable: true }, /Missing or unsafe AppImage launcher/],
+        ['archived permissions', { archivedNotExecutable: true }, /Tauri executable is not executable/],
+      ]),
     ]) await t.test(`${platform}/${name}`, async () => {
       const result = await runPackager(platform, 'arm64', scenario);
       assert.notEqual(result.status, 0);
