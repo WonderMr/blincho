@@ -126,5 +126,6 @@
   "release.1.4.1": "30 interfacetalen, waaronder Armeens, en updatevoorkeuren voor ondersteunde desktoppakketten. Kies automatische updates, toestemming vragen vóór het downloaden of schakel updatecontroles op de achtergrond uit.",
   "release.1.5.0": "macOS gebruikt nu Tauri met een systeemeigen timer en importeert de bestaande lokale geschiedenis. Windows en Linux behouden Electron. macOS-updates blijven handmatig.",
   "release.1.5.1": "macOS gebruikt nu Tauri met een systeemeigen timer en importeert de bestaande lokale geschiedenis. Windows en Linux behouden Electron. macOS-updates blijven handmatig.",
-  "release.1.5.2": "macOS gebruikt nu Tauri met een systeemeigen timer en importeert de bestaande lokale geschiedenis. Windows en Linux behouden Electron. macOS-updates blijven handmatig."
+  "release.1.5.2": "macOS gebruikt nu Tauri met een systeemeigen timer en importeert de bestaande lokale geschiedenis. Windows en Linux behouden Electron. macOS-updates blijven handmatig.",
+  "release.1.6.0": "Alle desktopversies gebruiken Rust en Tauri, ook Windows en Linux op x64 en ARM64. De geschiedenis wordt eenmalig geïmporteerd. Updates worden handmatig geïnstalleerd."
 }

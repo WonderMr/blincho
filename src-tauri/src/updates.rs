@@ -1,18 +1,17 @@
-//! Metadata-only update notifications for unsigned macOS packages.
+//! Metadata-only update notifications for unsigned desktop packages.
 //!
 //! The renderer cannot supply a feed or package URL. A check never fetches an
 //! installer, and opening the fixed download page belongs to the native bridge.
 
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{
     collections::HashSet,
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Condvar, Mutex, MutexGuard,
-    },
+    sync::{Arc, Condvar, Mutex, MutexGuard},
     time::{Duration, Instant},
 };
 
@@ -20,11 +19,12 @@ pub const MANIFEST_URL: &str = "https://blincho.app/releases.json";
 pub const MANUAL_DOWNLOAD_URL: &str = "https://blincho.app/#download";
 const MAX_MANIFEST_BYTES: usize = 1024 * 1024;
 const MAX_PREFERENCE_BYTES: usize = 4096;
+#[cfg(test)]
+static TEMPORARY_ID: AtomicU64 = AtomicU64::new(0);
 const INITIAL_DELAY: Duration = Duration::from_secs(60);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
-static TEMPORARY_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -135,13 +135,17 @@ fn version_parts(value: &str) -> Result<[u64; 3], String> {
     Ok(parts)
 }
 
-fn available_mac_version(
+fn available_version(
     bytes: &[u8],
     current_version: &str,
+    platform: &str,
     arch: &str,
 ) -> Result<Option<String>, String> {
     let current = version_parts(current_version)?;
-    if !matches!(arch, "arm64" | "x64") || bytes.len() > MAX_MANIFEST_BYTES {
+    if !matches!(platform, "macos" | "windows" | "linux")
+        || !matches!(arch, "arm64" | "x64")
+        || bytes.len() > MAX_MANIFEST_BYTES
+    {
         return Err("Invalid release manifest".into());
     }
     let manifest: Manifest =
@@ -167,7 +171,21 @@ fn available_mac_version(
         {
             return Err("Invalid release metadata".into());
         }
-        let expected_name = format!("Blincho-{}-macos-{arch}.zip", release.version);
+        let (expected_name, format) = match platform {
+            "macos" => (
+                format!("Blincho-{}-macos-{arch}.zip", release.version),
+                "zip",
+            ),
+            "windows" => (
+                format!("Blincho-{}-windows-{arch}-setup.exe", release.version),
+                "exe",
+            ),
+            "linux" => (
+                format!("Blincho-{}-linux-{arch}.AppImage", release.version),
+                "AppImage",
+            ),
+            _ => return Err("Unsupported platform".into()),
+        };
         let mut names = HashSet::new();
         let mut matching_asset = false;
         for asset in release.assets {
@@ -196,7 +214,9 @@ fn available_mac_version(
                 return Err("Invalid package metadata".into());
             }
             if asset.name == expected_name {
-                if asset.platform != "macos" || asset.architecture != arch || asset.format != "zip"
+                if asset.platform != platform
+                    || asset.architecture != arch
+                    || asset.format != format
                 {
                     return Err("Invalid package metadata".into());
                 }
@@ -213,6 +233,24 @@ fn available_mac_version(
         }
     }
     Ok(latest.map(|(_, version)| version))
+}
+
+#[cfg(test)]
+fn available_mac_version(
+    bytes: &[u8],
+    current_version: &str,
+    arch: &str,
+) -> Result<Option<String>, String> {
+    available_version(bytes, current_version, "macos", arch)
+}
+fn release_platform() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    }
 }
 
 fn bounded_read(mut reader: impl Read, limit: usize) -> Result<Vec<u8>, String> {
@@ -292,34 +330,18 @@ fn save_preferences(path: &Path, preferences: &Preferences) -> Result<(), String
         .parent()
         .ok_or_else(|| "Invalid preference path".to_string())?;
     fs::create_dir_all(directory).map_err(|_| "Preferences unavailable".to_string())?;
-    let id = TEMPORARY_ID.fetch_add(1, Ordering::Relaxed);
-    let temporary = directory.join(format!(
-        ".update-preferences.{}.{id}.tmp",
-        std::process::id()
-    ));
-    let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options
-            .open(&temporary)
-            .map_err(|_| "Preferences unavailable".to_string())?;
-        serde_json::to_writer(&mut file, preferences)
-            .map_err(|_| "Preferences unavailable".to_string())?;
-        file.write_all(b"\n")
-            .and_then(|_| file.sync_all())
-            .map_err(|_| "Preferences unavailable".to_string())?;
-        fs::rename(&temporary, path).map_err(|_| "Preferences unavailable".to_string())?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+    let mut temporary = tempfile::NamedTempFile::new_in(directory)
+        .map_err(|_| "Preferences unavailable".to_string())?;
+    serde_json::to_writer(temporary.as_file_mut(), preferences)
+        .map_err(|_| "Preferences unavailable".to_string())?;
+    temporary
+        .write_all(b"\n")
+        .and_then(|_| temporary.as_file().sync_all())
+        .map_err(|_| "Preferences unavailable".to_string())?;
+    temporary
+        .persist(path)
+        .map_err(|_| "Preferences unavailable".to_string())?;
+    Ok(())
 }
 
 type FetchManifest = dyn Fn(&str) -> Result<Vec<u8>, String> + Send + Sync;
@@ -342,6 +364,7 @@ pub struct UpdateController {
     changed: Condvar,
     preference_path: PathBuf,
     arch: String,
+    platform: String,
     fetch: Arc<FetchManifest>,
     on_state: Arc<StateCallback>,
     initial_delay: Duration,
@@ -365,17 +388,22 @@ impl UpdateController {
         };
         let support_reason = if !packaged {
             Some("development")
-        } else if !cfg!(target_os = "macos") || !matches!(arch, "arm64" | "x64") {
+        } else if !matches!(arch, "arm64" | "x64") {
             Some("unsupported-package")
         } else if version_parts(&current_version).is_err() {
             Some("missing-config")
         } else {
-            Some("unsigned-mac")
+            Some(if cfg!(target_os = "macos") {
+                "unsigned-mac"
+            } else {
+                "manual-package"
+            })
         };
         Self::with_dependencies(
             data_dir,
             current_version,
             arch,
+            release_platform(),
             support_reason,
             Arc::new(fetch_manifest),
             Arc::new(on_state),
@@ -389,6 +417,7 @@ impl UpdateController {
         data_dir: PathBuf,
         current_version: String,
         arch: &str,
+        platform: &str,
         support_reason: Option<&'static str>,
         fetch: Arc<FetchManifest>,
         on_state: Arc<StateCallback>,
@@ -415,7 +444,7 @@ impl UpdateController {
             policy: preferences.policy,
             status: if preference_error { "error" } else { "idle" },
             supported: false,
-            check_supported: support_reason == Some("unsigned-mac"),
+            check_supported: matches!(support_reason, Some("unsigned-mac" | "manual-package")),
             support_reason,
             current_version,
             available_version: None,
@@ -442,6 +471,7 @@ impl UpdateController {
             changed: Condvar::new(),
             preference_path,
             arch: arch.to_string(),
+            platform: platform.to_string(),
             fetch,
             on_state,
             initial_delay,
@@ -585,7 +615,7 @@ impl UpdateController {
             (inner.generation, inner.state.current_version.clone())
         };
         let result = (self.fetch)(&version)
-            .and_then(|bytes| available_mac_version(&bytes, &version, &self.arch));
+            .and_then(|bytes| available_version(&bytes, &version, &self.platform, &self.arch));
         let mut inner = self.lock();
         if inner.disposed || inner.generation != generation || inner.operation != Some(generation) {
             return inner.state.clone();
@@ -756,6 +786,7 @@ mod tests {
             directory.0.clone(),
             "1.5.0".into(),
             "arm64",
+            "macos",
             Some("unsigned-mac"),
             fetch,
             Arc::new(|_| {}),
@@ -778,6 +809,40 @@ mod tests {
         assert_eq!(inner.waiting_checks, count);
     }
 
+    #[test]
+    fn manual_updates_select_each_platform_and_architecture() {
+        for platform in ["macos", "windows", "linux"] {
+            for arch in ["arm64", "x64"] {
+                let (name, format) = match platform {
+                    "macos" => (format!("Blincho-1.6.0-macos-{arch}.zip"), "zip"),
+                    "windows" => (format!("Blincho-1.6.0-windows-{arch}-setup.exe"), "exe"),
+                    _ => (format!("Blincho-1.6.0-linux-{arch}.AppImage"), "AppImage"),
+                };
+                let mut item = release("1.6.0", arch);
+                item["assets"][0] = json!({"name": name, "platform": platform, "architecture": arch,
+                    "format": format, "size": 1024, "sha256": "a".repeat(64),
+                    "url": format!("https://github.com/WonderMr/blincho/releases/download/v1.6.0/{name}")});
+                let metadata = bytes(&manifest(vec![item]));
+                assert_eq!(
+                    available_version(&metadata, "1.5.3", platform, arch).unwrap(),
+                    Some("1.6.0".into())
+                );
+                let other_arch = if arch == "x64" { "arm64" } else { "x64" };
+                assert_eq!(
+                    available_version(&metadata, "1.5.3", platform, other_arch).unwrap(),
+                    None
+                );
+                for other_platform in ["macos", "windows", "linux"] {
+                    if other_platform != platform {
+                        assert_eq!(
+                            available_version(&metadata, "1.5.3", other_platform, arch).unwrap(),
+                            None
+                        );
+                    }
+                }
+            }
+        }
+    }
     #[test]
     fn strict_stable_semver_and_numeric_comparison() {
         assert!(version_parts("1.10.0").unwrap() > version_parts("1.9.0").unwrap());
@@ -1080,6 +1145,7 @@ mod tests {
             directory.0.clone(),
             "1.5.0".into(),
             "arm64",
+            "macos",
             Some("unsigned-mac"),
             Arc::new(move |_| {
                 entered_tx.send(()).unwrap();

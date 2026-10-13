@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, io::Read, path::Path};
+use std::{
+    collections::BTreeMap,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 #[path = "history/chromium.rs"]
 mod chromium;
@@ -8,6 +12,15 @@ const MAX_EXPORT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_VALUE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_KEY_BYTES: usize = 256;
 const MAX_ENTRIES: usize = 128;
+
+/// Electron's appData maps to config_dir on all supported desktops. In
+/// particular, Linux uses XDG_CONFIG_HOME, not XDG_DATA_HOME.
+pub fn legacy_profile_dir() -> Result<PathBuf, String> {
+    dirs::config_dir()
+        .filter(|path| path.is_absolute())
+        .map(|path| path.join("myeyes"))
+        .ok_or_else(|| "Legacy application configuration directory is unavailable".into())
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

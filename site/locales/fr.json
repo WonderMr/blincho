@@ -126,5 +126,6 @@
   "release.1.4.1": "30 langues d’interface, dont l’arménien, et des préférences de mise à jour pour les paquets de bureau compatibles. Choisissez les mises à jour automatiques, une demande d’accord avant le téléchargement ou la désactivation des recherches de mises à jour en arrière-plan.",
   "release.1.5.0": "macOS utilise désormais Tauri avec un minuteur natif et importe l’historique local existant. Windows et Linux conservent Electron. Les mises à jour macOS restent manuelles.",
   "release.1.5.1": "macOS utilise désormais Tauri avec un minuteur natif et importe l’historique local existant. Windows et Linux conservent Electron. Les mises à jour macOS restent manuelles.",
-  "release.1.5.2": "macOS utilise désormais Tauri avec un minuteur natif et importe l’historique local existant. Windows et Linux conservent Electron. Les mises à jour macOS restent manuelles."
+  "release.1.5.2": "macOS utilise désormais Tauri avec un minuteur natif et importe l’historique local existant. Windows et Linux conservent Electron. Les mises à jour macOS restent manuelles.",
+  "release.1.6.0": "Toutes les versions de bureau utilisent Rust et Tauri, y compris Windows et Linux sur x64 et ARM64. L’historique est importé une seule fois. Les mises à jour s’installent manuellement."
 }

@@ -35,7 +35,7 @@ function createStore(initial = []) {
   };
 }
 
-function harness({ store = createStore(), source = () => Promise.resolve(snapshot), runtime = 'tauri', listenFailure, timers } = {}) {
+function harness({ store = createStore(), source = () => Promise.resolve(snapshot), runtime = 'tauri', platform = 'darwin', listenFailure, timers } = {}) {
   const cache = new Map(), calls = [], native = new Map(), listenCounts = new Map(), windowEvents = new Map();
   let readSource = source, appMounts = 0, rootCount = 0, root;
   const host = doc.createElement('div'); doc.body.appendChild(host);
@@ -54,6 +54,7 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
       calls.push([command, args]);
       if (command === 'legacy_history') return readSource();
       if (command === 'preferred_languages') return ['en-US'];
+      if (command === 'desktop_info') return { platform, meetingDetectionSupported: platform !== 'linux' };
     } },
     event: { async listen(name, callback) {
       listenCounts.set(name, (listenCounts.get(name) || 0) + 1);
@@ -315,3 +316,17 @@ test('legacy export scheduling is restricted to macOS Electron and coalesces sta
     scheduled.clear(); window.__TAURI__ = {}; bridge.scheduleLegacyHistoryExport(); assert.equal(scheduled.size, 0);
   } finally { h.destroy(); }
 });
+
+for (const platform of ['darwin', 'win32', 'linux']) {
+  test(`Tauri bridge uses native ${platform} identity and capabilities`, async () => {
+    const h = harness({ platform });
+    try {
+      const bridge = h.load(path.join(repo, 'src/utils/tauriBridge.ts'));
+      await bridge.initializeTauriBridge();
+      assert.equal(doc.documentElement.dataset.platform, platform);
+      assert.equal(doc.documentElement.dataset.runtime, 'tauri');
+      assert.equal(window.electronAPI.platform, platform);
+      assert.equal(window.electronAPI.meetingDetectionSupported, platform !== 'linux');
+    } finally { h.destroy(); }
+  });
+}

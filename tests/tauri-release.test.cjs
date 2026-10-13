@@ -302,7 +302,7 @@ test('missing or tampered Tauri bundle metadata, identity, architecture and sign
   });
 });
 
-test('Windows and Linux retain separate Electron packages without invoking Rust or Tauri', async t => {
+test('historical 1.5.0 Windows and Linux retain separate Electron packages without invoking Rust or Tauri', async t => {
   const { validateReceipt } = await import('../scripts/release-lib.mjs');
   for (const platform of ['windows', 'linux']) for (const arch of ['arm64', 'x64']) await t.test(`${platform}/${arch}`, async () => {
     const result = await runElectronPackager(platform, arch);
@@ -316,18 +316,22 @@ test('Windows and Linux retain separate Electron packages without invoking Rust 
   });
 });
 
-test('macOS CI pins Rust for both targets and leaves Ubuntu validation free of Rust commands', async () => {
-  const workflow = await readFile(path.join(__dirname, '../.github/workflows/ci.yml'), 'utf8');
+test('CI and release use locked Rust builds on all six native targets with OS dependencies', async () => {
   const { load } = require('js-yaml');
-  const jobs = load(workflow).jobs;
+  const jobs = load(await readFile(path.join(__dirname, '../.github/workflows/ci.yml'), 'utf8')).jobs;
   assert.ok(jobs.validate.steps.every(step => !/cargo|rustup/.test(step.run || '')));
-  assert.deepEqual(jobs['tauri-macos'].strategy.matrix.include.map(target => target['rust-target']), ['aarch64-apple-darwin', 'x86_64-apple-darwin']);
-  assert.ok(jobs['tauri-macos'].steps.some(step => /^rustup toolchain install 1\.92\.0 [^\n]+\nrustup override set 1\.92\.0\n?$/.test(step.run || '')));
-  assert.ok(jobs['tauri-macos'].steps.some(step => /cmake==3\.31\.10/.test(step.run || '')));
-  for (const command of ['cargo fmt --manifest-path src-tauri/Cargo.toml --check', 'cargo check --manifest-path src-tauri/Cargo.toml --locked', 'cargo test --manifest-path src-tauri/Cargo.toml --locked']) assert.ok(jobs['tauri-macos'].steps.some(step => step.run === command));
+  const targets = ['aarch64-apple-darwin', 'x86_64-apple-darwin', 'aarch64-pc-windows-msvc', 'x86_64-pc-windows-msvc', 'aarch64-unknown-linux-gnu', 'x86_64-unknown-linux-gnu'];
+  const native = jobs['tauri-native'];
+  assert.deepEqual(native.strategy.matrix.include.map(target => target['rust-target']), targets);
+  assert.ok(native.steps.some(step => /rustup toolchain install 1\.92\.0/.test(step.run || '')));
+  assert.ok(native.steps.some(step => /cmake==3\.31\.10/.test(step.run || '')));
+  assert.ok(native.steps.some(step => step.if === "runner.os == 'Linux'" && /libwebkit2gtk-4.1-dev/.test(step.run)));
+  for (const command of ['cargo fmt --manifest-path src-tauri/Cargo.toml --check', 'cargo check --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}', 'cargo test --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}']) assert.ok(native.steps.some(step => step.run === command));
   const release = load(await readFile(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8'));
-  for (const step of release.jobs.package.steps.filter(step => /cargo|rustup|cmake==/.test(step.run || ''))) assert.equal(step.if, "matrix.platform == 'macos' && hashFiles('src-tauri/Cargo.toml') != ''");
+  for (const step of release.jobs.package.steps.filter(step => /cargo|rustup|cmake==/.test(step.run || ''))) assert.ok(["steps.runtime.outputs.tauri == 'true'", "steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''"].includes(step.if));
+  assert.deepEqual(release.jobs.package.strategy.matrix.include.map(target => target['rust-target']), targets);
+  assert.ok(release.jobs.package.steps.some(step => step.if?.includes("matrix.platform == 'linux'") && /libfuse2/.test(step.run || '')));
+  assert.ok(release.jobs.package.steps.some(step => step.if?.includes("matrix.platform == 'windows'") && /Get-Command 7z/.test(step.run || '')));
   const packageStep = release.jobs.package.steps.find(step => step.name === 'Build native packages');
   assert.deepEqual(packageStep.env, { RUST_TARGET: '${{ matrix.rust-target }}' });
-  assert.deepEqual(release.jobs.package.strategy.matrix.include.filter(target => target.platform === 'macos').map(target => [target.architecture, target['rust-target']]), [['arm64', 'aarch64-apple-darwin'], ['x64', 'x86_64-apple-darwin']]);
 });

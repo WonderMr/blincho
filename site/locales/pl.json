@@ -126,5 +126,6 @@
   "release.1.4.1": "30 języków interfejsu, w tym ormiański, oraz ustawienia aktualizacji dla obsługiwanych pakietów na komputery. Wybierz automatyczne aktualizacje, pytanie przed pobraniem lub wyłącz sprawdzanie aktualizacji w tle.",
   "release.1.5.0": "macOS korzysta teraz z Tauri z natywnym timerem i importuje istniejącą lokalną historię. Windows i Linux nadal używają Electron. Aktualizacje macOS pozostają ręczne.",
   "release.1.5.1": "macOS korzysta teraz z Tauri z natywnym timerem i importuje istniejącą lokalną historię. Windows i Linux nadal używają Electron. Aktualizacje macOS pozostają ręczne.",
-  "release.1.5.2": "macOS korzysta teraz z Tauri z natywnym timerem i importuje istniejącą lokalną historię. Windows i Linux nadal używają Electron. Aktualizacje macOS pozostają ręczne."
+  "release.1.5.2": "macOS korzysta teraz z Tauri z natywnym timerem i importuje istniejącą lokalną historię. Windows i Linux nadal używają Electron. Aktualizacje macOS pozostają ręczne.",
+  "release.1.6.0": "Wszystkie wersje komputerowe używają Rust i Tauri, także Windows i Linux na x64 i ARM64. Historia jest importowana raz. Aktualizacje instaluje się ręcznie."
 }

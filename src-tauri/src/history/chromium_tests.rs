@@ -467,3 +467,20 @@ fn normal_upgrade_uses_current_database_instead_of_stale_export() {
     assert_eq!(current.entries["myeyes_stats_v1"], "{\"new\":true}");
     assert!(super::super::read_legacy_source(&export).is_err());
 }
+
+#[test]
+fn unicode_electron_profile_is_copied_without_reencoding_or_source_writes() {
+    let root = tempfile::tempdir().unwrap();
+    let ascii = root.path().join("source");
+    let copies = copy_root(root.path());
+    fixture(&ascii, &[app_pair("myeyes_history", "preserved")], true);
+    // Native LevelDB only needs the snapshot's path. The original Chromium
+    // directory is accessed through Rust's platform filesystem implementation.
+    let source = root.path().join("Юлия 👁");
+    fs::rename(&ascii, &source).unwrap();
+    let original = files(&source);
+    let export = read_with_temp_parent(&source, &copies).unwrap().unwrap();
+    assert_eq!(export.entries["myeyes_history"], "preserved");
+    assert_eq!(files(&source), original);
+    assert_eq!(fs::read_dir(copies).unwrap().count(), 0);
+}

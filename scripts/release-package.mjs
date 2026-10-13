@@ -2,8 +2,9 @@ import { readFile, writeFile, mkdir, copyFile, stat, rm } from 'node:fs/promises
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { assertVersionMatch, expectedArtifacts, describeArtifact, hashFile, receiptName, validateReceipt, usesTauriMac } from './release-lib.mjs';
+import { assertVersionMatch, expectedArtifacts, describeArtifact, hashFile, receiptName, validateReceipt, usesTauriMac, usesTauriDesktop } from './release-lib.mjs';
 import { packageSupport, builderArtifactName, verifyPackagedSupport, verifyTauriMacBundle } from './update-package.mjs';
+import { packageTauriDesktop } from './bundle-tauri-desktop.mjs';
 
 const [platform, architecture] = process.argv.slice(2);
 const nativePlatform = { darwin: 'macos', win32: 'windows', linux: 'linux' }[process.platform];
@@ -14,7 +15,7 @@ const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 if (packageJson.build.appId !== 'com.myeyes.app') throw new Error('Application identity must remain com.myeyes.app');
 const version = assertVersionMatch(process.env.RELEASE_TAG, packageJson, JSON.parse(await readFile('package-lock.json', 'utf8')));
 await mkdir('release-upload', { recursive: true });
-const receipt = { schemaVersion: 1, version, platform: process.platform, arch: architecture, runtime: platform === 'macos' ? 'tauri' : 'electron', artifacts: [] };
+const receipt = { schemaVersion: 1, version, platform: process.platform, arch: architecture, runtime: platform === 'macos' || usesTauriDesktop(version) ? 'tauri' : 'electron', artifacts: [] };
 
 if (platform === 'macos') {
   if (!usesTauriMac(version)) throw new Error('This pipeline packages Tauri macOS releases from 1.5.0 onward');
@@ -40,6 +41,10 @@ if (platform === 'macos') {
   const size = (await stat(destination)).size;
   if (!size) throw new Error(`Empty release artifact: ${name}`);
   receipt.artifacts.push({ name, size, sha256: await hashFile(destination), sha512: await hashFile(destination, 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true });
+  validateReceipt(receipt, version);
+  await writeFile(path.join('release-upload', receiptName(version, process.platform, architecture)), JSON.stringify(receipt, null, 2) + '\n');
+} else if (usesTauriDesktop(version)) {
+  await packageTauriDesktop(platform, architecture, version, receipt);
   validateReceipt(receipt, version);
   await writeFile(path.join('release-upload', receiptName(version, process.platform, architecture)), JSON.stringify(receipt, null, 2) + '\n');
 } else {
