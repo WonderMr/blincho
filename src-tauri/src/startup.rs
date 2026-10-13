@@ -1,5 +1,7 @@
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use tauri::Manager;
 #[cfg(target_os = "macos")]
 use tauri_plugin_autostart::ManagerExt;
 
