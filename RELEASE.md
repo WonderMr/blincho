@@ -2,6 +2,8 @@
 
 The release pipeline builds native macOS, Windows and Linux packages for x64 and arm64. All six targets use Rust/Tauri from version 1.6.0. Historical versions 1.5.0 through 1.5.3 used Tauri on macOS and Electron on Windows and Linux. Older releases used Electron. `com.myeyes.app` remains the application ID. The package version, npm lockfile, Cargo package version, Tauri configuration and `vX.Y.Z` tag must match. Curated release notes come from that version's `CHANGELOG.md` section.
 
+The publication jobs also launch the exact Windows portable executable, Linux AppImage and extracted macOS archive in isolated profiles before uploading them. These checks verify real packaged WebView startup, history import, hidden timer progression, break expiry and persistence after restart. They still model idle and unlocked presence; physical lock/sleep and notification display remain separate checks.
+
 ## Publication
 
 After reviewing and merging the version and changelog, create and push its version tag or dispatch the release workflow on main with that tag. A retry accepts an existing immutable version tag. Never move or recreate an existing tag.
