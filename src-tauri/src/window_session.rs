@@ -276,6 +276,14 @@ fn restore_placement(
     if placement.fullscreen {
         return Ok(true);
     }
+    #[cfg(target_os = "linux")]
+    if !window.is_visible().map_err(|e| e.to_string())?
+        || window.is_minimized().map_err(|e| e.to_string())?
+    {
+        // GTK queues geometry requests for unmapped windows without confirming
+        // their frame. Keep the original placement until reopening maps it.
+        return Ok(false);
+    }
     // Tao's Windows geometry setters clear MAXIMIZED through SW_RESTORE,
     // which can show or unminimize a background window. Keep that placement
     // until the user explicitly opens it instead of invoking those setters.
