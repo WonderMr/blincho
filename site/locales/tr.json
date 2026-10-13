@@ -126,5 +126,6 @@
   "release.1.4.1": "Ermenice dahil 30 arayüz dili ve desteklenen masaüstü paketleri için güncelleme tercihleri. Otomatik güncellemeleri veya indirmeden önce izin istemeyi seçin ya da arka planda güncelleme denetimlerini kapatın.",
   "release.1.5.0": "macOS artık yerel bir zamanlayıcıyla Tauri kullanıyor ve mevcut yerel geçmişi içe aktarıyor. Windows ve Linux Electron kullanmaya devam ediyor. macOS güncellemeleri elle yükleniyor.",
   "release.1.5.1": "macOS artık yerel bir zamanlayıcıyla Tauri kullanıyor ve mevcut yerel geçmişi içe aktarıyor. Windows ve Linux Electron kullanmaya devam ediyor. macOS güncellemeleri elle yükleniyor.",
-  "release.1.5.2": "macOS artık yerel bir zamanlayıcıyla Tauri kullanıyor ve mevcut yerel geçmişi içe aktarıyor. Windows ve Linux Electron kullanmaya devam ediyor. macOS güncellemeleri elle yükleniyor."
+  "release.1.5.2": "macOS artık yerel bir zamanlayıcıyla Tauri kullanıyor ve mevcut yerel geçmişi içe aktarıyor. Windows ve Linux Electron kullanmaya devam ediyor. macOS güncellemeleri elle yükleniyor.",
+  "release.1.6.0": "Tüm masaüstü sürümleri, x64 ve ARM64 için Windows ve Linux dahil, Rust ve Tauri kullanır. Geçmiş bir kez içe aktarılır. Güncellemeler elle kurulur."
 }

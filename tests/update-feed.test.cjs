@@ -18,13 +18,13 @@ async function fixture(releaseVersion = version, signed = false) {
   const files = new Map(lib.expectedArtifacts(releaseVersion).map(name => [name, Buffer.from(`package fixture ${name}`)]));
   const receipts = lib.UPDATE_PLATFORMS.flatMap(platform => ['arm64', 'x64'].map(arch => ({
     schemaVersion: 1, version: releaseVersion, platform, arch,
-    ...(lib.usesTauriMac(releaseVersion) ? { runtime: platform === 'darwin' ? 'tauri' : 'electron' } : {}),
+    ...(lib.usesTauriMac(releaseVersion) ? { runtime: lib.usesTauriPlatform(releaseVersion, platform) ? 'tauri' : 'electron' } : {}),
     artifacts: lib.expectedArtifacts(releaseVersion).filter(name => {
       const item = lib.describeArtifact(name, releaseVersion);
       return item.platform === lib.SITE_PLATFORMS[platform] && item.architecture === arch;
     }).map(name => {
       const target = name.endsWith('.zip') ? 'zip' : name.endsWith('-setup.exe') ? 'nsis' : name.endsWith('-portable.exe') ? 'portable' : name.endsWith('.AppImage') ? 'AppImage' : 'tar.gz';
-      if (platform === 'darwin' && lib.usesTauriMac(releaseVersion)) return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true };
+      if (lib.usesTauriPlatform(releaseVersion, platform)) return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true };
       const support = packageSupport(platform, arch, target, platform === 'darwin' && signed);
       return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: support.packageType, signed: support.signed, notarized: support.signed, updaterConfig: true };
     }),
@@ -263,9 +263,9 @@ test('unsigned mac is manual, signing stays per asset and older retry cannot low
   }
 });
 
-test('CI installs Rust only for mac jobs and verifies packages before publication', async () => {
+test('CI installs Rust for all native jobs and verifies packages before publication', async () => {
   const workflow = await readFile(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8');
-  assert.match(workflow, /if: matrix.platform == 'macos' && hashFiles\('src-tauri\/Cargo.toml'\) != ''\s*\n\s*run: \|\s*\n\s*rustup toolchain install 1\.92\.0/);
+  assert.match(workflow, /if: steps\.runtime\.outputs\.tauri == 'true'\s*\n\s*run: \|\s*\n\s*rustup toolchain install 1\.92\.0/);
   assert.doesNotMatch(workflow, /secrets\.(?:MAC_CSC_LINK|MAC_CSC_KEY_PASSWORD|MAC_SIGNING_IDENTITY|APPLE_ID|APPLE_APP_SPECIFIC_PASSWORD|APPLE_TEAM_ID)/);
   assert.match(workflow, /needs: \[validate, package\]/);
   assert.doesNotMatch(workflow, /continue-on-error: true/);
@@ -296,6 +296,26 @@ test('Tauri macOS receipts keep manual downloads while Electron Windows and Linu
   injectedMac.updateSupport = 'mac-signed';
   injectedMac.signing = 'signed-notarized';
   assert.throws(() => createUpdateFeeds(injected), /Unsafe package/);
+});
+
+test('1.6.0 Tauri releases retain downloads for every OS while feeds retain compatible Electron releases', async () => {
+  const lib = await library;
+  const { createUpdateFeeds } = await feeds;
+  const latest = await fixture('1.6.0');
+  const previous = await fixture('1.5.3');
+  const older = await fixture('1.4.2', true);
+  assert.ok(latest.manifest.releases[0].assets.every(item => item.runtime === 'tauri' && item.updateSupport === 'manual' && item.signing === 'unsigned'));
+  const manifest = { ...latest.manifest, releases: [...latest.manifest.releases, ...previous.manifest.releases, ...older.manifest.releases] };
+  const generated = createUpdateFeeds(manifest);
+  assert.equal(generated.length, 6);
+  assert.ok(generated.filter(item => item.path.includes('/darwin/')).every(item => item.info.version === '1.4.2'));
+  assert.ok(generated.filter(item => !item.path.includes('/darwin/')).every(item => item.info.version === '1.5.3'));
+  for (const receipt of latest.receipts) {
+    for (const mutate of [item => { item.runtime = 'electron'; }, item => { delete item.runtime; }, item => { item.artifacts[0].updaterConfig = true; }, item => { item.artifacts[0].bundleVerified = false; }, item => { item.artifacts[0].packageType = item.platform === 'win32' ? 'nsis' : 'appimage'; }]) {
+      const broken = structuredClone(receipt); mutate(broken);
+      assert.throws(() => lib.validateReceipt(broken, '1.6.0'));
+    }
+  }
 });
 
 test('1.5.0 publication gate requires Tauri bundle verification and exact package bytes', async () => {

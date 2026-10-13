@@ -91,12 +91,14 @@ function reportHistoryStartup(history: HistoryStartupResult): void {
 async function installTauriBridge(): Promise<void> {
   const api = window.__TAURI__;
   if (!api) return;
-  document.documentElement.dataset.platform = 'darwin';
+  const info = await api.core.invoke<{ platform: 'darwin' | 'win32' | 'linux'; meetingDetectionSupported: boolean }>('desktop_info');
+  document.documentElement.dataset.platform = info.platform;
   document.documentElement.dataset.runtime = 'tauri';
   const command = (operation: string, flag?: boolean) => api.core.invoke<void>('desktop_command', { operation, flag: flag ?? null });
   window.electronAPI = {
     isElectron: true, // Compatibility adapter for the existing shared UI and desktop detection.
-    meetingDetectionSupported: true,
+    platform: info.platform,
+    meetingDetectionSupported: info.meetingDetectionSupported,
     checkMeetingActive: () => api.core.invoke('check_meeting_active'),
     requestNotificationPermission: () => api.core.invoke<boolean>('notification_permission'),
     showNotification: (title, body) => { void api.core.invoke('notification_send', {title, body}).catch(error => console.warn('Blincho: Notification failed:', error)); },

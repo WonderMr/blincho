@@ -12,13 +12,85 @@ pub struct NativeUi {
     pub autostart: CheckMenuItem<tauri::Wry>,
     pub guards: Mutex<Vec<MenuItem<tauri::Wry>>>,
 }
-pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
+
+#[cfg(target_os = "windows")]
+struct HiddenStartup {
+    position: tauri::PhysicalPosition<i32>,
+    skip_taskbar: bool,
+    focusable: bool,
+}
+#[cfg(target_os = "windows")]
+struct HiddenStartupState(Mutex<Option<HiddenStartup>>);
+
+#[cfg(target_os = "windows")]
+pub fn initialize_hidden_startup(
+    window: &tauri::WebviewWindow,
+    skip_taskbar: bool,
+    focusable: bool,
+) -> tauri::Result<()> {
+    let position = window.outer_position()?;
+    let size = window.outer_size()?;
+    let monitors = window.available_monitors()?;
+    let left = monitors.iter().map(|m| m.position().x).min().unwrap_or(0);
+    let top = monitors.iter().map(|m| m.position().y).min().unwrap_or(0);
+    let offscreen = tauri::PhysicalPosition::new(
+        left.saturating_sub(i32::try_from(size.width).unwrap_or(i32::MAX))
+            .saturating_sub(64),
+        top.saturating_sub(i32::try_from(size.height).unwrap_or(i32::MAX))
+            .saturating_sub(64),
+    );
+    window
+        .app_handle()
+        .manage(HiddenStartupState(Mutex::new(Some(HiddenStartup {
+            position,
+            skip_taskbar,
+            focusable,
+        }))));
+    window.set_position(offscreen)?;
+    // WebView2 can stall its first navigation under a hidden native HWND.
+    // Warm up outside every monitor without a taskbar icon or activation.
+    window.show()
+}
+
+pub fn finish_hidden_startup(_app: &tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    if let Some(state) = _app.try_state::<HiddenStartupState>() {
+        let mut startup = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(saved) = startup.as_ref() {
+            let window = _app
+                .get_webview_window("main")
+                .ok_or("Main window unavailable")?;
+            window.hide().map_err(|e| e.to_string())?;
+            window
+                .set_position(saved.position)
+                .map_err(|e| e.to_string())?;
+            window
+                .set_skip_taskbar(saved.skip_taskbar)
+                .map_err(|e| e.to_string())?;
+            window
+                .set_focusable(saved.focusable)
+                .map_err(|e| e.to_string())?;
+            *startup = None;
+        }
+    }
+    Ok(())
+}
+
+fn locale_text(locale: &str) -> &'static Value {
     static STRINGS: OnceLock<Value> = OnceLock::new();
     let strings = STRINGS.get_or_init(|| {
         serde_json::from_str(include_str!("../locales.json")).expect("Valid native translations")
     });
     let code = locale.split(['-', '_']).next().unwrap_or("en");
-    let text = strings.get(code).unwrap_or(&strings["en"]);
+    strings.get(code).unwrap_or(&strings["en"])
+}
+
+pub fn tray_title(locale: &str) -> &'static str {
+    locale_text(locale)["title"].as_str().unwrap_or("Blincho")
+}
+
+pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
+    let text = locale_text(locale);
     let label = |key: &str| text[key].as_str().unwrap_or("Blincho");
     let ui = app.state::<NativeUi>();
     ui.show.set_text(label("show")).map_err(|e| e.to_string())?;
@@ -30,9 +102,14 @@ pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
         .set_text(label("autostart"))
         .map_err(|e| e.to_string())?;
     if let Some(tray) = app.tray_by_id("blincho") {
-        tray.set_tooltip(Some(label("title")))
-            .map_err(|e| e.to_string())?;
+        // Windows can start login items before Explorer is ready. The tray
+        // library retains its window and registers again on TaskbarCreated.
+        // An optional tooltip update must not abort that recovery or startup.
+        if let Err(error) = tray.set_tooltip(Some(label("title"))) {
+            eprintln!("Tray tooltip: {error}");
+        }
     }
+    #[cfg(target_os = "macos")]
     let result = (|| -> tauri::Result<()> {
         let about = AboutMetadata {
             name: Some("Blincho".into()),
@@ -89,6 +166,7 @@ pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
         app.set_menu(Menu::with_items(app, &[&application, &edit, &window])?)?;
         Ok(())
     })();
+    #[cfg(target_os = "macos")]
     result.map_err(|e| e.to_string())?;
     let strict = app
         .state::<crate::Runtime>()

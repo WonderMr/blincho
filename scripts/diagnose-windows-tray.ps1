@@ -1,0 +1,38 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+if (-not $IsWindows) { throw 'The SDK tray diagnostic requires Windows.' }
+Write-Host "Apartment=$([Threading.Thread]::CurrentThread.GetApartmentState()) OS=$([Environment]::OSVersion)"
+function Read-RegistryValue([Microsoft.Win32.RegistryKey]$Hive, [string]$Path, [string]$Name) {
+    $key = $Hive.OpenSubKey($Path)
+    if ($null -eq $key) { return $null }
+    try { return $key.GetValue($Name, $null) } finally { $key.Dispose() }
+}
+foreach ($scope in 'HKCU', 'HKLM') {
+    $hive = if ($scope -eq 'HKCU') { [Microsoft.Win32.Registry]::CurrentUser } else { [Microsoft.Win32.Registry]::LocalMachine }
+    $value = Read-RegistryValue $hive 'Software\Microsoft\Windows\CurrentVersion\Policies\Explorer' 'NoTrayItemsDisplay'
+    Write-Host "${scope} NoTrayItemsDisplay=$(if ($null -eq $value) { 'absent' } else { $value })"
+}
+foreach ($name in 'EnableLUA', 'ConsentPromptBehaviorAdmin', 'FilterAdministratorToken') {
+    $value = Read-RegistryValue ([Microsoft.Win32.Registry]::LocalMachine) 'Software\Microsoft\Windows\CurrentVersion\Policies\System' $name
+    Write-Host "${name}=$(if ($null -eq $value) { 'absent' } else { $value })"
+}
+Get-Service -Name StateRepository, AppXSvc, WpnService, 'WpnUserService*' -ErrorAction SilentlyContinue | Select-Object Name, Status, StartType | Format-Table
+$vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+if (-not $vs) { throw 'Native ARM64 Visual Studio tools are required.' }
+$environment = & cmd.exe /d /s /c "`"$vs\Common7\Tools\VsDevCmd.bat`" -arch=arm64 -host_arch=arm64 >nul && set"
+if ($LASTEXITCODE -ne 0) { throw 'Native compiler environment failed.' }
+foreach ($line in $environment) {
+    if ($line -match '^(INCLUDE|LIB|PATH)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process') }
+}
+$temporary = Join-Path $env:RUNNER_TEMP ('blincho-sdk-probe-' + [Guid]::NewGuid())
+New-Item -ItemType Directory $temporary | Out-Null
+try {
+    $executable = Join-Path $temporary 'tray-probe.exe'
+    Push-Location $temporary
+    try {
+        & cl.exe /nologo /W4 /EHsc /std:c++17 /DUNICODE /D_UNICODE (Join-Path $PSScriptRoot 'windows-tray-sdk-probe.cpp') "/Fe$executable" /link user32.lib shell32.lib ole32.lib
+        if ($LASTEXITCODE -ne 0) { throw 'Native SDK probe compilation failed.' }
+        & $executable
+        if ($LASTEXITCODE -ne 0) { throw 'Native SDK diagnostic process failed.' }
+    } finally { Pop-Location }
+} finally { Remove-Item -Recurse -Force $temporary }

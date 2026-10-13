@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  windows-arm-shell-diagnostics:
+    runs-on: windows-11-arm
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Diagnose notification-area policy and native SDK calls
+        shell: pwsh
+        run: |
+          ./scripts/diagnose-windows-tray.ps1
+          ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce -AllowUnavailableNotificationArea -TimeoutSeconds 20
+
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -40,16 +53,23 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  tauri-macos:
-    name: Check Tauri macOS ${{ matrix.architecture }}
+  tauri-native:
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    name: Check Tauri ${{ matrix.os }} ${{ matrix.architecture }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-15, architecture: arm64, rust-target: aarch64-apple-darwin }
-          - { os: macos-15-intel, architecture: x64, rust-target: x86_64-apple-darwin }
+          - { os: macos-15, platform: macos, architecture: arm64, rust-target: aarch64-apple-darwin }
+          - { os: macos-15-intel, platform: macos, architecture: x64, rust-target: x86_64-apple-darwin }
+          - { os: windows-11-arm, platform: windows, architecture: arm64, rust-target: aarch64-pc-windows-msvc }
+          - { os: windows-2022, platform: windows, architecture: x64, rust-target: x86_64-pc-windows-msvc }
+          - { os: ubuntu-24.04-arm, platform: linux, architecture: arm64, rust-target: aarch64-unknown-linux-gnu }
+          - { os: ubuntu-24.04, platform: linux, architecture: x64, rust-target: x86_64-unknown-linux-gnu }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -59,20 +79,82 @@ jobs:
           node-version: '22'
           architecture: ${{ matrix.architecture }}
           cache: npm
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb dbus-x11 openbox
+      - name: Select Ninja for Windows ARM64 native dependencies
+        if: runner.os == 'Windows' && matrix.architecture == 'arm64'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+          $ninja = Get-Command ninja -ErrorAction SilentlyContinue
+          if ($ninja) { $ninjaDirectory = Split-Path $ninja.Source } else { $ninjaDirectory = Join-Path $vs 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja' }
+          if (-not (Test-Path (Join-Path $ninjaDirectory 'ninja.exe'))) { throw 'Ninja is required for Windows ARM64 native dependencies' }
+          $ninjaDirectory >> $env:GITHUB_PATH
+          'CMAKE_GENERATOR=Ninja' >> $env:GITHUB_ENV
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install 1.92.0 --profile minimal --component rustfmt --target ${{ matrix.rust-target }}
           rustup override set 1.92.0
+      - name: Cache native Rust dependencies and build outputs
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: blincho-rust-${{ runner.os }}-${{ matrix.rust-target }}-1.92-cmake3.31-macos14-${{ hashFiles('src-tauri/Cargo.lock', '.cargo/config.toml', '.cargo/*.cmake') }}
       - name: Install pinned CMake for native history migration
+        shell: bash
         run: |
-          python3 -m venv "$RUNNER_TEMP/blincho-build-tools"
-          "$RUNNER_TEMP/blincho-build-tools/bin/python" -m pip install --disable-pip-version-check --no-input cmake==3.31.10
-          "$RUNNER_TEMP/blincho-build-tools/bin/python" -c 'import cmake; from pathlib import Path; print(Path(cmake.__file__).parent / "data" / "bin")' >> "$GITHUB_PATH"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            python -m venv "$RUNNER_TEMP/blincho-build-tools"
+            build_python="$RUNNER_TEMP/blincho-build-tools/Scripts/python.exe"
+          else
+            python3 -m venv "$RUNNER_TEMP/blincho-build-tools"
+            build_python="$RUNNER_TEMP/blincho-build-tools/bin/python"
+          fi
+          "$build_python" -m pip install --disable-pip-version-check --no-input cmake==3.31.10
+          "$build_python" -c 'import cmake; from pathlib import Path; print(Path(cmake.__file__).parent / "data" / "bin")' >> "$GITHUB_PATH"
       - run: npm ci
       - run: npm run build
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Check locked Tauri sources
-        run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+        run: cargo check --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
       - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
+      - name: Build native smoke executable
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
+      - name: Prepare Windows desktop and verify notification area
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce -AllowUnavailableNotificationArea:('${{ matrix.architecture }}' -eq 'arm64') -TimeoutSeconds 20
+      - name: Smoke test native renderer, history and timer
+        if: runner.os != 'Linux'
+        run: node tests/tauri-cross-platform-smoke.cjs
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test Linux renderer, history and timer
+        if: runner.os == 'Linux'
+        run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-openbox.log 2>&1 & node tests/tauri-cross-platform-smoke.cjs'
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Select package version without creating a release tag
+        run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_ENV, "RELEASE_TAG=v" + require("./package.json").version + "\n")'
+      - name: Build and verify native release packages before tagging
+        run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Recheck Windows desktop before package launch
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce -AllowUnavailableNotificationArea:('${{ matrix.architecture }}' -eq 'arm64') -TimeoutSeconds 20
+      - name: Launch the verified release payload
+        if: runner.os != 'Linux'
+        run: node tests/tauri-package-smoke.cjs
+      - name: Launch the verified Linux AppImage
+        if: runner.os == 'Linux'
+        run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/dev/null 2>&1 & node tests/tauri-package-smoke.cjs'

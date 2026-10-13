@@ -68,11 +68,11 @@ function worker() {
   for (const icon of manifest.icons) assert(fs.existsSync(path.resolve(repo, 'public', icon.src))); results.push('manifest icon paths exist and PNG dimensions match 512x512 declaration');
 
   const mainFile = path.join(repo, 'src/main.tsx');
-  function register(prod, electron, protocol) {
+  function register(prod, electron, protocol, tauri = false) {
     let registered = null, listener;
     const source = transformSync(mainFile, fs.readFileSync(mainFile, 'utf8'), { jsx: { runtime: 'classic' } }).code
       .replace(/^import\s+[^\n]*;\n/gm, '').replaceAll('import.meta.env.PROD', String(prod)).replaceAll('import.meta.env.BASE_URL', '"/myeyes/"');
-    const window = { electronAPI: electron ? {} : undefined, addEventListener(name, callback) { assert.equal(name, 'load'); listener = callback; } };
+    const window = { electronAPI: electron ? {} : undefined, __TAURI__: tauri ? {} : undefined, addEventListener(name, callback) { assert.equal(name, 'load'); listener = callback; } };
     vm.runInNewContext(source, { window, location: { protocol }, navigator: { serviceWorker: { async register(url) { registered = url; } } }, document: { getElementById: () => null }, console,
       loadSettings: () => ({ theme: 'system', colorPalette: 'sage' }),
       applyAppearance: (mode, palette) => { assert.equal(mode, 'system'); assert.equal(palette, 'sage'); },
@@ -81,6 +81,8 @@ function worker() {
   }
   assert.equal(register(true, false, 'https:'), '/myeyes/sw.js');
   assert.equal(register(false, false, 'https:'), null); assert.equal(register(true, true, 'file:'), null); assert.equal(register(true, false, 'file:'), null);
+  assert.equal(register(true, false, 'http:', true), null, 'native Tauri does not register a worker before its compatibility bridge initializes');
+  assert.equal(register(true, false, 'https:', true), null);
   results.push('service worker registration uses deployment base and production browser-only gate');
   console.log(JSON.stringify({ passed: results.length, results, limitation: 'VM cache/fetch logic; PWA installation and browser offline navigation require browser E2E' }, null, 2));
 })().catch(error => { console.error(error); process.exitCode = 1; });

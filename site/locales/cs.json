@@ -126,5 +126,6 @@
   "release.1.4.1": "30 jazyků rozhraní včetně arménštiny a nastavení aktualizací pro podporované balíčky pro počítače. Zvolte automatické aktualizace, dotaz před stažením nebo vypněte kontrolu aktualizací na pozadí.",
   "release.1.5.0": "macOS nyní používá Tauri s nativním časovačem a importuje stávající místní historii. Windows a Linux nadále používají Electron. Aktualizace macOS zůstávají ruční.",
   "release.1.5.1": "macOS nyní používá Tauri s nativním časovačem a importuje stávající místní historii. Windows a Linux nadále používají Electron. Aktualizace macOS zůstávají ruční.",
-  "release.1.5.2": "macOS nyní používá Tauri s nativním časovačem a importuje stávající místní historii. Windows a Linux nadále používají Electron. Aktualizace macOS zůstávají ruční."
+  "release.1.5.2": "macOS nyní používá Tauri s nativním časovačem a importuje stávající místní historii. Windows a Linux nadále používají Electron. Aktualizace macOS zůstávají ruční.",
+  "release.1.6.0": "Všechny desktopové verze používají Rust a Tauri, včetně Windows a Linuxu pro x64 a ARM64. Historie se importuje jednou. Aktualizace se instalují ručně."
 }
