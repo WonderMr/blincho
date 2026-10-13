@@ -8,6 +8,7 @@ mod startup;
 mod timer;
 mod ui;
 mod updates;
+mod window_session;
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::{
@@ -43,6 +44,14 @@ extern "C" fn power_event(code: i32) {
         let runtime = app.state::<Runtime>();
         if let Ok(mut timer) = runtime.timer.lock() {
             timer.power(code, Utc::now().timestamp_millis());
+        }
+        if code == 1 || code == 3 {
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                if let Err(error) = window_session::begin_absence(&handle) {
+                    eprintln!("Window session: {error}");
+                }
+            });
         }
         if let Ok(mut events) = runtime.events.lock() {
             if events.len() == 100 {
@@ -92,9 +101,13 @@ fn foreground_expiry(
             return;
         }
         if let Ok(window) = window(&handle) {
+            if let Err(error) = window_session::prepare_show(&window) {
+                eprintln!("Window placement: {error}");
+            }
             let _ = window.unminimize();
             let _ = window.show();
             let _ = window.set_focus();
+            let _ = window_session::remember(&window);
         }
     })
     .map_err(|e| e.to_string())
@@ -124,6 +137,25 @@ fn window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
         .ok_or_else(|| "Main window unavailable".into())
 }
 fn presentation(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(), String> {
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let (strict, release) = {
+            let runtime = handle.state::<Runtime>();
+            let Ok(timer) = runtime.timer.lock() else {
+                return;
+            };
+            (
+                strict && timer.strict(),
+                release && (!timer.snapshot.reasons.is_empty() || timer.snapshot.break_elapsed),
+            )
+        };
+        if let Err(error) = presentation_on_main(&handle, strict, release) {
+            eprintln!("Presentation: {error}");
+        }
+    })
+    .map_err(|e| e.to_string())
+}
+fn presentation_on_main(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(), String> {
     let window = window(app)?;
     ui::set_strict(app, strict)?;
     window.set_closable(!strict).map_err(|e| e.to_string())?;
@@ -157,25 +189,23 @@ fn presentation(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(
     Ok(())
 }
 fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        window
-            .set_simple_fullscreen(enabled)
-            .map_err(|e| e.to_string())
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        window.set_fullscreen(enabled).map_err(|e| e.to_string())
-    }
+    window_session::set_fullscreen(window, enabled)
 }
 // Explicit tray, notification and reopen actions must remain available even when
 // a desktop cannot supply presence samples. Showing the UI never resumes timing.
 fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
     ui::finish_hidden_startup(app)?;
     let window = window(app)?;
+    if let Err(error) = window_session::prepare_show(&window) {
+        eprintln!("Window placement: {error}");
+    }
     window.unminimize().map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())
+    window.set_focus().map_err(|e| e.to_string())?;
+    if let Err(error) = window_session::remember(&window) {
+        eprintln!("Window session: {error}");
+    }
+    Ok(())
 }
 fn foreground(app: &tauri::AppHandle) -> Result<(), String> {
     let runtime = app.state::<Runtime>();
@@ -187,9 +217,16 @@ fn foreground(app: &tauri::AppHandle) -> Result<(), String> {
     drop(timer);
     ui::finish_hidden_startup(app)?;
     let window = window(app)?;
+    if let Err(error) = window_session::prepare_show(&window) {
+        eprintln!("Window placement: {error}");
+    }
     window.unminimize().map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())
+    window.set_focus().map_err(|e| e.to_string())?;
+    if let Err(error) = window_session::remember(&window) {
+        eprintln!("Window session: {error}");
+    }
+    Ok(())
 }
 #[tauri::command]
 fn configure_timer(input: TimerInput, app: tauri::AppHandle) -> Result<Snapshot, String> {
@@ -222,18 +259,26 @@ fn desktop_command(
             if runtime.timer.lock().map_err(|e| e.to_string())?.strict() {
                 return Err("Strict break active".into());
             }
-            window(&app)?.hide().map_err(|e| e.to_string())
+            let window = window(&app)?;
+            window.hide().map_err(|e| e.to_string())?;
+            window_session::background_action(&window, true, false)?;
+            window_session::remember(&window)
         }
         "minimize" => {
             let runtime = app.state::<Runtime>();
             if runtime.timer.lock().map_err(|e| e.to_string())?.strict() {
                 return Err("Strict break active".into());
             }
-            window(&app)?.minimize().map_err(|e| e.to_string())
+            let window = window(&app)?;
+            window_session::remember(&window)?;
+            window.minimize().map_err(|e| e.to_string())?;
+            window_session::background_action(&window, false, true)?;
+            window_session::remember(&window)
         }
         "show" => foreground(&app),
         "fullscreen" => {
             if flag == Some(true) {
+                window_session::remember(&window(&app)?)?;
                 foreground(&app)?;
             }
             set_fullscreen(&window(&app)?, flag.unwrap_or(false))
@@ -417,10 +462,14 @@ fn diagnostics(app: &tauri::AppHandle) {
         "strictShieldCount":strict_shield_count,
         "focused":window(app).ok().and_then(|w|w.is_focused().ok()),"events":runtime.events.lock().ok().map(|v|v.clone()),
         "fullscreen":window(app).ok().and_then(|w|w.is_fullscreen().ok()),
+        "minimized":window(app).ok().and_then(|w|w.is_minimized().ok()),
+        "maximized":window(app).ok().and_then(|w|w.is_maximized().ok()),
+        "monitors":window(app).ok().and_then(|w|w.available_monitors().ok()),
         "closable":window(app).ok().and_then(|w|w.is_closable().ok()),
         "minimizable":window(app).ok().and_then(|w|w.is_minimizable().ok()),
         "position":window(app).ok().and_then(|w|w.outer_position().ok()),
         "size":window(app).ok().and_then(|w|w.outer_size().ok()),
+        "innerSize":window(app).ok().and_then(|w|w.inner_size().ok()),
         "renderer":runtime.renderer.lock().ok().map(|v|v.clone()),"sourceExport":runtime.source,"profile":runtime.profile,
         "pid":std::process::id(),"updates":runtime.updates.get_state(),"autostart":runtime.autostart.lock().ok().map(|v|v.clone())});
     let path = runtime
@@ -440,6 +489,13 @@ fn diagnostics(app: &tauri::AppHandle) {
 // Native smoke tests opt in explicitly. This local file interface does not exist unless the
 // launching developer supplies a dedicated test directory. It never exposes an HTTP server.
 fn test_control(app: &tauri::AppHandle) {
+    if app.state::<Runtime>().test_dir.is_none() {
+        return;
+    }
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || test_control_on_main(&handle));
+}
+fn test_control_on_main(app: &tauri::AppHandle) {
     let runtime = app.state::<Runtime>();
     let Some(directory) = &runtime.test_dir else {
         return;
@@ -448,6 +504,7 @@ fn test_control(app: &tauri::AppHandle) {
     if !path.exists() {
         return;
     }
+    let mut request_id = Value::Null;
     let result = (|| -> Result<Value, String> {
         let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
@@ -455,6 +512,7 @@ fn test_control(app: &tauri::AppHandle) {
             return Err("Control too large".into());
         }
         let command: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        request_id = command["id"].clone();
         match command["operation"].as_str().unwrap_or("") {
             "meeting" => {
                 runtime
@@ -467,7 +525,54 @@ fn test_control(app: &tauri::AppHandle) {
                 configure_timer(input, app.clone())?;
             }
             "hide" => desktop_command("hide".into(), None, app.clone())?,
+            "minimize" => desktop_command("minimize".into(), None, app.clone())?,
             "show" => foreground(app)?,
+            "maximize" => {
+                let window = window(app)?;
+                window_session::remember(&window)?;
+                window.maximize().map_err(|e| e.to_string())?;
+            }
+            "unmaximize" => window(app)?.unmaximize().map_err(|e| e.to_string())?,
+            "fullscreen" => desktop_command(
+                "fullscreen".into(),
+                Some(
+                    command["active"]
+                        .as_bool()
+                        .ok_or("Missing fullscreen state")?,
+                ),
+                app.clone(),
+            )?,
+            "power-event" => {
+                let code = command["code"].as_i64().ok_or("Missing power code")?;
+                if !(1..=4).contains(&code) {
+                    return Err("Invalid power code".into());
+                }
+                power_event(code as i32);
+            }
+            "move" => {
+                let x = command["x"].as_i64().ok_or("Missing x")?;
+                let y = command["y"].as_i64().ok_or("Missing y")?;
+                let position = tauri::PhysicalPosition::new(
+                    i32::try_from(x).map_err(|_| "Invalid x")?,
+                    i32::try_from(y).map_err(|_| "Invalid y")?,
+                );
+                #[cfg(target_os = "macos")]
+                {
+                    let scale = command["scale"]
+                        .as_f64()
+                        .unwrap_or(window(app)?.scale_factor().map_err(|e| e.to_string())?);
+                    if !scale.is_finite() || !(0.5..=4.).contains(&scale) {
+                        return Err("Invalid scale".into());
+                    }
+                    window(app)?
+                        .set_position(position.to_logical::<f64>(scale))
+                        .map_err(|e| e.to_string())?;
+                }
+                #[cfg(not(target_os = "macos"))]
+                window(app)?
+                    .set_position(position)
+                    .map_err(|e| e.to_string())?;
+            }
             "close" => window(app)?.close().map_err(|e| e.to_string())?,
             "resize" => {
                 let width = command["width"].as_u64().ok_or("Missing width")?;
@@ -502,7 +607,7 @@ fn test_control(app: &tauri::AppHandle) {
     })();
     let response = match result {
         Ok(value) => value,
-        Err(error) => json!({"ok":false,"error":error}),
+        Err(error) => json!({"ok":false,"error":error,"id":request_id}),
     };
     let _ = std::fs::write(directory.join("response.json"), response.to_string());
 }
@@ -620,6 +725,7 @@ fn main() {
                 updates: update_controller.clone(),
                 meeting: platform::MeetingMonitor::new(),
             });
+            app.manage(window_session::WindowSession::default());
             HANDLE
                 .set(app.handle().clone())
                 .map_err(|_| "Duplicate runtime")?;
@@ -688,6 +794,9 @@ fn main() {
                 let config = &app.config().app.windows[0];
                 ui::initialize_hidden_startup(&_main_window, config.skip_taskbar, config.focusable)?;
             }
+            if let Err(error) = window_session::remember(&_main_window) {
+                eprintln!("Window session: {error}");
+            }
             if app.state::<Runtime>().test_dir.is_none() {update_controller.start();}
             let handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -737,6 +846,12 @@ fn main() {
                         last_strict = strict;
                         last_release = release;
                     }
+                    let session_handle = handle.clone();
+                    let _ = handle.run_on_main_thread(move || {
+                        if let Err(error) = window_session::synchronize(&session_handle) {
+                            eprintln!("Window session: {error}");
+                        }
+                    });
                     let _ = handle.emit("native-timer", snapshot);
                     test_control(&handle);
                     diagnostics(&handle);
@@ -753,6 +868,10 @@ fn main() {
                         api.prevent_close();
                         if !strict {
                             let _ = window.hide();
+                            if let Some(main) = window.app_handle().get_webview_window("main") {
+                                let _ = window_session::background_action(&main, true, false);
+                                let _ = window_session::remember(&main);
+                            }
                         }
                     }
                 }
