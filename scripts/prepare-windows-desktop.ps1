@@ -1,11 +1,15 @@
 param(
     [ValidateRange(1, 300)]
-    [int]$TimeoutSeconds = 60
+    [int]$TimeoutSeconds = 60,
+    [switch]$RestartExplorerOnce
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'Windows desktop preparation requires Windows.' }
+if ($RestartExplorerOnce -and $env:GITHUB_ACTIONS -ne 'true') {
+    throw 'Explorer restart is limited to the disposable GitHub Actions machine.'
+}
 
 # Explorer can exist before its notification area accepts icons. Probe the actual
 # add/tooltip-update/delete operations used by tray-icon before running GUI tests.
@@ -101,6 +105,8 @@ $sessionId = (Get-Process -Id $PID).SessionId
 Write-Host "Windows desktop: session=$sessionId name=$env:SESSIONNAME interactive=$([Environment]::UserInteractive) architecture=$([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture)"
 $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
 $startedExplorer = $false
+$restartedExplorer = $false
+$startedAt = [DateTime]::UtcNow
 $previousState = ''
 do {
     $allExplorers = @(Get-Process -Name explorer -ErrorAction SilentlyContinue)
@@ -125,6 +131,15 @@ do {
     if (-not $startedExplorer -and $explorers.Count -eq 0) {
         Write-Host "Starting Explorer in runner session $sessionId."
         Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe')
+        $startedExplorer = $true
+    }
+    if ($RestartExplorerOnce -and -not $restartedExplorer -and
+        $failure -eq 'NIM_ADD returned false' -and $taskbarProcessId -ne 0 -and
+        ([DateTime]::UtcNow - $startedAt).TotalSeconds -ge 10) {
+        Write-Host "Restarting Explorer $taskbarProcessId in disposable runner session $sessionId after notification-area rejection."
+        Stop-Process -Id $taskbarProcessId -Force
+        Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe')
+        $restartedExplorer = $true
         $startedExplorer = $true
     }
     Start-Sleep -Seconds 2

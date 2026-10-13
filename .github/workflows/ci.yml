@@ -18,7 +18,9 @@ jobs:
           persist-credentials: false
       - name: Diagnose notification-area policy and native SDK calls
         shell: pwsh
-        run: ./scripts/diagnose-windows-tray.ps1
+        run: |
+          ./scripts/diagnose-windows-tray.ps1
+          ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce
 
   validate:
     runs-on: ubuntu-24.04
@@ -129,7 +131,7 @@ jobs:
       - name: Prepare Windows desktop and verify notification area
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/prepare-windows-desktop.ps1
+        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce
       - name: Smoke test native renderer, history and timer
         if: runner.os != 'Linux'
         run: node tests/tauri-cross-platform-smoke.cjs
@@ -149,7 +151,7 @@ jobs:
       - name: Recheck Windows desktop before package launch
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/prepare-windows-desktop.ps1
+        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce
       - name: Launch the verified release payload
         if: runner.os != 'Linux'
         run: node tests/tauri-package-smoke.cjs
