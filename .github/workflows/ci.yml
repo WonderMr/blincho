@@ -70,6 +70,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb dbus-x11 openbox
+      - name: Select Ninja for Windows ARM64 native dependencies
+        if: runner.os == 'Windows' && matrix.architecture == 'arm64'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+          $ninja = Get-Command ninja -ErrorAction SilentlyContinue
+          if ($ninja) { $ninjaDirectory = Split-Path $ninja.Source } else { $ninjaDirectory = Join-Path $vs 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja' }
+          if (-not (Test-Path (Join-Path $ninjaDirectory 'ninja.exe'))) { throw 'Ninja is required for Windows ARM64 native dependencies' }
+          $ninjaDirectory >> $env:GITHUB_PATH
+          'CMAKE_GENERATOR=Ninja' >> $env:GITHUB_ENV
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install 1.92.0 --profile minimal --component rustfmt --target ${{ matrix.rust-target }}
