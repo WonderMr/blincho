@@ -1,6 +1,6 @@
-use super::{bounded_probe, parsing, MeetingStatus, Presence};
+use super::{bounded_probe, may_restore_focus, parsing, MeetingStatus, Presence};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     process::{Command, Stdio},
     sync::{Arc, Mutex, OnceLock},
     time::{Duration, Instant},
@@ -20,6 +20,234 @@ static POWER_CALLBACK: OnceLock<extern "C" fn(i32)> = OnceLock::new();
 static CLICKED: OnceLock<extern "C" fn()> = OnceLock::new();
 static PRESENCE: OnceLock<Arc<Mutex<Option<(Instant, Presence)>>>> = OnceLock::new();
 static NOTIFICATION_SERVICE: Mutex<Option<NotificationService>> = Mutex::new(None);
+
+#[derive(Clone, Debug)]
+pub struct FocusTarget {
+    window: xlib::Window,
+    process: u32,
+}
+pub fn capture_focus() -> Option<FocusTarget> {
+    let connection = X11Focus::new()?;
+    let window = connection.active_window()?;
+    let process = connection.window_process(window)?;
+    (process != std::process::id()).then_some(FocusTarget { window, process })
+}
+pub fn restore_focus(target: &FocusTarget) -> Result<(), String> {
+    let Some(connection) = X11Focus::new() else {
+        return Ok(());
+    };
+    let Some(active) = connection.active_window() else {
+        return Ok(());
+    };
+    let foreground = connection.window_process(active);
+    if foreground != Some(std::process::id()) {
+        return Ok(());
+    }
+    let original = connection.window_process(target.window) == Some(target.process);
+    if !may_restore_focus(std::process::id(), foreground, target.process, original) {
+        return Ok(());
+    }
+    let timestamp = connection
+        .property(active, connection.user_time, xlib::XA_CARDINAL)
+        .unwrap_or(xlib::CurrentTime);
+    let mut event = xlib::XEvent {
+        client_message: xlib::XClientMessageEvent {
+            type_: xlib::ClientMessage,
+            serial: 0,
+            send_event: xlib::True,
+            display: connection.display,
+            window: target.window,
+            message_type: connection.active_atom,
+            format: 32,
+            // EWMH application request, current user time, our active window.
+            data: [
+                1 as std::ffi::c_long,
+                timestamp as std::ffi::c_long,
+                active as std::ffi::c_long,
+                0,
+                0,
+            ]
+            .into(),
+        },
+    };
+    if unsafe {
+        (connection.xlib.XSendEvent)(
+            connection.display,
+            connection.root,
+            xlib::False,
+            xlib::SubstructureNotifyMask | xlib::SubstructureRedirectMask,
+            &mut event,
+        )
+    } != 0
+    {
+        Ok(())
+    } else {
+        Err("Could not request window focus restoration".into())
+    }
+}
+
+struct X11Focus {
+    xlib: xlib::Xlib,
+    display: *mut xlib::Display,
+    root: xlib::Window,
+    active_atom: xlib::Atom,
+    pid_atom: xlib::Atom,
+    user_time: xlib::Atom,
+    grabbed_at: Option<Instant>,
+}
+impl X11Focus {
+    fn new() -> Option<Self> {
+        // Wayland has no general global active-window/other-client activation
+        // API. XWayland cannot observe native Wayland clients, so do not use it.
+        if std::env::var_os("WAYLAND_DISPLAY").is_some()
+            || std::env::var("XDG_SESSION_TYPE").is_ok_and(|value| value == "wayland")
+        {
+            return None;
+        }
+        let xlib = xlib::Xlib::open().ok()?;
+        let display = unsafe { (xlib.XOpenDisplay)(std::ptr::null()) };
+        if display.is_null() {
+            return None;
+        }
+        let mut connection = Self {
+            root: unsafe { (xlib.XDefaultRootWindow)(display) },
+            active_atom: unsafe {
+                (xlib.XInternAtom)(display, c"_NET_ACTIVE_WINDOW".as_ptr(), xlib::True)
+            },
+            pid_atom: unsafe { (xlib.XInternAtom)(display, c"_NET_WM_PID".as_ptr(), xlib::True) },
+            user_time: unsafe {
+                (xlib.XInternAtom)(display, c"_NET_WM_USER_TIME".as_ptr(), xlib::True)
+            },
+            xlib,
+            display,
+            grabbed_at: None,
+        };
+        if connection.active_atom == 0 || connection.pid_atom == 0 {
+            return None;
+        }
+        // Keep existence checks and property reads in one server snapshot.
+        // Otherwise a closing window can trigger Xlib's fatal BadWindow handler.
+        // Avoid changing the process-global error handler used by GTK.
+        unsafe { (connection.xlib.XGrabServer)(display) };
+        connection.grabbed_at = Some(Instant::now());
+        Some(connection)
+    }
+    fn property(&self, window: xlib::Window, atom: xlib::Atom, kind: xlib::Atom) -> Option<u64> {
+        if atom == 0 {
+            return None;
+        }
+        let mut actual = 0;
+        let mut format = 0;
+        let mut count = 0;
+        let mut remaining = 0;
+        let mut bytes = std::ptr::null_mut();
+        let success = unsafe {
+            (self.xlib.XGetWindowProperty)(
+                self.display,
+                window,
+                atom,
+                0,
+                1,
+                xlib::False,
+                kind,
+                &mut actual,
+                &mut format,
+                &mut count,
+                &mut remaining,
+                &mut bytes,
+            )
+        } == xlib::Success as i32;
+        let value = if success
+            && actual == kind
+            && format == 32
+            && count == 1
+            && remaining == 0
+            && !bytes.is_null()
+        {
+            Some(unsafe { *bytes.cast::<std::ffi::c_ulong>() } as u64)
+        } else {
+            None
+        };
+        if !bytes.is_null() {
+            unsafe { (self.xlib.XFree)(bytes.cast()) };
+        }
+        value
+    }
+    fn active_window(&self) -> Option<xlib::Window> {
+        self.property(self.root, self.active_atom, xlib::XA_WINDOW)
+            .filter(|window| *window != 0)
+            .map(|window| window as xlib::Window)
+    }
+    fn window_process(&self, window: xlib::Window) -> Option<u32> {
+        if !self.window_exists(window) {
+            return None;
+        }
+        self.property(window, self.pid_atom, xlib::XA_CARDINAL)
+            .and_then(|process| u32::try_from(process).ok())
+            .filter(|process| *process != 0)
+    }
+    fn window_exists(&self, target: xlib::Window) -> bool {
+        // Only query windows from a live parent tree while the server is grabbed.
+        // Reparenting WMs put clients below frame windows, so search breadth first.
+        // A large or slow tree is unsupported rather than holding the desktop.
+        let mut pending = VecDeque::from([self.root]);
+        for _ in 0..256 {
+            if self
+                .grabbed_at
+                .is_none_or(|at| at.elapsed() >= Duration::from_millis(20))
+            {
+                return false;
+            }
+            let Some(window) = pending.pop_front() else {
+                return false;
+            };
+            let mut root = 0;
+            let mut parent = 0;
+            let mut children = std::ptr::null_mut();
+            let mut count = 0;
+            let success = unsafe {
+                (self.xlib.XQueryTree)(
+                    self.display,
+                    window,
+                    &mut root,
+                    &mut parent,
+                    &mut children,
+                    &mut count,
+                )
+            } != 0;
+            let mut found = false;
+            if success && !children.is_null() {
+                for &child in unsafe { std::slice::from_raw_parts(children, count as usize) } {
+                    found |= child == target;
+                    if pending.len() < 4096 {
+                        pending.push_back(child);
+                    }
+                }
+            }
+            if !children.is_null() {
+                unsafe { (self.xlib.XFree)(children.cast()) };
+            }
+            if found {
+                return true;
+            }
+            if !success {
+                return false;
+            }
+        }
+        false
+    }
+}
+impl Drop for X11Focus {
+    fn drop(&mut self) {
+        unsafe {
+            if self.grabbed_at.is_some() {
+                (self.xlib.XUngrabServer)(self.display);
+                (self.xlib.XFlush)(self.display);
+            }
+            (self.xlib.XCloseDisplay)(self.display);
+        }
+    }
+}
 
 fn session_bus() -> zbus::Result<Connection> {
     Builder::session()?

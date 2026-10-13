@@ -243,8 +243,28 @@ const samePosition = (value, expected) => Math.abs(value.position.x - expected.x
   await until(value => value.visible && originalFrame(value));
   console.log('PASS: a maximized tray window stays hidden and retains its normal frame for explicit reopen.');
 
+  await control('eval', { script: `(()=>{const start=[...document.querySelectorAll('button')].find(button=>button.textContent.trim()==='Do now');if(!start)throw Error('Exercise action unavailable');start.click()})()` });
+  await until(value => value.timer.exercising && !value.timer.breakActive);
+  await control('hide');
+  await until(value => !value.visible && value.timer.exercising);
+  await control('tray-rest');
+  await until(value => value.visible && value.timer.exercising && !value.timer.breakActive);
+  await control('eval', { script: `(()=>{const close=document.querySelector('button[aria-label="Close exercise"]');if(!close)throw Error('Exercise close unavailable');close.click()})()` });
+  await until(value => value.visible && !value.timer.exercising && !value.timer.breakActive);
+  await sleep(600);
+  await control('power-event', { code: 3 });
+  await until(value => value.timer.locked);
+  await control('move', drift);
+  await control('power-event', { code: 4 });
+  await until(value => !value.timer.locked);
+  await sleep(1200);
+  const afterIgnoredTrayBreak = read();
+  assert.equal(afterIgnoredTrayBreak.visible, true, 'A tray break rejected during an exercise must not leave a hidden restore snapshot');
+  assert(originalFrame(afterIgnoredTrayBreak), 'Later lock must preserve the current visible normal frame');
+  console.log('PASS: a rejected tray break during an exercise cannot replace a later lock snapshot.');
+
   const result = { status: 'passed', platform: process.platform, monitors: initial.monitors.length,
-    checks: ['native error response correlation', 'tray visibility and focus', 'monitor placement and size', 'hidden overlapping lock and sleep', 'visible overlapping lock and sleep', 'visible resume', 'explicit hide during restoration', 'minimized resume and manual reopen', 'interrupted fullscreen restoration', 'hidden maximized window and normal frame', 'bounded successful child exit'],
+    checks: ['native error response correlation', 'tray visibility and focus', 'monitor placement and size', 'hidden overlapping lock and sleep', 'visible overlapping lock and sleep', 'visible resume', 'explicit hide during restoration', 'minimized resume and manual reopen', 'interrupted fullscreen restoration', 'hidden maximized window and normal frame', 'ignored tray break during exercise', 'bounded successful child exit'],
     profile: directory, presence: 'modeled power events; physical lock, sleep and cable disconnection are not tested' };
   try { await control('quit'); } catch (error) {
     // Some native loops exit before their response file can be written. Only

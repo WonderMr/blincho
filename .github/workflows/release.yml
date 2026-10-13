@@ -218,6 +218,11 @@ jobs:
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-session-openbox.log 2>&1 & node tests/tauri-session-smoke.cjs'
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test macOS break completion and actual work app focus
+        if: matrix.platform == 'macos' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-break-focus-smoke.cjs') != ''
+        run: node tests/tauri-break-focus-smoke.cjs
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
       - name: Build native packages
         run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
         env:

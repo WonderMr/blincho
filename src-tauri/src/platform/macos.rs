@@ -1,7 +1,7 @@
 use super::{active_meeting_assertion, bounded_probe, MeetingStatus, Presence};
 use std::{
     ffi::{c_void, CString},
-    sync::mpsc,
+    sync::{mpsc, Arc},
     time::Duration,
 };
 
@@ -22,6 +22,38 @@ extern "C" {
     );
     fn blincho_window_level(pointer: *mut c_void, strict: i32);
     fn blincho_strict_shield_count() -> i32;
+    fn blincho_capture_focus() -> *mut c_void;
+    fn blincho_restore_focus(target: *mut c_void) -> i32;
+    fn blincho_release_focus(target: *mut c_void);
+}
+
+// The native object is immutable and retains a thread-safe NSRunningApplication.
+// Arc owns its +1 reference so session snapshots can safely clone the token.
+#[derive(Clone, Debug)]
+pub struct FocusTarget(Arc<RetainedFocusTarget>);
+#[derive(Debug)]
+struct RetainedFocusTarget {
+    pointer: usize,
+}
+impl Drop for RetainedFocusTarget {
+    fn drop(&mut self) {
+        unsafe { blincho_release_focus(self.pointer as *mut c_void) };
+    }
+}
+pub fn capture_focus() -> Option<FocusTarget> {
+    let pointer = unsafe { blincho_capture_focus() };
+    (!pointer.is_null()).then(|| {
+        FocusTarget(Arc::new(RetainedFocusTarget {
+            pointer: pointer as usize,
+        }))
+    })
+}
+pub fn restore_focus(target: &FocusTarget) -> Result<(), String> {
+    match unsafe { blincho_restore_focus(target.0.pointer as *mut c_void) } {
+        0 | 1 => Ok(()),
+        -2 => Err("Focus restoration requires the UI thread".into()),
+        _ => Err("Could not restore application focus".into()),
+    }
 }
 
 pub fn presence() -> Presence {
