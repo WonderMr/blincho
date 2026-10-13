@@ -617,12 +617,14 @@ fn main() {
                 autostart["registered"].as_bool().unwrap_or(false), None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &rest, &launch_at_login, &quit])?;
             app.manage(ui::NativeUi{show:show.clone(),rest:rest.clone(),quit:quit.clone(),autostart:launch_at_login.clone(),guards:Mutex::new(vec![])});
+            let startup_languages = preferred_languages();
+            let startup_locale = startup_languages.first().map(String::as_str).unwrap_or("en");
             TrayIconBuilder::with_id("blincho")
                 .icon(tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
                     include_bytes!("../../assets/trayTemplate.png")
                 } else { include_bytes!("../../assets/icon.png") })?)
                 .icon_as_template(cfg!(target_os = "macos"))
-                .tooltip("Blincho")
+                .tooltip(ui::tray_title(startup_locale))
                 .menu(&menu)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "autostart" => {
@@ -663,7 +665,7 @@ fn main() {
                 };
                 let _ = desktop_command(operation.into(), None, app.clone());
             });
-            ui::set_locale(app.handle(),preferred_languages().first().map(String::as_str).unwrap_or("en"))?;
+            ui::set_locale(app.handle(), startup_locale)?;
             let _main_window = builder.build()?;
             #[cfg(target_os = "windows")]
             if hidden {
