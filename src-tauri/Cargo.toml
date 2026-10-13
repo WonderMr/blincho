@@ -1,6 +1,6 @@
 [package]
 name = "blincho"
-version = "1.5.3"
+version = "1.6.0"
 edition = "2021"
 
 [build-dependencies]
@@ -19,7 +19,17 @@ leveldb-sys = { version = "=2.0.9", features = ["snappy"] }
 tempfile = "=3.27.0"
 libc = "=0.2.190"
 regex = "=1.13.1"
+dirs = "=6.0.0"
 
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winreg = "=0.56.0"
+windows-sys = { version = "=0.61.2", features = ["Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_SystemInformation", "Win32_Foundation", "Win32_Globalization", "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_RemoteDesktop", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "=0.61.3", features = ["Data_Xml_Dom", "Foundation", "UI_Notifications", "Win32_System_WinRT", "Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem", "Win32_Storage_EnhancedStorage"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "=5.19.0"
+x11-dl = "=2.21.0"

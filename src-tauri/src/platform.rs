@@ -1,4 +1,64 @@
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
+mod parsing;
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "linux")]
+use linux as native;
+#[cfg(target_os = "macos")]
+use macos as native;
 use regex::Regex;
+#[cfg(target_os = "windows")]
+use windows as native;
+
+/// A failed native probe stays unknown. The timer deliberately pauses while presence
+/// cannot be confirmed, rather than counting work based on invented zero idle time.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Presence {
+    pub idle_seconds: Option<f64>,
+    pub locked: Option<bool>,
+}
+pub fn presence() -> Presence {
+    let mut value = native::presence();
+    value.idle_seconds = value
+        .idle_seconds
+        .filter(|seconds| seconds.is_finite() && *seconds >= 0.);
+    value
+}
+pub fn observe_power(callback: extern "C" fn(i32)) -> Result<(), String> {
+    native::observe_power(callback)
+}
+pub fn power_source() -> &'static str {
+    native::power_source()
+}
+pub fn notifications_initialize(clicked: extern "C" fn()) {
+    native::notifications_initialize(clicked);
+}
+pub async fn notification_permission(app: &tauri::AppHandle) -> Result<bool, String> {
+    native::notification_permission(app).await
+}
+pub async fn notification_send(
+    app: &tauri::AppHandle,
+    title: String,
+    body: String,
+) -> Result<bool, String> {
+    if title.len() > 1024 || body.len() > 8192 || title.contains('\0') || body.contains('\0') {
+        return Err("Invalid notification text".into());
+    }
+    native::notification_send(app, title, body).await
+}
+pub fn preferred_languages() -> Vec<String> {
+    native::preferred_languages()
+}
+pub fn meeting_supported() -> bool {
+    native::meeting_supported()
+}
+#[cfg(target_os = "macos")]
+pub unsafe fn window_level(pointer: *mut std::ffi::c_void, strict: bool) {
+    macos::window_level(pointer, strict);
+}
 use serde::Serialize;
 use std::{
     io::Read,
@@ -32,7 +92,7 @@ impl MeetingMonitor {
             *self.cache.lock().unwrap() = None;
             return MeetingStatus {
                 in_meeting: false,
-                supported: true,
+                supported: meeting_supported(),
             };
         }
         if let Some(value) = *self.test_status.lock().unwrap() {
@@ -47,25 +107,12 @@ impl MeetingMonitor {
                 return value.clone();
             }
         }
-        let assertion = bounded_probe("/usr/bin/pmset", &["-g", "assertions"]);
-        let (in_meeting, supported) = match assertion {
-            Some(output) if active_meeting_assertion(&output) => (true, true),
-            Some(_) => (
-                bounded_probe("/usr/bin/pgrep", &["-i", "-x", "CptHost"])
-                    .is_some_and(|text| text.lines().any(|line| line.parse::<u32>().is_ok())),
-                true,
-            ),
-            None => (false, false),
-        };
-        let result = MeetingStatus {
-            in_meeting,
-            supported,
-        };
+        let result = native::meeting_status();
         *cache = Some((Instant::now(), epoch, result.clone()));
         result
     }
 }
-fn bounded_probe(program: &str, args: &[&str]) -> Option<String> {
+pub(super) fn bounded_probe(program: &str, args: &[&str]) -> Option<String> {
     const LIMIT: u64 = 256 * 1024;
     let mut child = Command::new(program)
         .args(args)
@@ -164,15 +211,7 @@ pub fn open_external(url: &str) -> Result<(), String> {
     {
         return Err("Only HTTPS links without credentials are supported".into());
     }
-    let status = Command::new("/usr/bin/open")
-        .arg(parsed.as_str())
-        .status()
-        .map_err(|e| e.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err("Could not open external link".into())
-    }
+    native::open_external(parsed.as_str())
 }
 
 #[cfg(test)]

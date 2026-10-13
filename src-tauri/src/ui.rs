@@ -33,6 +33,7 @@ pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
         tray.set_tooltip(Some(label("title")))
             .map_err(|e| e.to_string())?;
     }
+    #[cfg(target_os = "macos")]
     let result = (|| -> tauri::Result<()> {
         let about = AboutMetadata {
             name: Some("Blincho".into()),
@@ -89,6 +90,7 @@ pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
         app.set_menu(Menu::with_items(app, &[&application, &edit, &window])?)?;
         Ok(())
     })();
+    #[cfg(target_os = "macos")]
     result.map_err(|e| e.to_string())?;
     let strict = app
         .state::<crate::Runtime>()

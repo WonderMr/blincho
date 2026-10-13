@@ -7,15 +7,21 @@ use super::{
     is_app_key, validate_export, HistoryExport, MAX_ENTRIES, MAX_KEY_BYTES, MAX_VALUE_BYTES,
 };
 use leveldb_sys as ldb;
+#[cfg(not(windows))]
+use std::ffi::CString;
 use std::{
     collections::BTreeMap,
-    ffi::{CStr, CString},
+    ffi::CStr,
     fs::{self, Metadata, OpenOptions},
     io::{Read, Write},
     os::raw::c_char,
     path::Path,
     ptr,
 };
+
+#[cfg(windows)]
+#[path = "windows.rs"]
+mod windows;
 
 const MAX_FILES: usize = 256;
 const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
@@ -38,6 +44,10 @@ fn read_with_temp_parent(
         Err(error) => return Err(format!("Legacy history directory is unavailable: {error}")),
         Ok(metadata) if !metadata.is_dir() || metadata.file_type().is_symlink() => {
             return Err("Legacy history directory must be a regular directory".into());
+        }
+        #[cfg(windows)]
+        Ok(metadata) if windows::is_reparse_point(&metadata) => {
+            return Err("Legacy history directory must not be a Windows reparse point".into());
         }
         Ok(_) => {}
     }
@@ -73,6 +83,8 @@ struct SourceFile {
     device: u64,
     #[cfg(unix)]
     inode: u64,
+    #[cfg(windows)]
+    created: u64,
 }
 
 impl SourceFile {
@@ -80,11 +92,17 @@ impl SourceFile {
         if !metadata.is_file() || metadata.file_type().is_symlink() {
             return Err("Legacy history contains a link or nonregular file".into());
         }
+        #[cfg(windows)]
+        if windows::is_reparse_point(metadata) {
+            return Err("Legacy history contains a Windows reparse point".into());
+        }
         if metadata.len() > MAX_FILE_BYTES {
             return Err("Legacy history file exceeds 32 MiB".into());
         }
         #[cfg(unix)]
         use std::os::unix::fs::MetadataExt;
+        #[cfg(windows)]
+        use std::os::windows::fs::MetadataExt;
         Ok(Self {
             name,
             length: metadata.len(),
@@ -93,6 +111,8 @@ impl SourceFile {
             device: metadata.dev(),
             #[cfg(unix)]
             inode: metadata.ino(),
+            #[cfg(windows)]
+            created: metadata.creation_time(),
         })
     }
 }
@@ -150,6 +170,13 @@ fn copy_database(source: &Path, destination: &Path) -> Result<(), String> {
         {
             use std::os::unix::fs::OpenOptionsExt;
             options.custom_flags(libc::O_NOFOLLOW);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.custom_flags(
+                windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT,
+            );
         }
         let file = options
             .open(&source_path)
@@ -345,10 +372,13 @@ fn open_database(path: &Path, create: bool) -> Result<Database, String> {
     let name = {
         use std::os::unix::ffi::OsStrExt;
         CString::new(path.as_os_str().as_bytes())
-    };
-    #[cfg(not(unix))]
-    let name = CString::new(path.to_str().ok_or("Invalid legacy history path")?);
-    let name = name.map_err(|_| "Invalid legacy history path")?;
+    }
+    .map_err(|_| "Invalid legacy history path")?;
+    #[cfg(windows)]
+    let name = windows::native_path(path)?;
+    #[cfg(not(any(unix, windows)))]
+    let name = CString::new(path.to_str().ok_or("Invalid legacy history path")?)
+        .map_err(|_| "Invalid legacy history path")?;
     let mut error = ptr::null_mut();
     // All native database writes, including recovery, are confined to the copy.
     let raw = unsafe {

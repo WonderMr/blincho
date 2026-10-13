@@ -1,5 +1,7 @@
-#[cfg(not(target_os = "macos"))]
-compile_error!("This prototype currently supports macOS only");
+#![cfg_attr(
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
+)]
 mod history;
 mod platform;
 mod startup;
@@ -36,23 +38,6 @@ struct Runtime {
     meeting: platform::MeetingMonitor,
 }
 static HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
-extern "C" {
-    fn blincho_observe_power(callback: extern "C" fn(i32));
-    fn blincho_idle_seconds() -> f64;
-    fn blincho_session_locked() -> i32;
-    fn blincho_notifications_initialize(clicked: extern "C" fn());
-    fn blincho_notification_permission(
-        context: *mut std::ffi::c_void,
-        callback: extern "C" fn(*mut std::ffi::c_void, i32),
-    );
-    fn blincho_notification_send(
-        title: *const std::ffi::c_char,
-        body: *const std::ffi::c_char,
-        context: *mut std::ffi::c_void,
-        callback: extern "C" fn(*mut std::ffi::c_void, i32),
-    );
-    fn blincho_window_level(pointer: *mut std::ffi::c_void, strict: i32);
-}
 extern "C" fn power_event(code: i32) {
     if let Some(app) = HANDLE.get() {
         let runtime = app.state::<Runtime>();
@@ -63,7 +48,9 @@ extern "C" fn power_event(code: i32) {
             if events.len() == 100 {
                 events.remove(0);
             }
-            events.push(json!({"code":code,"at":Utc::now().to_rfc3339(),"source":"NSWorkspace/DistributedNotificationCenter"}));
+            events.push(
+                json!({"code":code,"at":Utc::now().to_rfc3339(),"source":platform::power_source()}),
+            );
         };
     }
 }
@@ -71,7 +58,7 @@ extern "C" fn notification_clicked() {
     if let Some(app) = HANDLE.get() {
         let handle = app.clone();
         let _ = app.run_on_main_thread(move || {
-            let _ = foreground(&handle);
+            let _ = show_manual(&handle);
         });
     }
 }
@@ -109,20 +96,23 @@ fn foreground_expiry(
     .map_err(|e| e.to_string())
 }
 fn sample(timer: &mut Timer) -> bool {
-    let idle = unsafe { blincho_idle_seconds() };
-    let locked = unsafe { blincho_session_locked() };
+    let isolated_smoke = std::env::var_os("BLINCHO_SMOKE_PRESENCE").is_some_and(|v| v == "1")
+        && HANDLE
+            .get()
+            .and_then(|app| app.try_state::<Runtime>())
+            .is_some_and(|runtime| runtime.test_dir.is_some());
+    let presence = if isolated_smoke {
+        platform::Presence {
+            idle_seconds: Some(0.),
+            locked: Some(false),
+        }
+    } else {
+        platform::presence()
+    };
     timer.tick(
         Utc::now().timestamp_millis(),
-        if idle.is_finite() && idle >= 0. {
-            Some(idle)
-        } else {
-            None
-        },
-        match locked {
-            0 => Some(false),
-            1 => Some(true),
-            _ => None,
-        },
+        presence.idle_seconds,
+        presence.locked,
     )
 }
 fn window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
@@ -137,18 +127,39 @@ fn presentation(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(
     window
         .set_always_on_top(strict)
         .map_err(|e| e.to_string())?;
-    let pointer = window.ns_window().map_err(|e| e.to_string())? as usize;
-    window
-        .run_on_main_thread(move || unsafe {
-            blincho_window_level(pointer as *mut _, strict as i32)
-        })
-        .map_err(|e| e.to_string())?;
-    if release {
+    #[cfg(target_os = "macos")]
+    {
+        let pointer = window.ns_window().map_err(|e| e.to_string())? as usize;
         window
-            .set_simple_fullscreen(false)
+            .run_on_main_thread(move || unsafe {
+                platform::window_level(pointer as *mut _, strict)
+            })
             .map_err(|e| e.to_string())?;
     }
+    if release {
+        set_fullscreen(&window, false)?;
+    }
     Ok(())
+}
+fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        window
+            .set_simple_fullscreen(enabled)
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        window.set_fullscreen(enabled).map_err(|e| e.to_string())
+    }
+}
+// Explicit tray, notification and reopen actions must remain available even when
+// a desktop cannot supply presence samples. Showing the UI never resumes timing.
+fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = window(app)?;
+    window.unminimize().map_err(|e| e.to_string())?;
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
 }
 fn foreground(app: &tauri::AppHandle) -> Result<(), String> {
     let runtime = app.state::<Runtime>();
@@ -205,9 +216,7 @@ fn desktop_command(
             if flag == Some(true) {
                 foreground(&app)?;
             }
-            window(&app)?
-                .set_simple_fullscreen(flag.unwrap_or(false))
-                .map_err(|e| e.to_string())
+            set_fullscreen(&window(&app)?, flag.unwrap_or(false))
         }
         "strict" => {
             let strict = flag.unwrap_or(false)
@@ -246,39 +255,9 @@ async fn legacy_history(app: tauri::AppHandle) -> Result<Option<history::History
     .await
     .map_err(|e| e.to_string())?
 }
-extern "C" fn notification_result(context: *mut std::ffi::c_void, value: i32) {
-    let sender = unsafe { Box::from_raw(context.cast::<std::sync::mpsc::Sender<i32>>()) };
-    let _ = sender.send(value);
-}
 #[tauri::command]
 async fn notification_permission(app: tauri::AppHandle) -> Result<bool, String> {
-    if !std::env::current_exe()
-        .map_err(|e| e.to_string())?
-        .parent()
-        .is_some_and(|p| p.ends_with("Contents/MacOS"))
-    {
-        return Ok(false);
-    }
-    let (sender, receiver) = std::sync::mpsc::channel::<i32>();
-    let context = Box::into_raw(Box::new(sender)) as usize;
-    if let Err(error) = app.run_on_main_thread(move || unsafe {
-        blincho_notification_permission(context as *mut _, notification_result)
-    }) {
-        unsafe {
-            drop(Box::from_raw(
-                (context as *mut std::ffi::c_void).cast::<std::sync::mpsc::Sender<i32>>(),
-            ));
-        }
-        return Err(error.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        receiver
-            .recv_timeout(Duration::from_secs(120))
-            .map(|v| v == 1)
-            .map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    platform::notification_permission(&app).await
 }
 #[tauri::command]
 async fn notification_send(
@@ -286,48 +265,31 @@ async fn notification_send(
     body: String,
     app: tauri::AppHandle,
 ) -> Result<bool, String> {
-    if !std::env::current_exe()
-        .map_err(|e| e.to_string())?
-        .parent()
-        .is_some_and(|p| p.ends_with("Contents/MacOS"))
-    {
-        return Ok(false);
-    }
     if title.len() > 1024 || body.len() > 8192 {
         return Err("Notification too large".into());
     }
-    let title = std::ffi::CString::new(title).map_err(|e| e.to_string())?;
-    let body = std::ffi::CString::new(body).map_err(|e| e.to_string())?;
-    let (sender, receiver) = std::sync::mpsc::channel::<i32>();
-    let context = Box::into_raw(Box::new(sender)) as usize;
-    if let Err(error) = app.run_on_main_thread(move || unsafe {
-        blincho_notification_send(
-            title.as_ptr(),
-            body.as_ptr(),
-            context as *mut _,
-            notification_result,
-        )
-    }) {
-        unsafe {
-            drop(Box::from_raw(
-                (context as *mut std::ffi::c_void).cast::<std::sync::mpsc::Sender<i32>>(),
-            ));
-        }
-        return Err(error.to_string());
-    }
-    tauri::async_runtime::spawn_blocking(move || {
-        receiver
-            .recv_timeout(Duration::from_secs(15))
-            .map_err(|e| e.to_string())
-            .and_then(|value| match value {
-                1 => Ok(true),
-                0 => Ok(false),
-                _ => Err("Notification delivery failed".into()),
-            })
+    platform::notification_send(&app, title, body).await
+}
+#[tauri::command]
+fn get_runtime_metadata() -> &'static str {
+    option_env!("BLINCHO_RELEASE_METADATA").unwrap_or("")
+}
+#[tauri::command]
+async fn desktop_info() -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let platform = if cfg!(target_os = "macos") {
+            "darwin"
+        } else if cfg!(target_os = "windows") {
+            "win32"
+        } else {
+            "linux"
+        };
+        json!({"platform":platform, "meetingDetectionSupported":platform::meeting_supported()})
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|error| error.to_string())
 }
+
 #[tauri::command]
 fn attention(app: tauri::AppHandle) -> Result<(), String> {
     window(&app)?
@@ -392,7 +354,7 @@ async fn check_meeting_active(app: tauri::AppHandle) -> Result<platform::Meeting
         if timer.snapshot.absence_epoch != epoch || !timer.snapshot.reasons.is_empty() {
             platform::MeetingStatus {
                 in_meeting: false,
-                supported: true,
+                supported: status.supported,
             }
         } else {
             status
@@ -414,20 +376,7 @@ fn renderer_report(report: Value, app: tauri::AppHandle) -> Result<(), String> {
 }
 #[tauri::command]
 fn preferred_languages() -> Vec<String> {
-    let output = std::process::Command::new("/usr/bin/defaults")
-        .args(["read", "-g", "AppleLanguages"])
-        .output();
-    output
-        .ok()
-        .filter(|v| v.status.success())
-        .map(|v| {
-            String::from_utf8_lossy(&v.stdout)
-                .lines()
-                .map(|s| s.trim().trim_matches(&['"', ','][..]).to_string())
-                .filter(|s| !s.is_empty() && s != "(" && s != ")")
-                .collect()
-        })
-        .unwrap_or_default()
+    platform::preferred_languages()
 }
 fn diagnostics(app: &tauri::AppHandle) {
     let runtime = app.state::<Runtime>();
@@ -542,6 +491,12 @@ fn main() {
         path.hash(&mut hash);
         context.config_mut().identifier = format!("com.myeyes.tauri.test{:x}", hash.finish());
     }
+    let autostart_builder = tauri_plugin_autostart::Builder::new()
+        .app_name(startup::LABEL)
+        .arg("--autostart");
+    #[cfg(target_os = "macos")]
+    let autostart_builder =
+        autostart_builder.macos_launcher(tauri_plugin_autostart::MacosLauncher::LaunchAgent);
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             let autostart = args.iter().any(|arg| arg == "--autostart");
@@ -553,22 +508,19 @@ fn main() {
                         events.push(json!({"source":"single-instance","autostart":autostart,"at":Utc::now().to_rfc3339()}));
                     }
                     if !autostart {
-                        if let Err(error) = foreground(&handle) { eprintln!("Reopen: {error}"); }
+                        if let Err(error) = show_manual(&handle) { eprintln!("Reopen: {error}"); }
                     }
                 }
             });
         }))
-        .plugin(tauri_plugin_autostart::Builder::new()
-            .app_name(startup::LABEL)
-            .macos_launcher(tauri_plugin_autostart::MacosLauncher::LaunchAgent)
-            .arg("--autostart").build())
+        .plugin(autostart_builder.build())
         .invoke_handler(tauri::generate_handler![
             configure_timer,
             timer_snapshot,
             desktop_command,
             legacy_history,
             renderer_report,
-            preferred_languages, notification_permission, notification_send, attention, open_external,
+            get_runtime_metadata, desktop_info, preferred_languages, notification_permission, notification_send, attention, open_external,
             set_locale, update_get_state, update_set_policy, update_check, update_skip, update_download, update_open_download, check_meeting_active
         ])
         .setup(move |app| {
@@ -586,40 +538,45 @@ fn main() {
                 tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
                     .visible(!hidden)
                     .on_navigation(|url| {
-                        url.scheme() == "tauri" && url.host_str() == Some("localhost")
+                        (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
+                            || (matches!(url.scheme(), "http" | "https") && url.host_str() == Some("tauri.localhost"))
                     });
             if let Some(path) = &test_dir {
-                use std::hash::{Hash, Hasher};
-                let mut hash = std::collections::hash_map::DefaultHasher::new();
-                path.hash(&mut hash);
-                let value = hash.finish();
-                let mut identifier = [0_u8; 16];
-                identifier[..8].copy_from_slice(&value.to_le_bytes());
-                identifier[8..].copy_from_slice(&value.to_be_bytes());
-                builder = builder.data_store_identifier(identifier);
+                #[cfg(target_os = "macos")]
+                {
+                    use std::hash::{Hash, Hasher};
+                    let mut hash = std::collections::hash_map::DefaultHasher::new();
+                    path.hash(&mut hash);
+                    let value = hash.finish();
+                    let mut identifier = [0_u8; 16];
+                    identifier[..8].copy_from_slice(&value.to_le_bytes());
+                    identifier[8..].copy_from_slice(&value.to_be_bytes());
+                    builder = builder.data_store_identifier(identifier);
+                }
+                #[cfg(not(target_os = "macos"))]
+                { builder = builder.data_directory(path.join("webview")); }
             }
             let source = std::env::var_os("BLINCHO_PROTOTYPE_HISTORY_SOURCE")
                 .map(PathBuf::from)
-                .unwrap_or(
-                    app.path()
-                        .data_dir()?
-                        .join("myeyes/tauri-history-export.json"),
-                );
+                .unwrap_or(history::legacy_profile_dir()?.join("tauri-history-export.json"));
             let preferences = profile.join("update-preferences.json");
             if test_dir.is_none() && !preferences.exists() {
-                let legacy=app.path().data_dir()?.join("myeyes/update-preferences.json");
+                let legacy=history::legacy_profile_dir()?.join("update-preferences.json");
                 if legacy.is_file() {
                     use std::io::Read;
                     let mut bytes=Vec::new();
                     std::fs::File::open(legacy)?.take(16_385).read_to_end(&mut bytes)?;
                     if bytes.len()>16_384 {bytes=b"{}".to_vec();}
                     std::fs::write(&preferences,bytes)?;
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(&preferences,std::fs::Permissions::from_mode(0o600))?;
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        std::fs::set_permissions(&preferences,std::fs::Permissions::from_mode(0o600))?;
+                    }
                 }
             }
             let updates_app=app.handle().clone();
-            let bundled=std::env::current_exe()?.parent().is_some_and(|p|p.ends_with("Contents/MacOS"));
+            let bundled=startup::is_packaged();
             let update_controller=updates::UpdateController::new(profile.clone(),app.package_info().version.to_string(),std::env::consts::ARCH,bundled,move|state|{let _=updates_app.emit("update-state",state);});
             app.manage(Runtime {
                 timer: Mutex::new(Timer::new(Utc::now().timestamp_millis())),
@@ -636,33 +593,29 @@ fn main() {
             HANDLE
                 .set(app.handle().clone())
                 .map_err(|_| "Duplicate runtime")?;
-            unsafe {
-                blincho_observe_power(power_event);
-                if bundled {blincho_notifications_initialize(notification_clicked);}
-            }
+            if let Err(error) = platform::observe_power(power_event) { eprintln!("Power observer: {error}"); }
+            if bundled { platform::notifications_initialize(notification_clicked); }
             let show = MenuItem::with_id(app, "show", "Показать Blincho", true, None::<&str>)?;
             let rest = MenuItem::with_id(app, "rest", "Сделать перерыв", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
-            let launch_at_login = CheckMenuItem::with_id(app, "autostart", "Запускать при входе в macOS",
+            let launch_at_login = CheckMenuItem::with_id(app, "autostart", "Запускать при входе",
                 autostart["managed"].as_bool().unwrap_or(false),
                 autostart["registered"].as_bool().unwrap_or(false), None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &rest, &launch_at_login, &quit])?;
             app.manage(ui::NativeUi{show:show.clone(),rest:rest.clone(),quit:quit.clone(),autostart:launch_at_login.clone(),guards:Mutex::new(vec![])});
             TrayIconBuilder::with_id("blincho")
-                .icon(tauri::image::Image::from_bytes(include_bytes!(
-                    "../../assets/trayTemplate.png"
-                ))?)
-                .icon_as_template(true)
+                .icon(tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
+                    include_bytes!("../../assets/trayTemplate.png")
+                } else { include_bytes!("../../assets/icon.png") })?)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip("Blincho")
                 .menu(&menu)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "autostart" => {
-                        use tauri_plugin_autostart::ManagerExt;
-                        let manager = app.autolaunch();
-                        let result = manager.is_enabled().map_err(|e| e.to_string()).and_then(|registered| {
-                            if registered { manager.disable().map_err(|e| e.to_string()) } else { startup::enable(app) }
+                        let result = startup::is_enabled(app).map_err(|e| e.to_string()).and_then(|registered| {
+                            if registered { startup::disable(app).map_err(|e| e.to_string()) } else { startup::enable(app) }
                         });
-                        let registered = manager.is_enabled().ok();
+                        let registered = startup::is_enabled(app).ok();
                         let _ = launch_at_login.set_checked(registered.unwrap_or(false));
                         if let Ok(mut status) = app.state::<Runtime>().autostart.lock() {
                             status["registered"] = json!(registered);
@@ -670,7 +623,7 @@ fn main() {
                         }
                     }
                     "show" => {
-                        if let Err(e) = foreground(app) {
+                        if let Err(e) = show_manual(app) {
                             eprintln!("Show: {e}");
                         }
                     }
@@ -785,8 +738,9 @@ fn main() {
             if let tauri::RunEvent::Exit = event {
                 if let Some(runtime)=app.try_state::<Runtime>() {runtime.quitting.store(true,Ordering::SeqCst);runtime.updates.dispose();}
             }
+            #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { has_visible_windows: false, .. } = event {
-                if let Err(error) = foreground(app) { eprintln!("Reopen: {error}"); }
+                if let Err(error) = show_manual(app) { eprintln!("Reopen: {error}"); }
             }
         });
 }

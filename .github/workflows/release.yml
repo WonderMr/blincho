@@ -21,6 +21,7 @@ concurrency:
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+  MACOSX_DEPLOYMENT_TARGET: '14.0'
 
 jobs:
   prepare:
@@ -84,17 +85,17 @@ jobs:
     needs: validate
     name: Package ${{ matrix.platform }} ${{ matrix.architecture }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         include:
           - { os: macos-15, platform: macos, architecture: arm64, rust-target: aarch64-apple-darwin }
           - { os: macos-15-intel, platform: macos, architecture: x64, rust-target: x86_64-apple-darwin }
-          - { os: windows-11-arm, platform: windows, architecture: arm64 }
-          - { os: windows-2022, platform: windows, architecture: x64 }
-          - { os: ubuntu-24.04-arm, platform: linux, architecture: arm64 }
-          - { os: ubuntu-24.04, platform: linux, architecture: x64 }
+          - { os: windows-11-arm, platform: windows, architecture: arm64, rust-target: aarch64-pc-windows-msvc }
+          - { os: windows-2022, platform: windows, architecture: x64, rust-target: x86_64-pc-windows-msvc }
+          - { os: ubuntu-24.04-arm, platform: linux, architecture: arm64, rust-target: aarch64-unknown-linux-gnu }
+          - { os: ubuntu-24.04, platform: linux, architecture: x64, rust-target: x86_64-unknown-linux-gnu }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -107,17 +108,48 @@ jobs:
           cache: npm
       - name: Validate tag and lockfile
         run: node scripts/release-check.mjs
-      - name: Install pinned Rust toolchain for Tauri macOS
-        if: matrix.platform == 'macos' && hashFiles('src-tauri/Cargo.toml') != ''
+      - name: Select runtime from immutable release version
+        id: runtime
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const parts = JSON.parse(fs.readFileSync('package.json', 'utf8')).version.split('.').map(Number);
+          const atLeast = minor => parts[0] > 1 || (parts[0] === 1 && parts[1] >= minor);
+          const tauri = fs.existsSync('src-tauri/Cargo.toml') && (atLeast(6) || ('${{ matrix.platform }}' === 'macos' && atLeast(5)));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tauri=${tauri}\n`);
+          NODE
+      - name: Install Linux native build and bundle dependencies
+        if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb dbus-x11 openbox
+      - name: Verify Windows native compiler and package extractor
+        if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true'
+        shell: pwsh
+        run: |
+          $component = if ('${{ matrix.architecture }}' -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.ARM64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
+          $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -products * -requires $component -property installationPath
+          if (-not $vs) { throw "Required native Visual Studio C++ tools are missing" }
+          if (-not (Get-Command 7z -ErrorAction SilentlyContinue)) { throw "7-Zip is required for installer verification" }
+      - name: Install pinned native Rust toolchain
+        if: steps.runtime.outputs.tauri == 'true'
         run: |
           rustup toolchain install 1.92.0 --profile minimal --component rustfmt --target ${{ matrix.rust-target }}
           rustup override set 1.92.0
       - name: Install pinned CMake for native history migration
-        if: matrix.platform == 'macos' && hashFiles('src-tauri/Cargo.toml') != ''
+        shell: bash
+        if: steps.runtime.outputs.tauri == 'true'
         run: |
-          python3 -m venv "$RUNNER_TEMP/blincho-build-tools"
-          "$RUNNER_TEMP/blincho-build-tools/bin/python" -m pip install --disable-pip-version-check --no-input cmake==3.31.10
-          "$RUNNER_TEMP/blincho-build-tools/bin/python" -c 'import cmake; from pathlib import Path; print(Path(cmake.__file__).parent / "data" / "bin")' >> "$GITHUB_PATH"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            python -m venv "$RUNNER_TEMP/blincho-build-tools"
+            build_python="$RUNNER_TEMP/blincho-build-tools/Scripts/python.exe"
+          else
+            python3 -m venv "$RUNNER_TEMP/blincho-build-tools"
+            build_python="$RUNNER_TEMP/blincho-build-tools/bin/python"
+          fi
+          "$build_python" -m pip install --disable-pip-version-check --no-input cmake==3.31.10
+          "$build_python" -c 'import cmake; from pathlib import Path; print(Path(cmake.__file__).parent / "data" / "bin")' >> "$GITHUB_PATH"
       - run: npm ci
       - name: Repair Windows test import for immutable v1.4.2 retry
         if: github.event_name == 'workflow_dispatch' && env.RELEASE_TAG == 'v1.4.2'
@@ -136,13 +168,26 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: Check Rust formatting
-        if: matrix.platform == 'macos' && hashFiles('src-tauri/Cargo.toml') != ''
+        if: steps.runtime.outputs.tauri == 'true'
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - name: Run locked Rust checks and tests
-        if: matrix.platform == 'macos' && hashFiles('src-tauri/Cargo.toml') != ''
+        if: steps.runtime.outputs.tauri == 'true'
         run: |
-          cargo check --manifest-path src-tauri/Cargo.toml --locked
-          cargo test --manifest-path src-tauri/Cargo.toml --locked
+          cargo check --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
+          cargo test --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
+      - name: Build native smoke executable
+        if: steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
+      - name: Smoke test native renderer, history and timer
+        if: matrix.platform != 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
+        run: node tests/tauri-cross-platform-smoke.cjs
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test Linux renderer, history and timer
+        if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
+        run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-openbox.log 2>&1 & node tests/tauri-cross-platform-smoke.cjs'
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
       - name: Build native packages
         run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
         env:

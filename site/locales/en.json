@@ -126,5 +126,6 @@
   "release.1.4.1": "30 interface languages, including Armenian, and update preferences for supported desktop packages. Choose automatic updates, ask before downloading, or turn off background update checks.",
   "release.1.5.0": "macOS now uses Tauri with a native timer and imports existing local history. Windows and Linux keep Electron. macOS updates remain manual.",
   "release.1.5.1": "macOS now uses Tauri with a native timer and imports existing local history. Windows and Linux keep Electron. macOS updates remain manual.",
-  "release.1.5.2": "macOS now uses Tauri with a native timer and imports existing local history. Windows and Linux keep Electron. macOS updates remain manual."
+  "release.1.5.2": "macOS now uses Tauri with a native timer and imports existing local history. Windows and Linux keep Electron. macOS updates remain manual.",
+  "release.1.6.0": "All desktop versions now use Rust and Tauri, including Windows and Linux on x64 and ARM64. Existing history is imported once. Updates are installed manually."
 }
