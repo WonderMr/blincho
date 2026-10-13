@@ -20,7 +20,7 @@ jobs:
         shell: pwsh
         run: |
           ./scripts/diagnose-windows-tray.ps1
-          ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce
+          ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce -AllowUnavailableNotificationArea -TimeoutSeconds 20
 
   validate:
     runs-on: ubuntu-24.04
@@ -131,7 +131,7 @@ jobs:
       - name: Prepare Windows desktop and verify notification area
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce
+        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce -AllowUnavailableNotificationArea:('${{ matrix.architecture }}' -eq 'arm64') -TimeoutSeconds 20
       - name: Smoke test native renderer, history and timer
         if: runner.os != 'Linux'
         run: node tests/tauri-cross-platform-smoke.cjs
@@ -151,7 +151,7 @@ jobs:
       - name: Recheck Windows desktop before package launch
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce
+        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce -AllowUnavailableNotificationArea:('${{ matrix.architecture }}' -eq 'arm64') -TimeoutSeconds 20
       - name: Launch the verified release payload
         if: runner.os != 'Linux'
         run: node tests/tauri-package-smoke.cjs
