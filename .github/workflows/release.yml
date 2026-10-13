@@ -208,6 +208,16 @@ jobs:
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-openbox.log 2>&1 & node tests/tauri-cross-platform-smoke.cjs'
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test window restoration after lock and sleep
+        if: matrix.platform != 'linux' && steps.runtime.outputs.tauri == 'true'
+        run: node tests/tauri-session-smoke.cjs
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test Linux window restoration after lock and sleep
+        if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true'
+        run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-session-openbox.log 2>&1 & node tests/tauri-session-smoke.cjs'
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
       - name: Build native packages
         run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
         env:
