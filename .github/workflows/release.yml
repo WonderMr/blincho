@@ -194,6 +194,10 @@ jobs:
       - name: Build native smoke executable
         if: steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         run: cargo build --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
+      - name: Prepare Windows desktop and verify notification area
+        if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
+        shell: pwsh
+        run: ./scripts/prepare-windows-desktop.ps1
       - name: Smoke test native renderer, history and timer
         if: matrix.platform != 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         run: node tests/tauri-cross-platform-smoke.cjs
@@ -208,6 +212,10 @@ jobs:
         run: node scripts/release-package.mjs ${{ matrix.platform }} ${{ matrix.architecture }}
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Recheck Windows desktop before package launch
+        if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
+        shell: pwsh
+        run: ./scripts/prepare-windows-desktop.ps1
       - name: Launch the verified Windows portable package
         if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         shell: pwsh
