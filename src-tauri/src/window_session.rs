@@ -187,6 +187,31 @@ impl Session {
             }
         }
     }
+
+    fn prepare_show(
+        &mut self,
+        restore: impl FnOnce(&Placement) -> Result<bool, String>,
+    ) -> Result<(), String> {
+        let placement = self
+            .saved
+            .take()
+            .map(|saved| saved.placement)
+            .or_else(|| self.deferred_placement.take());
+        // Reopening supersedes background state even if native geometry is
+        // temporarily unavailable. Only placement may be retried afterward.
+        self.ready_at = None;
+        if let Some(current) = &mut self.current {
+            current.visible = true;
+            current.minimized = false;
+        }
+        self.deferred_placement = placement;
+        if let Some(placement) = &self.deferred_placement {
+            if restore(placement)? {
+                self.deferred_placement = None;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Default)]
@@ -467,22 +492,7 @@ pub fn synchronize(app: &tauri::AppHandle) -> Result<(), String> {
 pub fn prepare_show(window: &tauri::WebviewWindow) -> Result<(), String> {
     let state = window.state::<WindowSession>();
     let mut session = state.0.lock().map_err(|e| e.to_string())?;
-    let placement = session
-        .saved
-        .as_ref()
-        .map(|saved| &saved.placement)
-        .or(session.deferred_placement.as_ref())
-        .cloned();
-    session.deferred_placement = match placement {
-        Some(placement) if !restore_placement(window, &placement, &displays(window)?, true)? => {
-            Some(placement)
-        }
-        _ => None,
-    };
-    // An explicit user action supersedes a pending automatic restore.
-    session.saved = None;
-    session.ready_at = None;
-    Ok(())
+    session.prepare_show(|placement| restore_placement(window, placement, &displays(window)?, true))
 }
 
 pub fn set_fullscreen(window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
@@ -636,6 +646,47 @@ mod tests {
         let saved = session.saved.unwrap();
         assert!(!saved.visible);
         assert!(saved.minimized);
+    }
+
+    #[test]
+    fn explicit_reopen_retains_only_geometry_after_temporary_placement_failure() {
+        for (visible, minimized) in [(false, false), (true, true)] {
+            let mut session = Session {
+                current: Some(SavedWindow {
+                    placement: placement(),
+                    visible,
+                    minimized,
+                }),
+                ..Default::default()
+            };
+            session.begin_absence();
+            session.ready_at = Some(Instant::now());
+            let error = session.prepare_show(|_| Err("Display temporarily unavailable".into()));
+            assert_eq!(error.unwrap_err(), "Display temporarily unavailable");
+            assert!(session.saved.is_none());
+            assert!(session.ready_at.is_none());
+            assert!(session.current.as_ref().unwrap().visible);
+            assert!(!session.current.as_ref().unwrap().minimized);
+            assert_eq!(
+                session.deferred_placement.as_ref().unwrap().position,
+                placement().position
+            );
+
+            // A staged native placement still needs a retry without restoring
+            // the old hidden/minimized presentation state.
+            session.prepare_show(|_| Ok(false)).unwrap();
+            assert!(session.saved.is_none());
+            assert!(session.deferred_placement.is_some());
+            session
+                .prepare_show(|retry| {
+                    assert_eq!(retry.position, placement().position);
+                    Ok(true)
+                })
+                .unwrap();
+            assert!(session.deferred_placement.is_none());
+            assert!(session.current.as_ref().unwrap().visible);
+            assert!(!session.current.as_ref().unwrap().minimized);
+        }
     }
 
     #[test]
