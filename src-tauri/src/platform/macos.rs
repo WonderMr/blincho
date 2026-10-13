@@ -21,6 +21,7 @@ extern "C" {
         callback: extern "C" fn(*mut c_void, i32),
     );
     fn blincho_window_level(pointer: *mut c_void, strict: i32);
+    fn blincho_strict_shield_count() -> i32;
 }
 
 pub fn presence() -> Presence {
@@ -51,6 +52,9 @@ pub fn notifications_initialize(clicked: extern "C" fn()) {
 }
 pub unsafe fn window_level(pointer: *mut c_void, strict: bool) {
     blincho_window_level(pointer, i32::from(strict));
+}
+pub fn strict_shield_count() -> i32 {
+    unsafe { blincho_strict_shield_count() }
 }
 fn bundled() -> bool {
     std::env::current_exe()

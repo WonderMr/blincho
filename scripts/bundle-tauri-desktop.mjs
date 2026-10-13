@@ -2,7 +2,7 @@ import { readFile, readdir, lstat, stat, realpath, mkdir, rm, mkdtemp, rename, c
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { hashFile } from './release-lib.mjs';
+import { artifactName, artifactNames, hashFile, usesLinuxInstallers } from './release-lib.mjs';
 import { tauriMetadata, verifyTauriExecutable } from './update-package.mjs';
 
 export const RUST_TARGETS = {
@@ -48,7 +48,41 @@ function assertUnsignedWindowsPackage(bytes) {
   if (certificate > bytes.length - 8 || bytes.readUInt32LE(certificate) || bytes.readUInt32LE(certificate + 4)) throw new Error('Tauri Windows installer must be unsigned');
 }
 
-// Use the pinned Tauri CLI for native NSIS/AppImage packaging. Portable Windows
+async function verifyLinuxInstaller(bundle, format, architecture, version, executable, temporary, invoke) {
+  const query = options => ({ stdio: 'pipe', encoding: 'utf8', ...options });
+  const identity = format === 'deb'
+    ? invoke('dpkg-deb', ['--show', '--showformat=${Package}\n${Version}\n${Architecture}\n', bundle], query()).stdout
+    : invoke('rpm', ['-qp', '--queryformat', '%{NAME}\n%{VERSION}\n%{ARCH}\n', bundle], query()).stdout;
+  const expectedArch = format === 'deb' ? { x64: 'amd64', arm64: 'arm64' }[architecture] : { x64: 'x86_64', arm64: 'aarch64' }[architecture];
+  if (String(identity).trim() !== `blincho\n${version}\n${expectedArch}`) throw new Error(`Invalid ${format} package identity or architecture`);
+  const dependencies = String(format === 'deb'
+    ? invoke('dpkg-deb', ['--field', bundle, 'Depends'], query()).stdout
+    : invoke('rpm', ['-qp', '--requires', bundle], query()).stdout);
+  const names = format === 'deb'
+    ? dependencies.trim().split(/,\s*/).map(item => item.split(/[\s(]/)[0])
+    : dependencies.trim().split(/\r?\n/).map(item => item.split(/\s/)[0]);
+  const required = format === 'deb'
+    ? ['libwebkit2gtk-4.1-0', 'libgtk-3-0', 'gstreamer1.0-plugins-base', 'gstreamer1.0-plugins-good']
+    : ['libwebkit2gtk-4.1.so.0()(64bit)', 'libgtk-3.so.0()(64bit)', 'gstreamer1-plugins-base', 'gstreamer1-plugins-good'];
+  const tray = format === 'deb' ? ['libayatana-appindicator3-1', 'libappindicator3-1'] : ['libayatana-appindicator3.so.1()(64bit)', 'libappindicator3.so.1()(64bit)'];
+  if (!required.every(name => names.includes(name)) || !tray.some(name => names.includes(name))) throw new Error(`Missing ${format} system runtime dependencies`);
+  const extracted = path.join(temporary, format);
+  await mkdir(extracted);
+  if (format === 'deb') invoke('dpkg-deb', ['--extract', bundle, extracted], query());
+  else invoke('bsdtar', ['-xf', bundle, '-C', extracted], query());
+  const packaged = path.join(extracted, 'usr/bin/blincho');
+  await verifyTauriExecutable(packaged, version, 'linux', architecture);
+  if (await hashFile(packaged) !== await hashFile(executable)) throw new Error(`Tauri ${format} executable differs from the verified Cargo executable`);
+  const entries = await readdir(path.join(extracted, 'usr/share/applications'), { withFileTypes: true });
+  if (!entries.some(entry => entry.isFile() && entry.name.endsWith('.desktop'))) throw new Error(`Missing ${format} desktop entry`);
+  const icons = await filesNamed(path.join(extracted, 'usr/share/icons'), 'blincho.png');
+  if (!icons.length) throw new Error(`Missing ${format} application icon`);
+  // These installed packages use system WebKitGTK instead of a portable AppDir.
+  const libraries = await filesNamed(extracted, 'libwebkit2gtk-4.1.so.0');
+  if (libraries.length) throw new Error(`Unexpected bundled WebKitGTK in ${format} package`);
+}
+
+// Use the pinned Tauri CLI for native NSIS/AppImage/deb/rpm packaging. Portable Windows
 // ships its self-contained Rust executable. Linux tar.gz ships the same AppDir
 // and libraries as the AppImage, including its AppRun launcher.
 export async function packageTauriDesktop(platform, architecture, version, receipt, run = spawnSync) {
@@ -65,21 +99,26 @@ export async function packageTauriDesktop(platform, architecture, version, recei
     return result;
   };
   const output = path.resolve('src-tauri/target', target, 'release');
-  const bundleType = platform === 'windows' ? 'nsis' : 'appimage';
+  const installers = platform === 'linux' && usesLinuxInstallers(version);
+  const bundleTypes = platform === 'windows' ? ['nsis'] : installers ? ['appimage', 'deb', 'rpm'] : ['appimage'];
+  const bundleType = bundleTypes[0];
   const bundleDirectory = path.join(output, 'bundle', bundleType);
   // A previous installer must never be mistaken for this build's output.
-  await rm(bundleDirectory, { recursive: true, force: true });
-  invoke(process.execPath, ['node_modules/@tauri-apps/cli/tauri.js', 'build', '--target', target, '--bundles', bundleType, '--ci', '--no-sign', '--no-binary-patching', '--', '--locked']);
+  for (const type of bundleTypes) await rm(path.join(output, 'bundle', type), { recursive: true, force: true });
+  invoke(process.execPath, ['node_modules/@tauri-apps/cli/tauri.js', 'build', '--target', target, '--bundles', bundleTypes.join(','), '--ci', '--no-sign', '--no-binary-patching', '--', '--locked']);
   const executable = path.join(output, platform === 'windows' ? 'blincho.exe' : 'blincho');
   await verifyTauriExecutable(executable, version, runtimePlatform, architecture);
   const bundle = await onlyArtifact(bundleDirectory, platform === 'windows' ? '-setup.exe' : '.AppImage');
   const temporary = await mkdtemp(path.join(tmpdir(), 'blincho-package-'));
   const upload = path.resolve('release-upload');
   await mkdir(upload, { recursive: true });
-  const record = async (source, name) => {
-    const destination = path.join(upload, name);
-    if (source !== destination) await copyFile(source, destination);
-    receipt.artifacts.push({ name, size: (await stat(destination)).size, sha256: await hashFile(destination), sha512: await hashFile(destination, 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true });
+  const record = async (source, target) => {
+    for (const name of artifactNames(version, platform, architecture, target)) {
+      const destination = path.join(upload, name);
+      if (source !== destination) await copyFile(source, destination);
+      if (platform === 'linux' && target === 'AppImage') await chmod(destination, 0o755);
+      receipt.artifacts.push({ name, size: (await stat(destination)).size, sha256: await hashFile(destination), sha512: await hashFile(destination, 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true });
+    }
   };
   try {
     if (platform === 'windows') {
@@ -90,9 +129,16 @@ export async function packageTauriDesktop(platform, architecture, version, recei
       if (installed.length !== 1) throw new Error('Tauri NSIS installer must contain one native executable');
       await verifyTauriExecutable(installed[0], version, runtimePlatform, architecture);
       if (await hashFile(installed[0]) !== await hashFile(executable)) throw new Error('Tauri NSIS executable differs from the verified portable executable');
-      await record(bundle, `Blincho-${version}-windows-${architecture}-setup.exe`);
-      await record(executable, `Blincho-${version}-windows-${architecture}-portable.exe`);
+      await record(bundle, 'setup');
+      await record(executable, 'portable');
     } else {
+      if (installers) {
+        for (const format of ['deb', 'rpm']) {
+          const installer = await onlyArtifact(path.join(output, 'bundle', format), `.${format}`);
+          await verifyLinuxInstaller(installer, format, architecture, version, executable, temporary, invoke);
+          await record(installer, format);
+        }
+      }
       // linuxdeploy may adjust ELF RPATHs when preparing its AppDir. Verify that
       // actual output and compare the AppImage payload with it, rather than
       // incorrectly requiring it to match the pre-deployment Cargo ELF bytes.
@@ -109,9 +155,9 @@ export async function packageTauriDesktop(platform, architecture, version, recei
       const resolvedLauncher = await realpath(launcher);
       if (!resolvedLauncher.startsWith(`${await realpath(appDirectory)}${path.sep}`) || !((await stat(launcher)).mode & 0o111)) throw new Error('Missing or unsafe AppImage launcher');
       if (!(await lstat(path.join(appDirectory, 'usr/lib'))).isDirectory()) throw new Error('AppImage runtime libraries are missing');
-      const archiveRoot = `Blincho-${version}-linux-${architecture}`;
+      const archiveName = artifactName(version, platform, architecture, 'tar.gz');
+      const archiveRoot = archiveName.slice(0, -'.tar.gz'.length);
       await rename(appDirectory, path.join(temporary, archiveRoot));
-      const archiveName = `${archiveRoot}.tar.gz`;
       const archive = path.join(upload, archiveName);
       invoke('tar', ['-czf', archive, '-C', temporary, archiveRoot]);
       // Inspect final archive bytes rather than trusting only the staging tree.
@@ -121,9 +167,8 @@ export async function packageTauriDesktop(platform, architecture, version, recei
       const archivedExecutable = path.join(verifyDirectory, archiveRoot, 'usr/bin/blincho');
       await verifyTauriExecutable(archivedExecutable, version, runtimePlatform, architecture);
       if (await hashFile(archivedExecutable) !== bundledHash) throw new Error('Tauri archive executable differs from the verified AppImage executable');
-      await record(bundle, `Blincho-${version}-linux-${architecture}.AppImage`);
-      await chmod(path.join(upload, `Blincho-${version}-linux-${architecture}.AppImage`), 0o755);
-      await record(archive, archiveName);
+      await record(bundle, 'AppImage');
+      await record(archive, 'tar.gz');
     }
   } finally {
     await rm(temporary, { recursive: true, force: true });

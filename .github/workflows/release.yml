@@ -123,7 +123,7 @@ jobs:
         if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb dbus-x11 openbox
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good rpm libarchive-tools xvfb dbus-x11 openbox
       - name: Verify Windows native compiler and package extractor
         if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true'
         shell: pwsh
@@ -221,14 +221,17 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
-          $env:BLINCHO_PROTOTYPE_EXECUTABLE = "$PWD/release-upload/Blincho-$version-windows-${{ matrix.architecture }}-portable.exe"
+          $artifact = node --input-type=module -e 'import { artifactName } from "./scripts/release-lib.mjs"; console.log(artifactName(...process.argv.slice(1)))' $version windows '${{ matrix.architecture }}' portable
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve portable package filename' }
+          $env:BLINCHO_PROTOTYPE_EXECUTABLE = Join-Path "$PWD/release-upload" $artifact
           node tests/tauri-cross-platform-smoke.cjs
       - name: Launch the verified Linux AppImage
         if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         shell: bash
         run: |
           version=$(node -p "require('./package.json').version")
-          export BLINCHO_PROTOTYPE_EXECUTABLE="$PWD/release-upload/Blincho-$version-linux-${{ matrix.architecture }}.AppImage"
+          artifact=$(node --input-type=module -e 'import { artifactName } from "./scripts/release-lib.mjs"; console.log(artifactName(...process.argv.slice(1)))' "$version" linux '${{ matrix.architecture }}' AppImage)
+          export BLINCHO_PROTOTYPE_EXECUTABLE="$PWD/release-upload/$artifact"
           export APPIMAGE_EXTRACT_AND_RUN=1
           xvfb-run -a dbus-run-session -- bash -c 'openbox >/dev/null 2>&1 & node tests/tauri-cross-platform-smoke.cjs'
       - name: Launch the verified macOS archive
@@ -237,7 +240,8 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           bundle_directory=$(mktemp -d "$RUNNER_TEMP/blincho-archive.XXXXXX")
-          ditto -x -k "release-upload/Blincho-$version-macos-${{ matrix.architecture }}.zip" "$bundle_directory"
+          artifact=$(node --input-type=module -e 'import { artifactName } from "./scripts/release-lib.mjs"; console.log(artifactName(...process.argv.slice(1)))' "$version" macos '${{ matrix.architecture }}' zip)
+          ditto -x -k "release-upload/$artifact" "$bundle_directory"
           export BLINCHO_PROTOTYPE_EXECUTABLE="$bundle_directory/Blincho.app/Contents/MacOS/blincho"
           node tests/tauri-cross-platform-smoke.cjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

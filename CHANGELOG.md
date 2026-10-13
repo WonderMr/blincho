@@ -2,6 +2,13 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.6.1]
+
+- Keep strict macOS breaks above other applications' fullscreen Spaces and consume fresh scroll input with temporary native shield panels.
+- Restore window presentation after the break deadline or cancellation and refresh shields when display geometry changes.
+- Give downloads descriptive product, platform, architecture and package names while retaining compatibility links for existing update clients.
+- Add Linux Debian and RPM installers for x64 and ARM64, with verified receipts, checksums and manual installation.
+
 ## [1.6.0]
 
 - Move Windows and Linux desktop packages to Tauri and Rust, alongside macOS, on x64 and ARM64.

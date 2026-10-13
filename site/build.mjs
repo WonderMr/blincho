@@ -2,6 +2,7 @@ import {readFile, writeFile, mkdir, cp, rm} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import { writeUpdateFeeds, createUpdateFeeds } from '../scripts/update-feed.mjs';
+import { artifactName, describeArtifact } from '../scripts/release-lib.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = path.join(root, 'site');
@@ -53,10 +54,17 @@ for (const lang of languages) {
   }
   html=html.replace(/(<div[^>]+data-download-platform="([^"]+)"[^>]*>)[\s\S]*?(<\/div>)/g,(_,open,platform,close)=>{
     const assets=latest?.assets.filter(a=>a.platform===platform)||[];
-    const links=assets.map(a=>{
+    const preferred=assets.filter(a=>{
+      const target=platform==='windows'?(a.kind==='installer'?'setup':'portable'):a.format;
+      const canonical=artifactName(latest.version,platform,a.architecture,target);
+      return a.name===canonical||!assets.some(other=>other.name===canonical);
+    });
+    const links=preferred.map(a=>{
       if(!/^[a-f0-9]{64}$/.test(a.sha256)||!Number.isSafeInteger(a.size)||a.size<=0)throw new Error('Invalid download metadata');
+      const description=describeArtifact(a.name,latest.version);
+      if(!description||['platform','architecture','format','kind'].some(key=>description[key]!==a[key])||a.url!==`https://github.com/${config.repository}/releases/download/${latest.tag}/${a.name}`)throw new Error('Invalid download filename or URL');
       const arch=platform==='macos'?(a.architecture==='arm64'?'Apple silicon':'Intel'):(a.architecture==='arm64'?'ARM64':'x64');
-      return `<a class="download-file" href="${releaseUrl(a.url)}"><span class="download-file-label">${arch} · ${escape(a.format)}</span><span class="download-file-detail">${t(a.kind==='installer'?'download.installer':'download.portable')} · ${(a.size/1048576).toFixed(1)} MB ↗</span><span class="download-file-detail">${t(a.signing==='signed-notarized'?'download.signedNotarized':a.signing==='unsigned'?'download.unsigned':'download.signingUnknown')} · ${t(['mac-signed','nsis','appimage'].includes(a.updateSupport)?'download.inAppUpdates':'download.manualUpdates')}</span></a>`;
+      return `<a class="download-file" href="${releaseUrl(a.url)}" download="${escape(a.name)}" title="${escape(a.name)}"><span class="download-file-label">${arch} · ${escape(a.format)}</span><span class="download-file-detail">${t(a.kind==='installer'?'download.installer':'download.portable')} · ${(a.size/1048576).toFixed(1)} MB ↗</span><span class="download-file-detail">${t(a.signing==='signed-notarized'?'download.signedNotarized':a.signing==='unsigned'?'download.unsigned':'download.signingUnknown')} · ${t(['mac-signed','nsis','appimage'].includes(a.updateSupport)?'download.inAppUpdates':'download.manualUpdates')}</span></a>`;
     }).join('');
     return open+(links||`<p>${t('download.preparing')}</p>`)+close;
   });

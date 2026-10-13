@@ -24,6 +24,62 @@ async function options(tag = 'v1.3.2') {
   return { requiredTag: tag, generatedAt: '2026-10-12T12:00:00Z', checksumsByTag: new Map([[tag, new Map(expectedArtifacts(tag.slice(1)).map(name => [name, digest]))]]) };
 }
 
+test('descriptive downloads start after published 1.6.0 and retain primary filenames used by older clients', async () => {
+  const { artifactName, artifactNames, expectedArtifacts, describeArtifact, parseChecksums, usesLinuxInstallers } = await library;
+  for (const version of ['1.4.2', '1.5.0', '1.5.3', '1.6.0']) {
+    assert.equal(expectedArtifacts(version).length, 10);
+    assert.equal(artifactName(version, 'macos', 'arm64', 'zip'), `Blincho-${version}-macos-arm64.zip`);
+    assert.equal(artifactName(version, 'windows', 'x64', 'setup'), `Blincho-${version}-windows-x64-setup.exe`);
+    assert.equal(usesLinuxInstallers(version), false);
+    for (const format of ['deb', 'rpm']) assert.throws(() => artifactName(version, 'linux', 'x64', format), /Invalid download package target/);
+  }
+  const expected = [
+    'Blincho-Screen-Breaks-1.6.1-macOS-ARM64-Portable.zip',
+    'Blincho-Screen-Breaks-1.6.1-macOS-x64-Portable.zip',
+    'Blincho-Screen-Breaks-1.6.1-Windows-ARM64-Setup.exe',
+    'Blincho-Screen-Breaks-1.6.1-Windows-ARM64-Portable.exe',
+    'Blincho-Screen-Breaks-1.6.1-Windows-x64-Setup.exe',
+    'Blincho-Screen-Breaks-1.6.1-Windows-x64-Portable.exe',
+    'Blincho-Screen-Breaks-1.6.1-Linux-ARM64-Portable.AppImage',
+    'Blincho-Screen-Breaks-1.6.1-Linux-ARM64-Portable.tar.gz',
+    'Blincho-Screen-Breaks-1.6.1-Linux-ARM64-Setup.deb',
+    'Blincho-Screen-Breaks-1.6.1-Linux-ARM64-Setup.rpm',
+    'Blincho-Screen-Breaks-1.6.1-Linux-x64-Portable.AppImage',
+    'Blincho-Screen-Breaks-1.6.1-Linux-x64-Portable.tar.gz',
+    'Blincho-Screen-Breaks-1.6.1-Linux-x64-Setup.deb',
+    'Blincho-Screen-Breaks-1.6.1-Linux-x64-Setup.rpm',
+  ].sort();
+  const names = expectedArtifacts('1.6.1');
+  assert.deepEqual(names.filter(name => name.startsWith('Blincho-Screen-Breaks-')), expected);
+  assert.equal(names.length, 20);
+  assert.equal(new Set(names).size, 20);
+  assert.equal(usesLinuxInstallers('1.6.1'), true);
+  assert.equal(expectedArtifacts('1.6.1', { legacy: true }).length, 10);
+  for (const arch of ['arm64', 'x64']) {
+    for (const [platform, target] of [['macos', 'zip'], ['windows', 'setup'], ['linux', 'AppImage']]) {
+      const [canonical, alias] = artifactNames('1.6.1', platform, arch, target);
+      assert.ok(names.includes(alias));
+      assert.deepEqual(describeArtifact(canonical, '1.6.1'), describeArtifact(alias, '1.6.1'));
+    }
+    for (const format of ['deb', 'rpm']) {
+      const name = artifactName('1.6.1', 'linux', arch, format);
+      assert.deepEqual(artifactNames('1.6.1', 'linux', arch, format), [name]);
+      assert.deepEqual(describeArtifact(name, '1.6.1'), { platform: 'linux', architecture: arch, format, kind: 'installer' });
+      assert.equal(describeArtifact(`Blincho-1.6.1-linux-${arch}.${format}`, '1.6.1'), null);
+    }
+  }
+  for (const name of names) {
+    assert.match(name, /^[A-Za-z0-9.-]+$/);
+    assert.ok(describeArtifact(name, '1.6.1'));
+    assert.equal(describeArtifact(name, '1.6.0'), null);
+  }
+  assert.equal(parseChecksums(names.map(name => `${digest}  ${name}\n`).join('')).size, 20);
+  assert.match(artifactName('2.0.0', 'linux', 'x64', 'AppImage'), /^Blincho-Screen-Breaks-2\.0\.0-Linux-x64-Portable\.AppImage$/);
+  assert.match(artifactName('2.0.0', 'linux', 'x64', 'deb'), /^Blincho-Screen-Breaks-2\.0\.0-Linux-x64-Setup\.deb$/);
+  for (const args of [['../bad', 'macos', 'arm64', 'zip'], ['1.6.1', 'macos', '../arm64', 'zip'], ['1.6.1', 'linux', 'x64', 'setup'], ['1.6.1', 'windows', 'x64', 'tar.gz']]) assert.throws(() => artifactName(...args));
+  for (const name of [expected[0].replace('Linux', 'linux'), expected[0].replace('Portable', 'Setup'), '../' + expected[0], expected[0] + '.exe']) assert.equal(describeArtifact(name, '1.6.1'), null);
+});
+
 test('release tags must match package and both lockfile versions exactly', async () => {
   const { assertVersionMatch, versionFromTag } = await library;
   const pkg = { name: 'blincho', version: '1.3.2' };

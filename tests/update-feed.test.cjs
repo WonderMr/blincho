@@ -12,18 +12,24 @@ const github = import('../scripts/release-github.mjs');
 const version = '1.4.0';
 const hash = (bytes, algorithm = 'sha256', encoding = 'hex') => createHash(algorithm).update(bytes).digest(encoding);
 
-async function fixture(releaseVersion = version, signed = false) {
+async function fixture(releaseVersion = version, signed = false, { legacy = false } = {}) {
   const lib = await library;
   const { packageSupport } = await packaging;
-  const files = new Map(lib.expectedArtifacts(releaseVersion).map(name => [name, Buffer.from(`package fixture ${name}`)]));
+  const names = lib.expectedArtifacts(releaseVersion, { legacy });
+  const files = new Map(names.map(name => {
+    const item = lib.describeArtifact(name, releaseVersion);
+    const target = item.platform === 'windows' ? item.kind === 'installer' ? 'setup' : 'portable' : item.format;
+    return [name, Buffer.from(`package fixture ${lib.artifactName(releaseVersion, item.platform, item.architecture, target)}`)];
+  }));
   const receipts = lib.UPDATE_PLATFORMS.flatMap(platform => ['arm64', 'x64'].map(arch => ({
     schemaVersion: 1, version: releaseVersion, platform, arch,
     ...(lib.usesTauriMac(releaseVersion) ? { runtime: lib.usesTauriPlatform(releaseVersion, platform) ? 'tauri' : 'electron' } : {}),
-    artifacts: lib.expectedArtifacts(releaseVersion).filter(name => {
+    artifacts: names.filter(name => {
       const item = lib.describeArtifact(name, releaseVersion);
       return item.platform === lib.SITE_PLATFORMS[platform] && item.architecture === arch;
     }).map(name => {
-      const target = name.endsWith('.zip') ? 'zip' : name.endsWith('-setup.exe') ? 'nsis' : name.endsWith('-portable.exe') ? 'portable' : name.endsWith('.AppImage') ? 'AppImage' : 'tar.gz';
+      const item = lib.describeArtifact(name, releaseVersion);
+      const target = item.format === 'zip' ? 'zip' : item.format === 'exe' ? item.kind === 'installer' ? 'nsis' : 'portable' : item.format;
       if (lib.usesTauriPlatform(releaseVersion, platform)) return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true };
       const support = packageSupport(platform, arch, target, platform === 'darwin' && signed);
       return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: support.packageType, signed: support.signed, notarized: support.signed, updaterConfig: true };
@@ -38,12 +44,13 @@ async function fixture(releaseVersion = version, signed = false) {
   return { files, receipts, checksums, release, options, manifest: lib.createManifest([release], options) };
 }
 
-async function runPublisher({ mutateDraft = () => {}, mutatePublished = () => {} } = {}) {
-  const f = await fixture('1.4.1');
+async function runPublisher({ releaseVersion = '1.4.1', mutateDraft = () => {}, mutatePublished = () => {} } = {}) {
+  const tag = `v${releaseVersion}`;
+  const f = await fixture(releaseVersion);
   const draftTag = 'untagged-752e02b9c4ead7c770a3';
   const draft = { ...structuredClone(f.release), draft: true, published_at: null,
-    html_url: f.release.html_url.replace('v1.4.1', draftTag),
-    assets: f.release.assets.map(asset => ({ ...asset, browser_download_url: asset.browser_download_url.replace('v1.4.1/', `${draftTag}/`) })),
+    html_url: f.release.html_url.replace(tag, draftTag),
+    assets: f.release.assets.map(asset => ({ ...asset, browser_download_url: asset.browser_download_url.replace(`${tag}/`, `${draftTag}/`) })),
   };
   mutateDraft(draft);
   mutatePublished(f.release);
@@ -51,9 +58,9 @@ async function runPublisher({ mutateDraft = () => {}, mutatePublished = () => {}
   try {
     await mkdir(path.join(directory, 'release-upload'));
     for (const [name, bytes] of f.files) await writeFile(path.join(directory, 'release-upload', name), bytes);
-    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version: '1.4.1' }));
-    await writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ version: '1.4.1', packages: { '': { version: '1.4.1' } } }));
-    await writeFile(path.join(directory, 'CHANGELOG.md'), '## [1.4.1]\n\n- Example curated release changes.\n');
+    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version: releaseVersion }));
+    await writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ version: releaseVersion, packages: { '': { version: releaseVersion } } }));
+    await writeFile(path.join(directory, 'CHANGELOG.md'), `## [${releaseVersion}]\n\n- Example curated release changes.\n`);
     await writeFile(path.join(directory, 'releases.json'), JSON.stringify({ draft, published: f.release }));
     // Stub the publisher's two external boundaries before importing it. No gh
     // process or network request can escape this isolated child process.
@@ -63,10 +70,11 @@ async function runPublisher({ mutateDraft = () => {}, mutatePublished = () => {}
       import { EventEmitter } from 'node:events';
       import { syncBuiltinESMExports } from 'node:module';
       const releases = JSON.parse(readFileSync('releases.json', 'utf8'));
+      const tag = ${JSON.stringify(tag)};
       let published = false;
       let commandPending = false;
       childProcess.spawn = (command, args) => {
-        if (command !== 'gh' || args[0] !== 'release' || !['upload', 'edit'].includes(args[1]) || args[2] !== 'v1.4.1' || args.at(-2) !== '--repo' || args.at(-1) !== 'WonderMr/blincho') throw new Error('Unexpected CLI operation');
+        if (command !== 'gh' || args[0] !== 'release' || !['upload', 'edit'].includes(args[1]) || args[2] !== tag || args.at(-2) !== '--repo' || args.at(-1) !== 'WonderMr/blincho') throw new Error('Unexpected CLI operation');
         appendFileSync('calls.jsonl', JSON.stringify(args) + '\\n');
         if (args[1] === 'edit') {
           if (!args.includes('--draft=false')) throw new Error('Expected publication command');
@@ -89,7 +97,7 @@ async function runPublisher({ mutateDraft = () => {}, mutatePublished = () => {}
     `);
     const result = spawnSync(process.execPath, ['--import', require('node:url').pathToFileURL(path.join(directory, 'mock-github.mjs')).href, path.resolve(__dirname, '../scripts/release-publish.mjs')], {
       cwd: directory, encoding: 'utf8', timeout: 30_000,
-      env: { ...process.env, RELEASE_TAG: 'v1.4.1', GITHUB_REPOSITORY: 'WonderMr/blincho', GH_TOKEN: 'fixture-token' },
+      env: { ...process.env, RELEASE_TAG: tag, GITHUB_REPOSITORY: 'WonderMr/blincho', GH_TOKEN: 'fixture-token' },
     });
     if (result.error) throw result.error;
     const calls = (await readFile(path.join(directory, 'calls.jsonl'), 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; })).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
@@ -102,6 +110,22 @@ test('publisher projects temporary GitHub draft release and asset URLs before pu
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.calls.map(args => args[1]), ['upload', 'edit']);
   assert.match(result.stdout, /Published v1\.4\.1 with all packages and verified SHA-256 digests/);
+});
+
+test('1.6.1 publisher verifies all descriptive packages, legacy aliases and receipts before publication', async () => {
+  const lib = await library;
+  const result = await runPublisher({ releaseVersion: '1.6.1' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.calls.map(args => args[1]), ['upload', 'edit']);
+  const uploaded = result.calls[0].slice(3, -3).map(name => path.basename(name)).sort();
+  assert.deepEqual(uploaded, [...lib.expectedReleaseFiles('1.6.1'), 'SHA256SUMS.txt'].sort());
+  assert.equal(uploaded.length, 27);
+  const tampered = await runPublisher({ releaseVersion: '1.6.1', mutateDraft: release => {
+    release.assets.find(item => item.name === 'Blincho-1.6.1-linux-x64.AppImage').digest = `sha256:${'a'.repeat(64)}`;
+  } });
+  assert.notEqual(tampered.status, 0);
+  assert.match(tampered.stderr, /Uploaded bytes do not match/);
+  assert.deepEqual(tampered.calls.map(args => args[1]), ['upload']);
 });
 
 test('publisher refuses unverified draft bytes and unrelated draft URLs before publication', async t => {
@@ -265,6 +289,12 @@ test('unsigned mac is manual, signing stays per asset and older retry cannot low
 
 test('CI installs Rust for all native jobs and verifies packages before publication', async () => {
   const workflow = await readFile(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8');
+  const ci = await readFile(path.join(__dirname, '../.github/workflows/ci.yml'), 'utf8');
+  for (const source of [workflow, ci]) {
+    const install = source.match(/sudo apt-get install[^\n]+/)[0];
+    assert.match(install, /\brpm\b/);
+    assert.match(install, /\blibarchive-tools\b/);
+  }
   assert.match(workflow, /if: steps\.runtime\.outputs\.tauri == 'true'\s*\n\s*run: \|\s*\n\s*rustup toolchain install 1\.92\.0/);
   assert.doesNotMatch(workflow, /secrets\.(?:MAC_CSC_LINK|MAC_CSC_KEY_PASSWORD|MAC_SIGNING_IDENTITY|APPLE_ID|APPLE_APP_SPECIFIC_PASSWORD|APPLE_TEAM_ID)/);
   assert.match(workflow, /needs: \[validate, package\]/);
@@ -316,6 +346,96 @@ test('1.6.0 Tauri releases retain downloads for every OS while feeds retain comp
       assert.throws(() => lib.validateReceipt(broken, '1.6.0'));
     }
   }
+});
+
+test('descriptive packages and legacy aliases round trip through receipt, checksum and manifest verification', async () => {
+  const lib = await library;
+  const { loadUpdateReceipts } = await github;
+  for (const [releaseVersion, legacy] of [['1.6.0', false], ['1.6.1', false]]) {
+    const f = await fixture(releaseVersion, false, { legacy });
+    const count = releaseVersion === '1.6.1' && !legacy ? 20 : 10;
+    assert.equal(f.manifest.releases[0].assets.length, count);
+    const fetched = await loadUpdateReceipts([f.release], f.options.checksumsByTag, { fetchImpl: async url => new Response(f.files.get(url.split('/').at(-1))) });
+    const verified = lib.createManifest([f.release], { ...f.options, receiptsByTag: fetched });
+    assert.deepEqual(verified.releases[0].assets.map(item => item.name), f.manifest.releases[0].assets.map(item => item.name));
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-download-name-gate-'));
+    try {
+      for (const [name, bytes] of f.files) await writeFile(path.join(directory, name), bytes);
+      assert.equal((await lib.inspectArtifacts(directory, releaseVersion)).length, count + 6);
+      assert.equal((await lib.readLocalReceipts(directory, releaseVersion)).length, 6);
+      if (count === 20) {
+        const receipt = f.receipts.find(item => item.platform === 'win32');
+        const alias = receipt.artifacts.find(item => item.name.endsWith('-setup.exe'));
+        const canonical = receipt.artifacts.find(item => item.name.endsWith('-Setup.exe'));
+        assert.equal(alias.sha256, canonical.sha256);
+        assert.equal(alias.sha512, canonical.sha512);
+        const changed = structuredClone(receipt);
+        changed.artifacts.find(item => item.name === alias.name).sha256 = 'a'.repeat(64);
+        assert.throws(() => lib.validateReceipt(changed, releaseVersion), /alias differs/);
+        changed.artifacts = receipt.artifacts.filter(item => item.name !== alias.name);
+        assert.throws(() => lib.validateReceipt(changed, releaseVersion), /Incomplete/);
+        await writeFile(path.join(directory, alias.name), 'tampered compatibility alias');
+        await assert.rejects(lib.inspectArtifacts(directory, releaseVersion), /differs from package bytes/);
+      }
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  }
+});
+
+test('modern release receipts reject legacy-only package sets without Linux installers', async () => {
+  const lib = await library;
+  const historical = await fixture('1.6.0');
+  const outdated = structuredClone(historical.receipts);
+  for (const receipt of outdated) {
+    receipt.version = '1.6.1';
+    for (const item of receipt.artifacts) item.name = item.name.replace('-1.6.0-', '-1.6.1-');
+    assert.throws(() => lib.validateReceipt(receipt, '1.6.1'), /Incomplete/);
+  }
+  assert.throws(() => lib.expectedReleaseFiles('1.6.1', outdated), /Incomplete/);
+  for (const releaseVersion of ['1.6.1', '1.7.0']) await assert.rejects(fixture(releaseVersion, false, { legacy: true }), /Incomplete/);
+});
+
+test('Linux deb and rpm installers require complete verified manual metadata and stay out of updater feeds', async () => {
+  const lib = await library;
+  const { createUpdateFeeds } = await feeds;
+  const f = await fixture('1.6.1');
+  const installers = f.manifest.releases[0].assets.filter(item => ['deb', 'rpm'].includes(item.format));
+  assert.equal(installers.length, 4);
+  assert.ok(installers.every(item => item.platform === 'linux' && item.kind === 'installer' && item.runtime === 'tauri' && item.updateSupport === 'manual' && item.signing === 'unsigned'));
+  assert.equal(lib.expectedReleaseFiles('1.6.1').length, 26);
+  assert.equal(f.checksums.size, 26);
+  assert.equal(f.release.assets.length, 27);
+  assert.deepEqual(createUpdateFeeds(f.manifest), []);
+  const previous = await fixture('1.5.3');
+  const compatible = createUpdateFeeds({ ...f.manifest, releases: [...f.manifest.releases, ...previous.manifest.releases] });
+  assert.equal(compatible.length, 4);
+  assert.ok(compatible.every(item => item.info.version === '1.5.3'));
+  for (const format of ['deb', 'rpm']) {
+    const name = lib.artifactName('1.6.1', 'linux', 'x64', format);
+    const receipt = f.receipts.find(item => item.platform === 'linux' && item.arch === 'x64');
+    const incomplete = structuredClone(receipt);
+    incomplete.artifacts = incomplete.artifacts.filter(item => item.name !== name);
+    assert.throws(() => lib.validateReceipt(incomplete, '1.6.1'), /Incomplete/);
+    const unsupported = structuredClone(receipt);
+    unsupported.artifacts.find(item => item.name === name).packageType = 'appimage';
+    assert.throws(() => lib.validateReceipt(unsupported, '1.6.1'), /manual bundle metadata/);
+    const missing = structuredClone(f.release);
+    missing.assets = missing.assets.filter(item => item.name !== name);
+    assert.throws(() => lib.createManifest([missing], f.options), /missing or has unexpected/);
+    const checksums = new Map(f.checksums);
+    checksums.delete(name);
+    assert.throws(() => lib.createManifest([f.release], { ...f.options, checksumsByTag: new Map([['v1.6.1', checksums]]) }));
+    const injected = structuredClone(f.manifest);
+    const asset = injected.releases[0].assets.find(item => item.name === name);
+    asset.updateSupport = 'appimage';
+    asset.runtime = 'electron';
+    assert.throws(() => createUpdateFeeds(injected), /Unsafe package/);
+  }
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-linux-installer-gate-'));
+  try {
+    for (const [name, bytes] of f.files) await writeFile(path.join(directory, name), bytes);
+    await writeFile(path.join(directory, installers[0].name), 'tampered Linux installer');
+    await assert.rejects(lib.inspectArtifacts(directory, '1.6.1'), /differs from package bytes/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test('1.5.0 publication gate requires Tauri bundle verification and exact package bytes', async () => {
@@ -405,7 +525,7 @@ test('website renders per-download signing and emits feeds only from validated m
     await writeFile(path.join(directory, 'site/releases.json'), JSON.stringify(f.manifest));
     execFileSync(process.execPath, ['site/build.mjs'], { cwd: directory });
     const html = await readFile(path.join(directory, 'site-dist/en/index.html'), 'utf8');
-    const links = [...html.matchAll(/<a class="download-file" href="([^"]+)">([\s\S]*?)<\/a>/g)];
+    const links = [...html.matchAll(/<a class="download-file" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)];
     assert.equal(links.length, 10);
     for (const [, url, content] of links) {
       assert.ok(content.includes(url.includes('-macos-') ? labels['download.signedNotarized'] : labels['download.unsigned']));
@@ -415,5 +535,45 @@ test('website renders per-download signing and emits feeds only from validated m
     f.manifest.releases[0].assets.find(item => item.updateSupport === 'nsis').url = 'https://evil.example/update.exe';
     await writeFile(path.join(directory, 'site/releases.json'), JSON.stringify(f.manifest));
     assert.throws(() => execFileSync(process.execPath, ['site/build.mjs'], { cwd: directory, stdio: 'pipe' }), /Invalid verified update asset/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('website prefers descriptive filenames while retaining exact historical download names', async () => {
+  const { execFileSync } = require('node:child_process');
+  const lib = await library;
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-download-name-site-'));
+  const root = path.resolve(__dirname, '..');
+  try {
+    await cp(path.join(root, 'site'), path.join(directory, 'site'), { recursive: true });
+    await mkdir(path.join(directory, 'scripts'));
+    await mkdir(path.join(directory, 'assets'));
+    for (const name of ['release-lib.mjs', 'update-feed.mjs']) await cp(path.join(root, 'scripts', name), path.join(directory, 'scripts', name));
+    await cp(path.join(root, 'assets/icon.png'), path.join(directory, 'assets/icon.png'));
+    for (const [releaseVersion, legacy] of [['1.6.0', false], ['1.6.1', false]]) {
+      const f = await fixture(releaseVersion, false, { legacy });
+      await writeFile(path.join(directory, 'site/releases.json'), JSON.stringify(f.manifest));
+      execFileSync(process.execPath, ['site/build.mjs'], { cwd: directory });
+      const html = await readFile(path.join(directory, 'site-dist/en/index.html'), 'utf8');
+      const links = [...html.matchAll(/<a class="download-file" href="([^"]+)" download="([^"]+)" title="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)];
+      const count = releaseVersion === '1.6.1' && !legacy ? 14 : 10;
+      assert.equal(links.length, count);
+      assert.equal(new Set(links.map(([, , name]) => name)).size, count);
+      const catalog = JSON.parse(await readFile(path.join(directory, 'site/locales/en.json'), 'utf8'));
+      for (const [, url, name, title, content] of links) {
+        assert.ok(url.endsWith(`/${name}`));
+        assert.equal(title, name);
+        assert.ok(lib.describeArtifact(name, releaseVersion));
+        assert.equal(name.startsWith('Blincho-Screen-Breaks-'), releaseVersion === '1.6.1' && !legacy);
+        if (/\.(deb|rpm)$/.test(name)) {
+          assert.ok(content.includes(catalog['download.installer']));
+          assert.ok(content.includes(catalog['download.manualUpdates']));
+          assert.ok(!content.includes(catalog['download.portable']));
+        }
+      }
+      const changed = structuredClone(f.manifest);
+      changed.releases[0].assets.find(item => item.name === links[0][2]).url = 'https://github.com/WonderMr/blincho/releases/download/v1.6.1/other.exe';
+      await writeFile(path.join(directory, 'site/releases.json'), JSON.stringify(changed));
+      assert.throws(() => execFileSync(process.execPath, ['site/build.mjs'], { cwd: directory, stdio: 'pipe' }), /Invalid download filename or URL/);
+    }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

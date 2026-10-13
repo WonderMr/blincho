@@ -59,6 +59,10 @@ pub fn meeting_supported() -> bool {
 pub unsafe fn window_level(pointer: *mut std::ffi::c_void, strict: bool) {
     macos::window_level(pointer, strict);
 }
+#[cfg(target_os = "macos")]
+pub fn strict_shield_count() -> i32 {
+    macos::strict_shield_count()
+}
 use serde::Serialize;
 use std::{
     io::Read,

@@ -83,7 +83,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good xvfb dbus-x11 openbox
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential clang curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libfuse2 patchelf xdg-utils gstreamer1.0-plugins-base gstreamer1.0-plugins-good rpm libarchive-tools xvfb dbus-x11 openbox
       - name: Select Ninja for Windows ARM64 native dependencies
         if: runner.os == 'Windows' && matrix.architecture == 'arm64'
         shell: pwsh
