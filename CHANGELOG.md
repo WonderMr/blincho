@@ -2,6 +2,12 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.5.3]
+
+- Keep the macOS titlebar and document fixed to the native viewport, removing the small whole-window scrollbar when opening the Timer.
+- Resize the sidebar with the window and retain scrolling for long pages, short windows and sidebar controls.
+- Check native viewport sizing, resize/restore, all five pages and reopening with an isolated WKWebView profile.
+
 ## [1.5.2]
 
 - Make macOS package fixtures portable on Windows without relaxing real bundle permission checks.

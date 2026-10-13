@@ -35,6 +35,28 @@
 .main-content .statistics-metric { border: 0; border-inline-start: 1px solid var(--border-subtle); border-radius: 0; box-shadow: none; background: transparent; padding: 12px 18px; }
 .main-content .statistics-metric:first-child { border-inline-start: 0; }
 .main-content .statistics-metrics { gap: 12px 0; }
+
+/* Keep native macOS scrolling below the titlebar. The grid supplies the sidebar
+   height, avoiding stale dynamic viewport units when WKWebView resizes. */
+@media (min-width: 761px) {
+  html[data-runtime="tauri"] .app-container {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  html[data-runtime="tauri"] .app-workspace { min-height: 0; }
+  html[data-runtime="tauri"] .app-workspace > .nav-bar {
+    position: static;
+    height: auto;
+    align-self: stretch;
+  }
+  html[data-runtime="tauri"] .app-workspace > .main-content {
+    min-height: 0;
+    overflow-y: auto;
+    padding-block: clamp(20px, 3vh, 28px) clamp(24px, 4vh, 36px);
+    gap: clamp(16px, 2.5vh, 24px);
+  }
+}
 @container content-column (max-width: 600px) {
   .main-content .technique-card { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .main-content .technique-card-footer { align-items: stretch; }
