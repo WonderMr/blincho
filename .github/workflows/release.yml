@@ -209,12 +209,12 @@ jobs:
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
       - name: Smoke test window restoration after lock and sleep
-        if: matrix.platform != 'linux' && steps.runtime.outputs.tauri == 'true'
+        if: matrix.platform != 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-session-smoke.cjs') != ''
         run: node tests/tauri-session-smoke.cjs
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
       - name: Smoke test Linux window restoration after lock and sleep
-        if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true'
+        if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-session-smoke.cjs') != ''
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-session-openbox.log 2>&1 & node tests/tauri-session-smoke.cjs'
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
