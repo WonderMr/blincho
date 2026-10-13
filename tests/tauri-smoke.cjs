@@ -94,12 +94,12 @@ async function inspectStorage() {
   const progressed = read(); assert.equal(progressed.visible, false);
   assert(hidden.timer.remainingMs - progressed.timer.remainingMs >= 1000);
   console.log('PASS: actual hidden native window retains a running Rust timer.');
-  const strict = await until(value => value.visible && value.strict && value.closable === false && value.minimizable === false, 15000);
+  const strict = await until(value => value.visible && value.strict && value.strictShieldCount > 0 && value.closable === false && value.minimizable === false, 15000);
   assert(strict.timer.breakActive); await control('close'); await sleep(300); assert.equal(read().visible, true);
   assert.equal((await control('hide', {}, true)).ok, false);
   const overlay = await inspectStorage(); assert.equal(overlay.renderer.dialog, true);
   console.log('PASS: native expiry presents the React break; close/hide/minimize guards are active.');
-  await until(value => !value.strict && value.closable && value.minimizable && !value.timer.breakActive, 12000);
+  await until(value => !value.strict && value.strictShieldCount === 0 && value.closable && value.minimizable && !value.timer.breakActive, 12000);
   let finishedOverlay;
   for (let attempt = 0; attempt < 30; attempt++) {
     finishedOverlay = await inspectStorage();
@@ -131,7 +131,7 @@ async function inspectStorage() {
   const completedBeforeInterruption = beforeInterruption.renderer.stats.reduce((sum, day) => sum + day.breaksCompleted, 0);
   const absenceEpoch = read().timer.absenceEpoch;
   await control('power-cycle');
-  await until(value => value.timer.absenceEpoch > absenceEpoch && !value.strict && !value.timer.breakActive);
+  await until(value => value.timer.absenceEpoch > absenceEpoch && !value.strict && value.strictShieldCount === 0 && !value.timer.breakActive);
   let interrupted;
   for (let attempt = 0; attempt < 20; attempt++) { interrupted = await inspectStorage(); if (!interrupted.renderer.dialog) break; await sleep(100); }
   assert.equal(interrupted.renderer.dialog, false);

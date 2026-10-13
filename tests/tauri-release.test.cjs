@@ -113,12 +113,13 @@ test('invalid bundle targets or missing inputs preserve the previous app and uno
 });
 
 async function runMacPackager(arch, scenario = {}) {
+  const version = scenario.version || '1.5.0';
   const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-tauri-package-'));
   try {
     await mkdir(path.join(directory, 'src-tauri'));
-    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version: '1.5.0', build: { appId: 'com.myeyes.app' } }));
-    await writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ version: '1.5.0', packages: { '': { version: '1.5.0' } } }));
-    await writeFile(path.join(directory, 'src-tauri/tauri.conf.json'), JSON.stringify({ identifier: 'com.myeyes.app', productName: 'Blincho', version: '1.5.0', ...scenario.config }));
+    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version, build: { appId: 'com.myeyes.app' } }));
+    await writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ version, packages: { '': { version } } }));
+    await writeFile(path.join(directory, 'src-tauri/tauri.conf.json'), JSON.stringify({ identifier: 'com.myeyes.app', productName: 'Blincho', version, ...scenario.config }));
     const oldBundleFile = path.join(directory, 'release/tauri-macos/Blincho.app/Contents/Resources/old-bundle.txt');
     await mkdir(path.dirname(oldBundleFile), { recursive: true });
     await writeFile(oldBundleFile, 'healthy previous bundle');
@@ -129,6 +130,7 @@ async function runMacPackager(arch, scenario = {}) {
       import childProcess from 'node:child_process';
       import { syncBuiltinESMExports } from 'node:module';
       const arch = ${JSON.stringify(arch)};
+      const version = ${JSON.stringify(version)};
       const scenario = ${JSON.stringify(scenario)};
       Object.defineProperty(process, 'platform', { value: 'darwin' });
       Object.defineProperty(process, 'arch', { value: arch });
@@ -141,7 +143,7 @@ async function runMacPackager(arch, scenario = {}) {
         if (path.resolve(args[0]) === executable) result.mode = (result.mode & ~0o777) | (scenario.executableMode ?? 0o755);
         return result;
       };
-      const metadata = { schemaVersion: 1, runtime: 'tauri', platform: 'darwin', arch, version: '1.5.0', identifier: 'com.myeyes.app', packageType: 'manual', signed: false, notarized: false, updaterConfig: false, ...scenario.metadata };
+      const metadata = { schemaVersion: 1, runtime: 'tauri', platform: 'darwin', arch, version, identifier: 'com.myeyes.app', packageType: 'manual', signed: false, notarized: false, updaterConfig: false, ...scenario.metadata };
       childProcess.spawnSync = (command, args) => {
         fs.appendFileSync('calls.jsonl', JSON.stringify([command, args]) + '\\n');
         if (command === 'cargo') return { status: scenario.cargoFailed ? 1 : 0 };
@@ -153,7 +155,7 @@ async function runMacPackager(arch, scenario = {}) {
           if (!scenario.missingMetadata) fs.writeFileSync(path.join(bundle, 'Contents/Resources/blincho-runtime.json'), JSON.stringify(metadata));
           return { status: 0 };
         }
-        if (command === '/usr/bin/plutil') return { status: 0, stdout: JSON.stringify({ CFBundleIdentifier: 'com.myeyes.app', CFBundleName: 'Blincho', CFBundleDisplayName: 'Blincho', CFBundleExecutable: 'blincho', CFBundlePackageType: 'APPL', CFBundleShortVersionString: '1.5.0', CFBundleVersion: '1.5.0', ...scenario.plist }) };
+        if (command === '/usr/bin/plutil') return { status: 0, stdout: JSON.stringify({ CFBundleIdentifier: 'com.myeyes.app', CFBundleName: 'Blincho', CFBundleDisplayName: 'Blincho', CFBundleExecutable: 'blincho', CFBundlePackageType: 'APPL', CFBundleShortVersionString: version, CFBundleVersion: version, ...scenario.plist }) };
         if (command === '/usr/bin/lipo') return { status: 0, stdout: scenario.binaryArch || (arch === 'x64' ? 'x86_64' : 'arm64') };
         if (command === '/usr/bin/codesign') return { status: scenario.signatureFailed ? 1 : 0, stderr: scenario.signature || 'Signature=adhoc\\nTeamIdentifier=not set\\n' };
         if (command === '/usr/bin/ditto') {
@@ -165,15 +167,16 @@ async function runMacPackager(arch, scenario = {}) {
       syncBuiltinESMExports();
     `);
     const result = spawnSync(process.execPath, ['--import', pathToFileURL(mock).href, path.resolve(__dirname, '../scripts/release-package.mjs'), 'macos', arch], {
-      cwd: directory, encoding: 'utf8', timeout: 30_000, env: { ...process.env, RELEASE_TAG: 'v1.5.0', RUST_TARGET: scenario.rustTarget ?? '' },
+      cwd: directory, encoding: 'utf8', timeout: 30_000, env: { ...process.env, RELEASE_TAG: `v${version}`, RUST_TARGET: scenario.rustTarget ?? '' },
     });
     if (result.error) throw result.error;
     const calls = (await readFile(path.join(directory, 'calls.jsonl'), 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; })).trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
-    const receiptPath = path.join(directory, `release-upload/Blincho-1.5.0-updates-darwin-${arch}.json`);
+    const receiptPath = path.join(directory, `release-upload/Blincho-${version}-updates-darwin-${arch}.json`);
     const receipt = await readFile(receiptPath, 'utf8').then(JSON.parse).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-    const bytes = await readFile(path.join(directory, `release-upload/Blincho-1.5.0-macos-${arch}.zip`)).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    const bytes = await readFile(path.join(directory, `release-upload/Blincho-${version}-macos-${arch}.zip`)).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    const packages = receipt && await Promise.all(receipt.artifacts.map(async artifact => ({ artifact, bytes: await readFile(path.join(directory, 'release-upload', artifact.name)) })));
     const previousBundle = await readFile(oldBundleFile, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-    return { ...result, calls, receipt, bytes, previousBundle };
+    return { ...result, calls, receipt, bytes, packages, previousBundle };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
@@ -255,6 +258,21 @@ test('macOS packaging builds locked current Cargo sources and publishes canonica
     assert.equal(artifact.size, result.bytes.length);
     assert.equal(artifact.sha256, createHash('sha256').update(result.bytes).digest('hex'));
     assert.equal(artifact.sha512, createHash('sha512').update(result.bytes).digest('base64'));
+  });
+});
+
+test('1.6.1 macOS packaging writes descriptive archives and identical legacy aliases', async t => {
+  const { artifactNames, validateReceipt } = await import('../scripts/release-lib.mjs');
+  for (const arch of ['arm64', 'x64']) await t.test(arch, async () => {
+    const result = await runMacPackager(arch, { version: '1.6.1' });
+    assert.equal(result.status, 0, result.stderr);
+    validateReceipt(result.receipt, '1.6.1');
+    const [canonical, alias] = artifactNames('1.6.1', 'macos', arch, 'zip');
+    assert.deepEqual(result.receipt.artifacts.map(item => item.name), [canonical, alias]);
+    assert.ok(result.calls.at(-1)[1].at(-1).endsWith(canonical));
+    assert.deepEqual(result.packages[0].bytes, result.packages[1].bytes);
+    assert.equal(result.packages[0].artifact.sha256, result.packages[1].artifact.sha256);
+    assert.equal(result.packages[0].artifact.sha512, result.packages[1].artifact.sha512);
   });
 });
 

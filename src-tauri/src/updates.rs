@@ -186,6 +186,21 @@ fn available_version(
             ),
             _ => return Err("Unsupported platform".into()),
         };
+        let descriptive_name = if parts >= [1, 6, 1] {
+            let cpu = if arch == "arm64" { "ARM64" } else { "x64" };
+            let (os, package) = match platform {
+                "macos" => ("macOS", "Portable.zip"),
+                "windows" => ("Windows", "Setup.exe"),
+                "linux" => ("Linux", "Portable.AppImage"),
+                _ => unreachable!(),
+            };
+            Some(format!(
+                "Blincho-Screen-Breaks-{}-{os}-{cpu}-{package}",
+                release.version
+            ))
+        } else {
+            None
+        };
         let mut names = HashSet::new();
         let mut matching_asset = false;
         for asset in release.assets {
@@ -213,7 +228,9 @@ fn available_version(
             {
                 return Err("Invalid package metadata".into());
             }
-            if asset.name == expected_name {
+            if asset.name == expected_name
+                || descriptive_name.as_deref() == Some(asset.name.as_str())
+            {
                 if asset.platform != platform
                     || asset.architecture != arch
                     || asset.format != format
@@ -840,6 +857,39 @@ mod tests {
                         );
                     }
                 }
+            }
+        }
+    }
+    #[test]
+    fn descriptive_download_names_preserve_platform_and_architecture_validation() {
+        for platform in ["macos", "windows", "linux"] {
+            for arch in ["arm64", "x64"] {
+                let cpu = if arch == "arm64" { "ARM64" } else { "x64" };
+                let (os, package, format) = match platform {
+                    "macos" => ("macOS", "Portable.zip", "zip"),
+                    "windows" => ("Windows", "Setup.exe", "exe"),
+                    _ => ("Linux", "Portable.AppImage", "AppImage"),
+                };
+                let name = format!("Blincho-Screen-Breaks-1.6.1-{os}-{cpu}-{package}");
+                let mut item = release("1.6.1", arch);
+                item["assets"][0] = json!({"name":name,"platform":platform,"architecture":arch,
+                    "format":format,"size":1024,"sha256":"a".repeat(64),
+                    "url":format!("https://github.com/WonderMr/blincho/releases/download/v1.6.1/{name}")});
+                let metadata = bytes(&manifest(vec![item.clone()]));
+                assert_eq!(
+                    available_version(&metadata, "1.6.0", platform, arch).unwrap(),
+                    Some("1.6.1".into())
+                );
+                let other_arch = if arch == "arm64" { "x64" } else { "arm64" };
+                assert_eq!(
+                    available_version(&metadata, "1.6.0", platform, other_arch).unwrap(),
+                    None
+                );
+                item["assets"][0]["architecture"] = json!(other_arch);
+                assert!(
+                    available_version(&bytes(&manifest(vec![item])), "1.6.0", platform, arch)
+                        .is_err()
+                );
             }
         }
     }

@@ -128,14 +128,25 @@ fn presentation(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(
     ui::set_strict(app, strict)?;
     window.set_closable(!strict).map_err(|e| e.to_string())?;
     window.set_minimizable(!strict).map_err(|e| e.to_string())?;
+    // The native macOS guard owns the level and restores its actual baseline.
+    #[cfg(not(target_os = "macos"))]
     window
         .set_always_on_top(strict)
         .map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     {
         let pointer = window.ns_window().map_err(|e| e.to_string())? as usize;
+        let handle = app.clone();
         window
             .run_on_main_thread(move || unsafe {
+                // An already queued enable must not recreate shields after a
+                // native deadline, sleep, lock or settings change.
+                let strict = handle
+                    .state::<Runtime>()
+                    .timer
+                    .lock()
+                    .map(|timer| timer.strict())
+                    .unwrap_or(false);
                 platform::window_level(pointer as *mut _, strict)
             })
             .map_err(|e| e.to_string())?;
@@ -398,7 +409,12 @@ fn diagnostics(app: &tauri::AppHandle) {
         };
         (timer.snapshot.clone(), timer.strict())
     };
+    #[cfg(target_os = "macos")]
+    let strict_shield_count = platform::strict_shield_count();
+    #[cfg(not(target_os = "macos"))]
+    let strict_shield_count = 0;
     let value = json!({"timer":snapshot,"strict":strict,"visible":window(app).ok().and_then(|w|w.is_visible().ok()),
+        "strictShieldCount":strict_shield_count,
         "focused":window(app).ok().and_then(|w|w.is_focused().ok()),"events":runtime.events.lock().ok().map(|v|v.clone()),
         "fullscreen":window(app).ok().and_then(|w|w.is_fullscreen().ok()),
         "closable":window(app).ok().and_then(|w|w.is_closable().ok()),

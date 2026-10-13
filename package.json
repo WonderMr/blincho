@@ -1,6 +1,6 @@
 {
   "name": "blincho",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Screen break reminders and habits for comfortable computer use",
   "main": "electron/main.cjs",
   "scripts": {
@@ -23,7 +23,8 @@
     "electron:start": "npm run build && electron .",
     "tauri:test:layout": "npm run build && cargo build --locked --manifest-path src-tauri/Cargo.toml && node tests/tauri-layout-smoke.cjs",
     "tauri:build:win": "npm run build && tauri build --bundles nsis --ci --no-sign -- --locked",
-    "tauri:build:linux": "npm run build && tauri build --bundles appimage --ci --no-sign -- --locked"
+    "tauri:build:linux": "npm run build && tauri build --bundles appimage,deb,rpm --ci --no-sign --no-binary-patching -- --locked",
+    "tauri:test:strict": "node --test tests/macos-strict-smoke.cjs"
   },
   "build": {
     "appId": "com.myeyes.app",

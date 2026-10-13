@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir, copyFile, stat, rm } from 'node:fs/promises
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { assertVersionMatch, expectedArtifacts, describeArtifact, hashFile, receiptName, validateReceipt, usesTauriMac, usesTauriDesktop } from './release-lib.mjs';
+import { assertVersionMatch, artifactNames, expectedArtifacts, describeArtifact, hashFile, receiptName, validateReceipt, usesTauriMac, usesTauriDesktop } from './release-lib.mjs';
 import { packageSupport, builderArtifactName, verifyPackagedSupport, verifyTauriMacBundle } from './update-package.mjs';
 import { packageTauriDesktop } from './bundle-tauri-desktop.mjs';
 
@@ -34,13 +34,17 @@ if (platform === 'macos') {
   run(process.execPath, ['scripts/bundle-tauri-macos.cjs', '--target', rustTarget]);
   const bundle = path.resolve('release/tauri-macos/Blincho.app');
   await verifyTauriMacBundle(bundle, version, architecture);
-  const name = `Blincho-${version}-macos-${architecture}.zip`;
+  const [name, alias] = artifactNames(version, platform, architecture, 'zip');
   const destination = path.resolve('release-upload', name);
   await rm(destination, { force: true });
   run('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', bundle, destination]);
   const size = (await stat(destination)).size;
   if (!size) throw new Error(`Empty release artifact: ${name}`);
   receipt.artifacts.push({ name, size, sha256: await hashFile(destination), sha512: await hashFile(destination, 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true });
+  if (alias) {
+    await copyFile(destination, path.resolve('release-upload', alias));
+    receipt.artifacts.push({ ...receipt.artifacts[0], name: alias });
+  }
   validateReceipt(receipt, version);
   await writeFile(path.join('release-upload', receiptName(version, process.platform, architecture)), JSON.stringify(receipt, null, 2) + '\n');
 } else if (usesTauriDesktop(version)) {

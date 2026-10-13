@@ -49,22 +49,47 @@ export function releaseNotes(changelog, version, receipts = null) {
   return `${notice}\n\n${notes}\n`;
 }
 
-export function expectedArtifacts(version) {
+// v1.6.0 was already published with the historical filenames.
+export const DESCRIPTIVE_DOWNLOAD_VERSION = '1.6.1';
+const PACKAGE_TARGETS = { macos: ['zip'], windows: ['setup', 'portable'], linux: ['AppImage', 'tar.gz'] };
+const LINUX_INSTALLER_TARGETS = ['deb', 'rpm'];
+const DOWNLOAD_PLATFORM_LABELS = { macos: 'macOS', windows: 'Windows', linux: 'Linux' };
+export function usesLinuxInstallers(version) { return compareVersions(version, '1.6.1') >= 0; }
+
+export function artifactName(version, platform, architecture, target, { legacy = false } = {}) {
   assertVersion(version);
-  return ['arm64', 'x64'].flatMap(arch => [
-    `Blincho-${version}-macos-${arch}.zip`,
-    `Blincho-${version}-windows-${arch}-setup.exe`,
-    `Blincho-${version}-windows-${arch}-portable.exe`,
-    `Blincho-${version}-linux-${arch}.AppImage`,
-    `Blincho-${version}-linux-${arch}.tar.gz`,
-  ]).sort();
+  const linuxInstaller = platform === 'linux' && LINUX_INSTALLER_TARGETS.includes(target) && usesLinuxInstallers(version);
+  requireValue((PACKAGE_TARGETS[platform]?.includes(target) || linuxInstaller) && ['arm64', 'x64'].includes(architecture), 'Invalid download package target');
+  const format = ['setup', 'portable'].includes(target) ? 'exe' : target;
+  if ((legacy && !linuxInstaller) || compareVersions(version, DESCRIPTIVE_DOWNLOAD_VERSION) < 0) {
+    const suffix = ['setup', 'portable'].includes(target) ? `-${target}` : '';
+    return `Blincho-${version}-${platform}-${architecture}${suffix}.${format}`;
+  }
+  const arch = architecture === 'arm64' ? 'ARM64' : 'x64';
+  const kind = target === 'setup' || linuxInstaller ? 'Setup' : 'Portable';
+  return `Blincho-Screen-Breaks-${version}-${DOWNLOAD_PLATFORM_LABELS[platform]}-${arch}-${kind}.${format}`;
+}
+
+// Published native clients select these exact legacy names when checking updates.
+export function artifactNames(version, platform, architecture, target, options = {}) {
+  const name = artifactName(version, platform, architecture, target, options);
+  const historical = artifactName(version, platform, architecture, target, { legacy: true });
+  return name !== historical && ['zip', 'setup', 'AppImage'].includes(target) ? [name, historical] : [name];
+}
+
+export function expectedArtifacts(version, options = {}) {
+  assertVersion(version);
+  return ['arm64', 'x64'].flatMap(arch => Object.entries(PACKAGE_TARGETS).flatMap(([platform, targets]) => {
+    const formats = platform === 'linux' && !options.legacy && usesLinuxInstallers(version) ? [...targets, ...LINUX_INSTALLER_TARGETS] : targets;
+    return formats.flatMap(target => artifactNames(version, platform, arch, target, options));
+  })).sort();
 }
 
 export function describeArtifact(name, version) {
   assertVersion(version);
-  if (typeof name !== 'string' || !expectedArtifacts(version).includes(name)) return null;
-  const match = name.match(/^Blincho-[\d.]+-(macos|windows|linux)-(arm64|x64)(?:-(setup|portable))?\.(zip|exe|AppImage|tar\.gz)$/);
-  return { platform: match[1], architecture: match[2], format: match[4], kind: match[3] === 'setup' ? 'installer' : 'portable' };
+  if (typeof name !== 'string' || ![...expectedArtifacts(version), ...expectedArtifacts(version, { legacy: true })].includes(name)) return null;
+  const match = name.match(/^Blincho-(?:Screen-Breaks-)?[\d.]+-(macOS|macos|Windows|windows|Linux|linux)-(ARM64|arm64|x64)(?:-(Setup|setup|Portable|portable))?\.(zip|exe|AppImage|tar\.gz|deb|rpm)$/);
+  return { platform: match[1].toLowerCase(), architecture: match[2].toLowerCase(), format: match[4], kind: match[3]?.toLowerCase() === 'setup' ? 'installer' : 'portable' };
 }
 
 export function parseChecksums(text) {
@@ -88,8 +113,11 @@ export async function hashFile(file, algorithm = 'sha256', encoding = 'hex') {
 export const sha256File = file => hashFile(file);
 
 export async function inspectArtifacts(directory, version) {
-  const expected = expectedReleaseFiles(version);
   const entries = await readdir(directory, { withFileTypes: true });
+  const allowed = [...expectedReleaseFiles(version), ...expectedArtifacts(version, { legacy: true })];
+  requireValue(entries.every(entry => entry.isFile() && (allowed.includes(entry.name) || entry.name === 'SHA256SUMS.txt')), 'Unexpected files, directories or symlinks in release upload folder');
+  const receipts = usesUpdateReceipts(version) ? await readReceiptMetadata(directory, version) : null;
+  const expected = expectedReleaseFiles(version, receipts);
   requireValue(entries.every(entry => entry.isFile() && (expected.includes(entry.name) || entry.name === 'SHA256SUMS.txt')), 'Unexpected files, directories or symlinks in release upload folder');
   const result = [];
   for (const name of expected) {
@@ -169,7 +197,7 @@ export function createManifest(releases, { repository = REPOSITORY, requiredTag,
     if (receipts) {
       const checksums = checksumsByTag.get(release.tag_name);
       requireValue(checksumUrl && checksums, 'Release requires SHA256SUMS.txt');
-      const expected = expectedReleaseFiles(version);
+      const expected = expectedReleaseFiles(version, receipts);
       requireValue(names.size === expected.length + 1 && expected.every(name => names.has(name)), 'Release is missing or has unexpected package or receipt assets');
       requireValue(checksums.size === expected.length && expected.every(name => checksums.has(name)), 'Release checksum list is incomplete or contains unexpected artifacts');
       for (const asset of release.assets.filter(item => item.name !== 'SHA256SUMS.txt')) requireValue(asset.digest === `sha256:${checksums.get(asset.name)}`, 'GitHub digest does not match SHA256SUMS.txt');
@@ -178,8 +206,10 @@ export function createManifest(releases, { repository = REPOSITORY, requiredTag,
     if (release.tag_name === requiredTag) {
       requireValue(release.prerelease && (receipts ? notes.startsWith(releaseSigningNotice(receipts)) : /unsigned beta/i.test(notes)), 'Current release must truthfully describe beta signing status');
       requireValue(checksumUrl && checksumsByTag.has(requiredTag), 'Current release requires SHA256SUMS.txt');
-      requireValue(expectedArtifacts(version).every(name => assets.some(asset => asset.name === name)), 'Current release is missing required platform artifacts');
-      requireValue(checksumsByTag.get(requiredTag).size === expectedReleaseFiles(version).length && expectedReleaseFiles(version).every(name => checksumsByTag.get(requiredTag).has(name)), 'Current release checksum list is incomplete or contains unexpected artifacts');
+      const expected = expectedReleaseFiles(version, receipts);
+      const packages = receipts ? receipts.flatMap(receipt => receipt.artifacts.map(item => item.name)) : expectedArtifacts(version);
+      requireValue(packages.every(name => assets.some(asset => asset.name === name)), 'Current release is missing required platform artifacts');
+      requireValue(checksumsByTag.get(requiredTag).size === expected.length && expected.every(name => checksumsByTag.get(requiredTag).has(name)), 'Current release checksum list is incomplete or contains unexpected artifacts');
     }
     entries.push({ version, tag: release.tag_name, name: release.name || `Blincho ${version}`, publishedAt: release.published_at, url: release.html_url, prerelease: release.prerelease, signing: receipts ? (receipts.some(receipt => receipt.artifacts.some(item => item.signed)) ? 'mixed' : 'unsigned') : /unsigned beta/i.test(notes) ? 'unsigned' : 'unknown', notes, assets: assets.sort((a, b) => a.name.localeCompare(b.name)), checksumUrl });
   }
@@ -211,17 +241,22 @@ export function receiptName(version, platform, arch) {
 export function expectedReceipts(version) {
   return UPDATE_PLATFORMS.flatMap(platform => ['arm64', 'x64'].map(arch => receiptName(version, platform, arch))).sort();
 }
-export function expectedReleaseFiles(version) {
-  return [...expectedArtifacts(version), ...(usesUpdateReceipts(version) ? expectedReceipts(version) : [])].sort();
+export function expectedReleaseFiles(version, receipts = null) {
+  if (receipts) validateReceiptSet(receipts, version);
+  const packages = receipts ? receipts.flatMap(receipt => receipt.artifacts.map(item => item.name)) : expectedArtifacts(version);
+  return [...packages, ...(usesUpdateReceipts(version) ? expectedReceipts(version) : [])].sort();
 }
 export function validateReceipt(receipt, version) {
   requireValue(receipt?.schemaVersion === 1 && receipt.version === version && UPDATE_PLATFORMS.includes(receipt.platform) && ['x64', 'arm64'].includes(receipt.arch), 'Invalid update receipt identity');
   const tauri = usesTauriPlatform(version, receipt.platform);
   requireValue(tauri ? receipt.runtime === 'tauri' : receipt.runtime == null || receipt.runtime === 'electron', 'Invalid package runtime');
-  const expected = expectedArtifacts(version).filter(name => {
+  const matchesTarget = name => {
     const item = describeArtifact(name, version);
     return item.platform === SITE_PLATFORMS[receipt.platform] && item.architecture === receipt.arch;
-  });
+  };
+  const canonical = expectedArtifacts(version).filter(matchesTarget);
+  const historical = expectedArtifacts(version, { legacy: true }).filter(matchesTarget);
+  const expected = compareVersions(version, DESCRIPTIVE_DOWNLOAD_VERSION) < 0 ? historical : canonical;
   requireValue(Array.isArray(receipt.artifacts) && receipt.artifacts.length === expected.length && new Set(receipt.artifacts.map(item => item?.name)).size === expected.length, 'Incomplete or duplicate update receipt artifacts');
   for (const item of receipt.artifacts) {
     requireValue(item && expected.includes(item.name) && Number.isSafeInteger(item.size) && item.size > 0 && /^[a-f0-9]{64}$/.test(item.sha256) && typeof item.sha512 === 'string' && /^[A-Za-z0-9+/]{86}==$/.test(item.sha512) && Buffer.from(item.sha512, 'base64').toString('base64') === item.sha512, 'Invalid update receipt artifact or hashes');
@@ -235,6 +270,17 @@ export function validateReceipt(receipt, version) {
     requireValue(item.packageType === packageType, 'Invalid package update support');
     requireValue(receipt.platform === 'darwin' ? item.signed === item.notarized : !item.signed && !item.notarized, 'Unsupported signing claim');
   }
+  if (expected === canonical) {
+    for (const item of receipt.artifacts) {
+      const description = describeArtifact(item.name, version);
+      const target = description.platform === 'windows' ? description.kind === 'installer' ? 'setup' : 'portable' : description.format;
+      const names = artifactNames(version, description.platform, description.architecture, target);
+      if (names.length < 2) continue;
+      const original = receipt.artifacts.find(record => record.name === names[0]);
+      const alias = receipt.artifacts.find(record => record.name === names[1]);
+      requireValue(original && alias && original.size === alias.size && original.sha256 === alias.sha256 && original.sha512 === alias.sha512, 'Legacy download alias differs from canonical package bytes');
+    }
+  }
   return receipt;
 }
 export function validateReceiptSet(receipts, version) {
@@ -243,21 +289,27 @@ export function validateReceiptSet(receipts, version) {
   requireValue(new Set(receipts.map(item => `${item.platform}/${item.arch}`)).size === 6, 'Duplicate native update receipt');
   return receipts;
 }
-export async function readLocalReceipts(directory, version, inspected = null) {
-  const records = inspected ?? await inspectArtifacts(directory, version);
+async function readReceiptMetadata(directory, version) {
   const receipts = [];
   for (const name of expectedReceipts(version)) {
     const text = await readFile(path.join(directory, name), 'utf8');
     requireValue(Buffer.byteLength(text) <= 65536, 'Update receipt is too large');
     const receipt = validateReceipt(JSON.parse(text), version);
     requireValue(name === receiptName(version, receipt.platform, receipt.arch), 'Update receipt filename mismatch');
+    receipts.push(receipt);
+  }
+  return validateReceiptSet(receipts, version);
+}
+export async function readLocalReceipts(directory, version, inspected = null) {
+  const records = inspected ?? await inspectArtifacts(directory, version);
+  const receipts = await readReceiptMetadata(directory, version);
+  for (const receipt of receipts) {
     for (const item of receipt.artifacts) {
       const actual = records.find(record => record.name === item.name);
       requireValue(actual && actual.size === item.size && actual.sha256 === item.sha256 && await hashFile(actual.file, 'sha512', 'base64') === item.sha512, 'Update receipt differs from package bytes');
     }
-    receipts.push(receipt);
   }
-  return validateReceiptSet(receipts, version);
+  return receipts;
 }
 export function releaseSigningNotice(receipts) {
   const signed = receipts.filter(item => item.platform === 'darwin').filter(item => item.artifacts[0].signed);
