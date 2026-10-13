@@ -52,22 +52,30 @@ async function control(operation, args = {}, allowFailure = false) {
   }
   throw Error('Test control timed out: ' + operation);
 }
-async function measure(script = '') {
-  const marker = ++sequence;
-  await control('eval', { script: `(() => { ${script}
-    const main = document.querySelector('.main-content'), nav = document.querySelector('.nav-bar');
-    const describe = element => { const rect = element.getBoundingClientRect(); return {
-      top:rect.top,bottom:rect.bottom,clientHeight:element.clientHeight,scrollHeight:element.scrollHeight,scrollTop:element.scrollTop }; };
-    window.scrollTo(0,99999);
-    main.scrollTop = main.scrollHeight;
-    window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${marker},layout:{
-      width:innerWidth,height:innerHeight,availableHeight:screen.availHeight,rootRange:document.scrollingElement.scrollHeight-document.scrollingElement.clientHeight,
-      rootScrollTop:scrollY,titlebarBottom:document.querySelector('.mac-titlebar-drag').getBoundingClientRect().bottom,
-      main:describe(main),nav:describe(nav),lastBottom:main.lastElementChild.getBoundingClientRect().bottom,
-      dialog:!!document.querySelector('[role=dialog]')}}});
-    main.scrollTop=0;
-  })()` });
-  return (await until(value => value.renderer?.marker === marker)).renderer.layout;
+async function measure(expectedPage) {
+  const started = Date.now();
+  while (Date.now() - started < 10000) {
+    const marker = ++sequence;
+    await control('eval', { script: `(() => {
+      const main = document.querySelector('.main-content'), nav = document.querySelector('.nav-bar');
+      const pages = {timer:'.hero-dashboard-grid',library:'.library-view',survey:'.survey-view',ergonomics:'.ergonomics-view',stats:'.statistics-view'};
+      const page = Object.keys(pages).find(name => main.querySelector(':scope > ' + pages[name]));
+      const describe = element => { const rect = element.getBoundingClientRect(); return {
+        top:rect.top,bottom:rect.bottom,clientHeight:element.clientHeight,scrollHeight:element.scrollHeight,scrollTop:element.scrollTop }; };
+      window.scrollTo(0,99999);
+      main.scrollTop = main.scrollHeight;
+      window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${marker},layout:{
+        page,width:innerWidth,height:innerHeight,availableHeight:screen.availHeight,rootRange:document.scrollingElement.scrollHeight-document.scrollingElement.clientHeight,
+        rootScrollTop:scrollY,titlebarBottom:document.querySelector('.mac-titlebar-drag').getBoundingClientRect().bottom,
+        main:describe(main),nav:describe(nav),lastBottom:main.lastElementChild.getBoundingClientRect().bottom,
+        dialog:!!document.querySelector('[role=dialog]')}}});
+      main.scrollTop=0;
+    })()` });
+    const layout = (await until(value => value.renderer?.marker === marker)).renderer.layout;
+    if (layout.page === expectedPage) return layout;
+    await sleep(50);
+  }
+  throw Error('Selected page did not commit: ' + expectedPage);
 }
 function checkShell(layout) {
   assert.equal(layout.rootRange, 0, 'The document must fit the native viewport');
@@ -84,7 +92,7 @@ function checkShell(layout) {
     await until(value => value.renderer?.ready && value.timer.totalMs > 0);
     for (const [width, height] of [[1040, 760], [1280, 900], [1440, 1000], [1040, 760], [780, 620], [1040, 760]]) {
       await control('resize', { width, height });
-      const layout = await measure(); checkShell(layout);
+      const layout = await measure('timer'); checkShell(layout);
       assert.equal(layout.width, width);
       // AppKit clamps windows taller than the screen's available work area.
       assert.equal(layout.height, Math.min(height, layout.availableHeight));
@@ -93,15 +101,15 @@ function checkShell(layout) {
     }
     for (let tab = 1; tab <= 4; tab++) {
       await control('eval', { script: `document.querySelectorAll('.nav-tabs button')[${tab}].click();` });
-      // React commits the selected page asynchronously. Measure after the native command completes.
-      const committed = await measure(); checkShell(committed);
+      // A native eval acknowledgement does not prove that React committed the new page.
+      const committed = await measure(['timer', 'library', 'survey', 'ergonomics', 'stats'][tab]); checkShell(committed);
       if (tab === 1) assert(committed.main.scrollTop > 0, 'The long exercise library must scroll');
       results.push({ scope: 'tab-' + tab, ...committed });
     }
     const hidden = await control('hide'); assert(hidden.ok);
     const reopened = await control('show', {}, true);
     reopenStatus = 'passed';
-    if (reopened.ok) checkShell(await measure());
+    if (reopened.ok) checkShell(await measure('stats'));
     else {
       assert.equal(reopened.error, 'Presence is not confirmed');
       reopenStatus = 'not_run: real macOS presence is not confirmed';
