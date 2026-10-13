@@ -11,6 +11,7 @@ Website: https://blincho.app
 - Reminds you to take short breaks and supports configurable work/break intervals.
 - Pauses timing when you are away, the screen locks or the computer sleeps.
 - Keeps the desktop timer running in Rust when the window is hidden or minimized.
+- Restores the window on its previous monitor after lock or sleep, keeping hidden and minimized windows in the background. If that monitor is disconnected, the window returns to an available screen.
 - Includes exercises, a personal comfort journal and local statistics.
 - Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
 - Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.

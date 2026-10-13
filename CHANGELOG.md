@@ -2,6 +2,13 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.6.2]
+
+- Restore the previous monitor, window position and size after screen lock or sleep on macOS, Windows and Linux.
+- Keep tray-hidden and minimized windows in the background after returning, without stealing focus.
+- Preserve normal and maximized window placement across overlapping lock and sleep, display scale changes and interrupted fullscreen breaks.
+- Use an accessible screen when the original monitor is disconnected and check window restoration in native desktop tests.
+
 ## [1.6.1]
 
 - Keep strict macOS breaks above other applications' fullscreen Spaces and consume fresh scroll input with temporary native shield panels.

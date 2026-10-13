@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage, powerMonitor, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, nativeImage, powerMonitor, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
@@ -21,6 +21,7 @@ const appIconPath = path.join(app.getAppPath(), 'assets', process.platform === '
 
 let mainWindow = null;
 let tray = null;
+let windowHiddenInTray = false;
 let isQuitting = false;
 let nativeLocale = 'en';
 let updateController = null;
@@ -83,6 +84,8 @@ let powerGeneration = 0;
 const linuxSession = process.platform === 'linux' ? createLinuxSessionProbe({ execute: execFile, env: process.env, now: () => performance.now() }) : null;
 let breakWindowState = null;
 let fullscreenGeneration = 0;
+let pendingFullscreenRestore = null;
+let sessionWindowState = null;
 const diagnosticEvents = [];
 let diagnosticsWarningReported = false;
 
@@ -118,15 +121,89 @@ function safely(action, operation) {
   catch (error) { console.warn(`Blincho: ${action} failed:`, error); }
 }
 
+function captureWindowPlacement(window) {
+  const bounds = window.getNormalBounds();
+  const display = screen.getDisplayMatching(bounds);
+  return {
+    bounds, displayId: display.id, workArea: { ...display.workArea },
+    fullscreen: window.isFullScreen(), maximized: window.isMaximized(),
+  };
+}
+
+function accessibleWindowBounds(previous) {
+  const displays = screen.getAllDisplays();
+  const originalDisplay = displays.find(display => display.id === previous.displayId);
+  const display = originalDisplay || screen.getDisplayMatching(previous.bounds);
+  const area = display.workArea;
+  const bounds = { ...previous.bounds };
+  // Display IDs survive rearrangement. Preserve the position within that
+  // display instead of restoring obsolete desktop coordinates.
+  if (originalDisplay) {
+    bounds.x += area.x - previous.workArea.x;
+    bounds.y += area.y - previous.workArea.y;
+  }
+  bounds.width = Math.min(bounds.width, area.width);
+  bounds.height = Math.min(bounds.height, area.height);
+  bounds.x = Math.max(area.x, Math.min(bounds.x, area.x + area.width - bounds.width));
+  bounds.y = Math.max(area.y, Math.min(bounds.y, area.y + area.height - bounds.height));
+  return bounds;
+}
+
+function restoreWindowPlacement(window, previous, canPresent = true) {
+  // Maximizing a hidden window can show it on some platforms. Restoring its
+  // normal bounds is safe without changing its background presentation.
+  if (canPresent && window.isMaximized()) window.unmaximize();
+  window.setBounds(accessibleWindowBounds(previous));
+  if (canPresent && previous.maximized) window.maximize();
+}
+
+function captureSessionWindow() {
+  // A lock and sleep can overlap. Keep the first snapshot until both end.
+  if (sessionWindowState || !mainWindow || mainWindow.isDestroyed()) return;
+  const window = mainWindow;
+  const visible = window.isVisible();
+  const minimized = window.isMinimized();
+  sessionWindowState = {
+    ...(breakWindowState || captureWindowPlacement(window)), window,
+    visible, minimized, hidden: windowHiddenInTray || (!visible && !minimized),
+  };
+}
+
+function restoreSessionWindow() {
+  const previous = sessionWindowState;
+  if (!previous || suspended || locked || !linuxPresenceConfirmed || isQuitting) return;
+  const window = previous.window;
+  if (mainWindow !== window || window.isDestroyed()) {
+    sessionWindowState = null;
+    return;
+  }
+  // macOS changes Spaces asynchronously. Applying bounds before the leave
+  // event can be ignored or can move the window onto the primary display.
+  if (pendingFullscreenRestore?.window === window) return;
+  safely('restore window after absence', () => {
+    restoreWindowPlacement(window, previous, previous.visible && !previous.minimized && !previous.hidden);
+    if (previous.minimized) {
+      if (!window.isMinimized()) window.minimize();
+    }
+    if (previous.hidden) {
+      window.hide();
+    } else if (!previous.minimized && previous.visible) {
+      if (window.isMinimized()) window.restore();
+      if (!window.isVisible()) window.showInactive();
+    }
+    sessionWindowState = null;
+    recordRuntimeEvent('window-session-restored');
+  });
+}
+
 function setBreakFullscreen(active) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (!active && !breakWindowState) return;
   const window = mainWindow;
   const generation = ++fullscreenGeneration;
   if (active) {
-    if (!breakWindowState) breakWindowState = {
-      bounds: window.getBounds(), fullscreen: window.isFullScreen(), maximized: window.isMaximized(),
-    };
+    pendingFullscreenRestore = null;
+    if (!breakWindowState) breakWindowState = captureWindowPlacement(window);
     window.setFullScreen(true);
   } else if (breakWindowState) {
     const previous = breakWindowState;
@@ -134,12 +211,17 @@ function setBreakFullscreen(active) {
     if (previous.fullscreen) return;
     const restore = () => {
       if (generation !== fullscreenGeneration || window.isDestroyed()) return;
+      pendingFullscreenRestore = null;
       safely('restore window bounds', () => {
-        if (previous.maximized) window.maximize();
-        else window.setBounds(previous.bounds);
+        const canPresent = sessionWindowState?.window === window
+          ? sessionWindowState.visible && !sessionWindowState.minimized && !sessionWindowState.hidden
+          : window.isVisible() && !window.isMinimized();
+        restoreWindowPlacement(window, previous, canPresent);
       });
+      restoreSessionWindow();
     };
     if (process.platform === 'darwin' && window.isFullScreen()) {
+      pendingFullscreenRestore = { window };
       window.once('leave-full-screen', restore);
       window.setFullScreen(false);
     } else {
@@ -168,6 +250,13 @@ app.on('before-quit', event => {
 function showMainWindow() {
   if (isQuitting || suspended || locked) return null;
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  windowHiddenInTray = false;
+  if (sessionWindowState?.window === mainWindow) {
+    sessionWindowState.visible = true;
+    sessionWindowState.minimized = false;
+    sessionWindowState.hidden = false;
+    restoreSessionWindow();
+  }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
@@ -192,15 +281,28 @@ function putWindowInBackground() {
   // Linux desktops may accept Tray construction without displaying an icon.
   // Keep a taskbar entry there, and on Windows if tray setup failed.
   if (process.platform === 'linux' || (process.platform === 'win32' && !tray)) {
+    windowHiddenInTray = false;
+    if (sessionWindowState?.window === mainWindow) {
+      sessionWindowState.visible = false;
+      sessionWindowState.minimized = true;
+      sessionWindowState.hidden = false;
+    }
     mainWindow.minimize();
     recordRuntimeEvent('close-to-taskbar');
   } else {
+    windowHiddenInTray = true;
+    if (sessionWindowState?.window === mainWindow) {
+      sessionWindowState.visible = false;
+      sessionWindowState.minimized = false;
+      sessionWindowState.hidden = true;
+    }
     mainWindow.hide();
     recordRuntimeEvent('close-to-tray');
   }
 }
 
 function createWindow() {
+  windowHiddenInTray = false;
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 780,
@@ -262,12 +364,19 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     breakWindowState = null;
+    pendingFullscreenRestore = null;
+    sessionWindowState = null;
+    windowHiddenInTray = false;
     fullscreenGeneration += 1;
     isStrictLockActive = false;
     recordRuntimeEvent('window-closed');
   });
   for (const event of ['show', 'hide', 'minimize', 'restore', 'enter-full-screen', 'leave-full-screen']) {
-    mainWindow.on(event, () => recordRuntimeEvent(`window-${event}`));
+    mainWindow.on(event, () => {
+      if (event === 'show') windowHiddenInTray = false;
+      if (event === 'hide') windowHiddenInTray = true;
+      recordRuntimeEvent(`window-${event}`);
+    });
   }
   recordRuntimeEvent('window-created');
 }
@@ -329,6 +438,7 @@ ipcMain.on('bring-to-front', (event, payload) => {
   const { alwaysOnTop = false } = payload && typeof payload === 'object' ? payload : {};
   if (mainWindow && !mainWindow.isDestroyed() && !suspended && !locked && linuxPresenceConfirmed) {
     safely('bring window to front', () => {
+      windowHiddenInTray = false;
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
@@ -351,6 +461,7 @@ ipcMain.handle('get-system-idle-time', () => {
 });
 
 function releaseBreakPresentation() {
+  safely('remember window before absence', captureSessionWindow);
   isStrictLockActive = false;
   safely('release always on top for absence', () => mainWindow?.setAlwaysOnTop(false));
   safely('restore fullscreen for absence', () => setBreakFullscreen(false));
@@ -361,6 +472,7 @@ function observeScreenLock(nextLocked, source) {
   locked = nextLocked;
   invalidateMeetingCache();
   if (locked) releaseBreakPresentation();
+  else restoreSessionWindow();
   recordRuntimeEvent(source);
   if (mainWindow && !mainWindow.isDestroyed()) {
     safely('notify sampled screen lock', () => mainWindow.webContents.send('power-state-change', locked ? 'lock-screen' : 'unlock-screen'));
@@ -387,6 +499,7 @@ ipcMain.handle('get-power-state', () => {
     linuxPresenceConfirmed = true;
     // Linux has no native unlock event: a fresh unlocked sample must recover.
     observeScreenLock(session.locked || state === 'locked', session.locked || state === 'locked' ? 'linux-session-locked' : 'linux-session-unlocked');
+    restoreSessionWindow();
     if (linuxProbeFailureReported) {
       linuxProbeFailureReported = false;
       recordRuntimeEvent('linux-session-recovered');
@@ -493,6 +606,7 @@ app.whenReady().then(() => {
     linuxSession?.invalidate();
     if (linuxSession) linuxPresenceConfirmed = false;
     suspended = false;
+    restoreSessionWindow();
     recordRuntimeEvent('resume');
     if (mainWindow && !mainWindow.isDestroyed()) {
       safely('notify resume', () => mainWindow.webContents.send('power-state-change', 'resume'));
@@ -518,6 +632,7 @@ app.whenReady().then(() => {
     linuxSession?.invalidate();
     if (linuxSession) linuxPresenceConfirmed = false;
     locked = false;
+    restoreSessionWindow();
     recordRuntimeEvent('unlock-screen');
     if (mainWindow && !mainWindow.isDestroyed()) {
       safely('notify unlock', () => mainWindow.webContents.send('power-state-change', 'unlock-screen'));
