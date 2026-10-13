@@ -197,7 +197,7 @@ jobs:
       - name: Prepare Windows desktop and verify notification area
         if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         shell: pwsh
-        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce
+        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce -AllowUnavailableNotificationArea:('${{ matrix.architecture }}' -eq 'arm64') -TimeoutSeconds 20
       - name: Smoke test native renderer, history and timer
         if: matrix.platform != 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         run: node tests/tauri-cross-platform-smoke.cjs
@@ -215,7 +215,7 @@ jobs:
       - name: Recheck Windows desktop before package launch
         if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         shell: pwsh
-        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce
+        run: ./scripts/prepare-windows-desktop.ps1 -RestartExplorerOnce -AllowUnavailableNotificationArea:('${{ matrix.architecture }}' -eq 'arm64') -TimeoutSeconds 20
       - name: Launch the verified Windows portable package
         if: matrix.platform == 'windows' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         shell: pwsh

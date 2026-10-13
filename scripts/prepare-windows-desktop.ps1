@@ -1,7 +1,8 @@
 param(
     [ValidateRange(1, 300)]
     [int]$TimeoutSeconds = 60,
-    [switch]$RestartExplorerOnce
+    [switch]$RestartExplorerOnce,
+    [switch]$AllowUnavailableNotificationArea
 )
 
 Set-StrictMode -Version Latest
@@ -9,6 +10,10 @@ $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'Windows desktop preparation requires Windows.' }
 if ($RestartExplorerOnce -and $env:GITHUB_ACTIONS -ne 'true') {
     throw 'Explorer restart is limited to the disposable GitHub Actions machine.'
+}
+if ($AllowUnavailableNotificationArea -and
+    ($env:GITHUB_ACTIONS -ne 'true' -or [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -ne 'Arm64')) {
+    throw 'Unavailable notification-area diagnostics are limited to the GitHub Actions ARM64 image.'
 }
 
 # Explorer can exist before its notification area accepts icons. Probe the actual
@@ -144,4 +149,10 @@ do {
     }
     Start-Sleep -Seconds 2
 } while ([DateTime]::UtcNow -lt $deadline)
+if ($AllowUnavailableNotificationArea -and $failure -eq 'NIM_ADD returned false' -and
+    $shellWindow -ne [IntPtr]::Zero -and $taskbarWindow -ne [IntPtr]::Zero -and
+    @($explorers | ForEach-Object { $_.Id }) -contains $taskbarProcessId) {
+    Write-Warning "ARM64 CI notification area rejected NIM_ADD, including the independent SDK probe. Notification-area display remains unverified. Real application renderer, history, timer and package checks still run. $previousState"
+    return
+}
 throw "Windows desktop was not ready within $TimeoutSeconds seconds: $previousState"
