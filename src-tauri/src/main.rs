@@ -495,6 +495,16 @@ fn test_control(app: &tauri::AppHandle) {
             "hide" => desktop_command("hide".into(), None, app.clone())?,
             "show" => foreground(app)?,
             "close" => window(app)?.close().map_err(|e| e.to_string())?,
+            "resize" => {
+                let width = command["width"].as_u64().ok_or("Missing width")?;
+                let height = command["height"].as_u64().ok_or("Missing height")?;
+                if !(780..=2500).contains(&width) || !(620..=1800).contains(&height) {
+                    return Err("Invalid test window size".into());
+                }
+                window(app)?
+                    .set_size(tauri::LogicalSize::new(width as f64, height as f64))
+                    .map_err(|e| e.to_string())?;
+            }
             "rest" => {
                 foreground(app)?;
                 app.emit("trigger-break", ()).map_err(|e| e.to_string())?;
