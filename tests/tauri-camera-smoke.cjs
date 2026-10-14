@@ -37,20 +37,20 @@ async function evaluate(script) {
 (async () => {
   try {
     await until(value => value.renderer?.ready && value.timer.totalMs > 0);
-    await evaluate(`(async()=>{let detector;const errors=[];const originalError=console.error;console.error=(...args)=>{errors.push(args.map(String).join(' ').slice(0,500));if(errors.length>8)errors.shift();originalError.apply(console,args)};let graphics={};try{
-      graphics={htmlWebgl:!!document.createElement('canvas').getContext('webgl2'),offscreenWebgl:typeof OffscreenCanvas==='function'&&!!new OffscreenCanvas(1,1).getContext('webgl2')};
+    await evaluate(`(async()=>{let detector;const errors=[];const originalError=console.error;console.error=(...args)=>{errors.push(args.map(String).join(' ').slice(0,500));if(errors.length>8)errors.shift();originalError.apply(console,args)};
+    let webglRequests=0;const prototypes=[HTMLCanvasElement.prototype,...(typeof OffscreenCanvas==='function'?[OffscreenCanvas.prototype]:[])];const originals=prototypes.map(prototype=>prototype.getContext);prototypes.forEach((prototype,index)=>{prototype.getContext=function(kind,...args){if(String(kind).toLowerCase().includes('webgl')){webglRequests++;throw Error('Camera detection must not initialize WebGL')}return originals[index].call(this,kind,...args)}});try{
       const module=await import('./assets/${modelChunk}'); detector=await Object.values(module)[0]();
       const canvas=document.createElement('canvas');canvas.width=320;canvas.height=240;
       const ctx=canvas.getContext('2d');const gradient=ctx.createLinearGradient(0,0,320,240);gradient.addColorStop(0,'#263342');gradient.addColorStop(1,'#a8bbc9');ctx.fillStyle=gradient;ctx.fillRect(0,0,320,240);
-      const result=detector.detect(canvas);if(!Array.isArray(result.detections))throw Error('Invalid real model result');
+      const result=await detector.detect(canvas);if(!Array.isArray(result.detections))throw Error('Invalid real model result');
       let lockRejected=false;try{await window.electronAPI.lockComputer()}catch(error){lockRejected=String(error).includes('test profile')}
       document.querySelector('.nav-settings-button').click();
       await new Promise(resolve=>setTimeout(resolve,100));
       const toggle=document.getElementById('camera-lock-enabled');
-      await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:true,detections:result.detections.length,cameraAPI:typeof navigator.mediaDevices?.getUserMedia==='function',lockAPI:typeof window.electronAPI.lockComputer==='function',lockRejected,defaultEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==false,toggleReady:!!toggle&&toggle.checked&&!toggle.disabled}}});
-    }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:false,error:String(error),stack:error?.stack,graphics,errors}}})}finally{console.error=originalError;detector?.close()}})()`);
+      await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:true,detections:result.detections.length,webglRequests,cameraAPI:typeof navigator.mediaDevices?.getUserMedia==='function',lockAPI:typeof window.electronAPI.lockComputer==='function',lockRejected,defaultEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==false,toggleReady:!!toggle&&toggle.checked&&!toggle.disabled}}});
+    }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:false,error:String(error),stack:error?.stack,webglRequests,errors}}})}finally{prototypes.forEach((prototype,index)=>{prototype.getContext=originals[index]});console.error=originalError;detector?.close()}})()`);
     const probe = (await until(value => value.renderer?.cameraSmoke)).renderer.cameraSmoke;
-    assert.equal(probe.passed, true, JSON.stringify(probe)); assert.equal(probe.cameraAPI, true); assert.equal(probe.lockAPI, true); assert.equal(probe.lockRejected, true); assert.equal(probe.defaultEnabled, true); assert.equal(probe.toggleReady, true);
+    assert.equal(probe.passed, true, JSON.stringify(probe)); assert.equal(probe.webglRequests, 0); assert.equal(probe.cameraAPI, true); assert.equal(probe.lockAPI, true); assert.equal(probe.lockRejected, true); assert.equal(probe.defaultEnabled, true); assert.equal(probe.toggleReady, true);
     console.log(JSON.stringify({ ...probe, executable, profile: directory, limitation: 'Actual camera hardware and physical locking were not invoked.' }, null, 2));
   } finally { child.kill('SIGTERM'); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

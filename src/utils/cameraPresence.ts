@@ -1,6 +1,6 @@
 export type CameraPresence = 'present' | 'absent' | 'unavailable';
 interface PersonDetector {
-  detect(image: HTMLCanvasElement): { detections: Array<{ categories: Array<{ categoryName: string; score: number }> }> };
+  detect(image: HTMLCanvasElement): { detections: Array<{ categories: Array<{ categoryName: string; score: number }> }> } | Promise<{ detections: Array<{ categories: Array<{ categoryName: string; score: number }> }> }>;
   close(): void;
 }
 interface CameraEnvironment {
@@ -81,7 +81,8 @@ export function createCameraPresenceChecker(environment: CameraEnvironment = def
             // Some stalled camera drivers still advance video timestamps.
             if (previousPixels && pixels.every((value, index) => value === previousPixels![index])) return 'unavailable';
             previousPixels = new Uint8ClampedArray(pixels);
-            const result = detector.detect(canvas);
+            const result = await detector.detect(canvas);
+            if (cancelled || track.readyState !== 'live' || track.muted) return 'unavailable';
             if (!Array.isArray(result?.detections)) return 'unavailable';
             if (result.detections.some(detection => detection.categories.some(category => category.categoryName === 'person' && category.score >= 0.35))) return 'present';
             if (++emptyFrames >= REQUIRED_EMPTY_FRAMES) return 'absent';

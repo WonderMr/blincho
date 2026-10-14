@@ -80,7 +80,10 @@
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
-    "@mediapipe/tasks-vision": "1.1.0",
+    "@tensorflow/tfjs-backend-cpu": "4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "4.22.0",
+    "@tensorflow/tfjs-converter": "4.22.0",
+    "@tensorflow/tfjs-core": "4.22.0",
     "canvas-confetti": "^1.9.4",
     "electron-updater": "6.8.9",
     "lucide-react": "^1.55.0",
