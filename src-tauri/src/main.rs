@@ -141,6 +141,35 @@ fn window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     app.get_webview_window("main")
         .ok_or_else(|| "Main window unavailable".into())
 }
+#[cfg(target_os = "macos")]
+fn maintain_strict_focus_on_main(app: &tauri::AppHandle) -> Result<(), String> {
+    let runtime = app.state::<Runtime>();
+    let allowed = || {
+        !runtime.quitting.load(Ordering::SeqCst)
+            && runtime
+                .timer
+                .lock()
+                .map(|timer| timer.strict_at(Utc::now().timestamp_millis()))
+                .unwrap_or(false)
+    };
+    if !allowed() {
+        return Ok(());
+    }
+    let window = window(app)?;
+    let minimized = window.is_minimized().map_err(|e| e.to_string())?;
+    if !minimized && !window.is_visible().map_err(|e| e.to_string())? {
+        return Ok(());
+    }
+    // AppKit may still be deminiaturizing after the initial foreground request.
+    // Retry without replacing the break's saved presentation or work focus.
+    if minimized && allowed() {
+        window.unminimize().map_err(|e| e.to_string())?;
+    }
+    if !window.is_focused().map_err(|e| e.to_string())? && allowed() {
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 fn presentation(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(), String> {
     let handle = app.clone();
     app.run_on_main_thread(move || {
@@ -220,6 +249,16 @@ fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
     window.set_focus().map_err(|e| e.to_string())?;
     if let Err(error) = window_session::remember(&window) {
         eprintln!("Window session: {error}");
+    }
+    Ok(())
+}
+#[cfg(target_os = "macos")]
+fn reopen_main(app: &tauri::AppHandle) -> Result<(), String> {
+    let main = window(app)?;
+    if !main.is_visible().map_err(|e| e.to_string())?
+        || main.is_minimized().map_err(|e| e.to_string())?
+    {
+        show_manual(app)?;
     }
     Ok(())
 }
@@ -582,6 +621,12 @@ fn test_control_on_main(app: &tauri::AppHandle) {
             "hide" => desktop_command("hide".into(), None, app.clone())?,
             "minimize" => desktop_command("minimize".into(), None, app.clone())?,
             "show" => show_manual(app)?,
+            "reopen" => {
+                #[cfg(target_os = "macos")]
+                reopen_main(app)?;
+                #[cfg(not(target_os = "macos"))]
+                return Err("Native Dock reopen requires macOS".into());
+            }
             "release-and-hide" => {
                 let input: TimerInput =
                     serde_json::from_value(command["input"].clone()).map_err(|e| e.to_string())?;
@@ -958,6 +1003,10 @@ fn main() {
                         if let Err(error) = window_session::synchronize(&session_handle) {
                             eprintln!("Window session: {error}");
                         }
+                        #[cfg(target_os = "macos")]
+                        if let Err(error) = maintain_strict_focus_on_main(&session_handle) {
+                            eprintln!("Strict focus: {error}");
+                        }
                     });
                     tray_preview::update(&handle, &snapshot, strict);
                     let _ = handle.emit("native-timer", snapshot);
@@ -1025,16 +1074,10 @@ fn main() {
         }
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Reopen { .. } = event {
-            // A visible hover preview must not make the hidden main window
-            // count as already open when the user clicks the Dock icon.
-            if !window(app)
-                .ok()
-                .and_then(|main| main.is_visible().ok())
-                .unwrap_or(false)
-            {
-                if let Err(error) = show_manual(app) {
-                    eprintln!("Reopen: {error}");
-                }
+            // A hover preview does not replace the hidden or minimized main
+            // window when the user clicks the Dock icon.
+            if let Err(error) = reopen_main(app) {
+                eprintln!("Reopen: {error}");
             }
         }
     });

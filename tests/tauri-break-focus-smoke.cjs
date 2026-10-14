@@ -230,6 +230,8 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     exercising: false, expiryPending: false, version: app.read().timer.version + 1,
     breakSeconds, strictMode, idleEnabled: false, idleThresholdSeconds: 60,
     meetingEnabled: false, autoTakeover: true };
+  const focusTrace = [];
+  let lastFocusTick = -1;
   await control(app, 'configure', { input });
   const started = await until(app.read, value => value.visible && value.timer.breakActive
     && (!strictMode || value.strict && value.strictShieldCount > 0),
@@ -241,8 +243,17 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   assert(started.timer.breakEndAt > observedStart, 'The automatic break must have a real native deadline');
   if (!releaseAndHide) assert(started.timer.breakEndAt - observedStart >= breakSeconds * 1000 - 1500,
     'The smoke must observe the configured countdown, without shortening it');
-  if (!releaseAndHide) await until(() => ({ focus: fixtureState(previous), runtime: app.read(),
-    expectedPID: initial.pid, breakEndAt: started.timer.breakEndAt }),
+  if (!releaseAndHide) await until(() => {
+    const focus = fixtureState(previous), runtime = app.read();
+    if (runtime?.timer.tickCount !== lastFocusTick && focusTrace.length < 60) {
+      lastFocusTick = runtime?.timer.tickCount;
+      focusTrace.push({ at: Date.now(), tick: lastFocusTick, breakActive: runtime?.timer.breakActive,
+        deadline: runtime?.timer.breakEndAt, strict: runtime?.strict, shields: runtime?.strictShieldCount,
+        visible: runtime?.visible, minimized: runtime?.minimized, focused: runtime?.focused,
+        foregroundPID: focus?.frontmostPID, activationPolicy: focus?.observedActivationPolicy });
+    }
+    return { focus, runtime, expectedPID: initial.pid, breakEndAt: started.timer.breakEndAt, focusTrace };
+  },
     value => value.focus?.frontmostPID === initial.pid && value.runtime?.timer.breakActive,
     [handle, previous.handle], 5_000, 'Blincho frontmost during break');
   assert.equal((await inspectRenderer(app)).renderer.dialog, true, 'The real renderer must show the break');
@@ -317,7 +328,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   const result = { name, status: 'passed', mode, strictMode, breakSeconds, profile: directory,
     blinchoPID: initial.pid, priorPID: previous.pid, expectedFrontmostPID: expectedPID,
     baseline: { position: baseline.position, size: baseline.size },
-    reopened: { position: reopened.position, size: reopened.size } };
+    reopened: { position: reopened.position, size: reopened.size }, focusTrace };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log('PASS: ' + name);
   return result;
