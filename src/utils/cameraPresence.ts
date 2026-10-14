@@ -68,6 +68,7 @@ export function createCameraPresenceChecker(environment: CameraEnvironment = def
           const context = canvas.getContext('2d', { willReadFrequently: true });
           if (!context) return 'unavailable';
           let emptyFrames = 0, previousFrameTime = -1;
+          let previousPixels: Uint8ClampedArray | undefined;
           const deadline = environment.now() + 4000;
           while (!cancelled && environment.now() < deadline) {
             await new Promise(resolve => setTimeout(resolve, FRAME_GAP_MS));
@@ -75,7 +76,11 @@ export function createCameraPresenceChecker(environment: CameraEnvironment = def
             if (video.readyState < 2 || !video.videoWidth || !video.videoHeight || video.currentTime <= previousFrameTime) continue;
             previousFrameTime = video.currentTime;
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            if (!isUsableCameraFrame(context.getImageData(0, 0, canvas.width, canvas.height).data)) return 'unavailable';
+            const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+            if (!isUsableCameraFrame(pixels)) return 'unavailable';
+            // Some stalled camera drivers still advance video timestamps.
+            if (previousPixels && pixels.every((value, index) => value === previousPixels![index])) return 'unavailable';
+            previousPixels = new Uint8ClampedArray(pixels);
             const result = detector.detect(canvas);
             if (!Array.isArray(result?.detections)) return 'unavailable';
             if (result.detections.some(detection => detection.categories.some(category => category.categoryName === 'person' && category.score >= 0.35))) return 'present';

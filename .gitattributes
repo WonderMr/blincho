@@ -1,0 +1,3 @@
+public/camera/*.js -text
+public/camera/*.wasm binary
+public/camera/*.tflite binary

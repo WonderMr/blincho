@@ -745,6 +745,7 @@ export const App: React.FC = () => {
       }
     });
     const activity = () => {
+      cameraAbortRef.current?.abort();
       markPageActivity();
       if (!hasSystemIdleDetection() && !window.electronAPI?.isElectron) {
         handlersRef.current.setPresenceReason('idle', false);
