@@ -158,9 +158,7 @@ fn observe_background_meeting(runtime: &Runtime) {
         return;
     };
     sample(&mut timer);
-    if timer.meeting_epoch() == epoch && timer.meeting_sample_allowed() {
-        timer.observe_meeting(Utc::now().timestamp_millis(), &status);
-    }
+    timer.observe_meeting_if_current(epoch, Utc::now().timestamp_millis(), &status);
 }
 fn window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     app.get_webview_window("main")
@@ -331,7 +329,11 @@ fn configure_timer(input: TimerInput, app: tauri::AppHandle) -> Result<Snapshot,
     // Account for native elapsed time before accepting an explicit UI transition.
     sample(&mut timer);
     let open_exercise = input.exercising && !timer.snapshot.exercising;
+    let meeting_epoch = timer.meeting_epoch();
     timer.configure(input, Utc::now().timestamp_millis())?;
+    if timer.meeting_epoch() != meeting_epoch {
+        runtime.meeting.invalidate();
+    }
     let snapshot = timer.snapshot.clone();
     drop(timer);
     if open_exercise && snapshot.reasons.is_empty() {
@@ -345,6 +347,15 @@ fn timer_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
     let runtime = app.state::<Runtime>();
     let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
     sample(&mut timer);
+    Ok(timer.snapshot.clone())
+}
+#[tauri::command]
+fn clear_meeting_history(app: tauri::AppHandle) -> Result<Snapshot, String> {
+    let runtime = app.state::<Runtime>();
+    let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+    sample(&mut timer);
+    timer.clear_meeting_history(Utc::now().timestamp_millis());
+    runtime.meeting.invalidate();
     Ok(timer.snapshot.clone())
 }
 #[tauri::command]
@@ -440,8 +451,8 @@ fn get_runtime_metadata() -> &'static str {
     option_env!("BLINCHO_RELEASE_METADATA").unwrap_or("")
 }
 #[tauri::command]
-async fn desktop_info() -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+async fn desktop_info(app: tauri::AppHandle) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
         let platform = if cfg!(target_os = "macos") {
             "darwin"
         } else if cfg!(target_os = "windows") {
@@ -449,7 +460,9 @@ async fn desktop_info() -> Result<Value, String> {
         } else {
             "linux"
         };
-        json!({"platform":platform, "meetingDetectionSupported":platform::meeting_supported()})
+        let smoke_supported = app.state::<Runtime>().test_dir.is_some()
+            && std::env::var_os("BLINCHO_SMOKE_MEETINGS").is_some_and(|value| value == "1");
+        json!({"platform":platform, "meetingDetectionSupported":smoke_supported || platform::meeting_supported()})
     })
     .await
     .map_err(|error| error.to_string())
@@ -657,6 +670,10 @@ fn test_control_on_main(app: &tauri::AppHandle) {
                     serde_json::from_value(command["input"].clone()).map_err(|e| e.to_string())?;
                 configure_timer(input, app.clone())?;
             }
+            "clear-meeting-history" => {
+                let snapshot = clear_meeting_history(app.clone())?;
+                return Ok(json!({"ok":true,"id":command["id"],"snapshot":snapshot}));
+            }
             "hide" => desktop_command("hide".into(), None, app.clone())?,
             "minimize" => desktop_command("minimize".into(), None, app.clone())?,
             "show" => show_manual(app)?,
@@ -824,6 +841,7 @@ fn main() {
             let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             configure_timer,
             timer_snapshot,
+            clear_meeting_history,
             desktop_command,
             legacy_history,
             renderer_report,
@@ -999,7 +1017,7 @@ fn main() {
             std::thread::spawn(move || {
                 let mut last_strict = false;
                 let mut last_release = false;
-                let mut handled_expiry: Option<(u64,bool,bool,bool)> = None;
+                let mut handled_expiry: Option<(u64,bool,bool,bool,u64)> = None;
                 loop {
                     if handle.state::<Runtime>().quitting.load(Ordering::SeqCst) {break;}
                     std::thread::sleep(Duration::from_millis(250));
@@ -1009,7 +1027,7 @@ fn main() {
                         let Ok(timer) = runtime.timer.lock() else {
                             break;
                         };
-                        let expired = timer.snapshot.expiry_pending && !timer.snapshot.manual_paused && timer.snapshot.reasons.is_empty() && handled_expiry!=timer.input.as_ref().map(|input|(timer.snapshot.version,input.meeting_enabled,input.auto_takeover,input.strict_mode));
+                        let expired = timer.snapshot.expiry_pending && !timer.snapshot.manual_paused && timer.snapshot.reasons.is_empty() && handled_expiry!=timer.input.as_ref().map(|input|(timer.snapshot.version,input.meeting_enabled,input.auto_takeover,input.strict_mode,timer.meeting_epoch()));
                         (
                             expired,
                             timer.strict(),
@@ -1021,7 +1039,9 @@ fn main() {
                     };
                     if !snapshot.expiry_pending {handled_expiry=None;}
                     if expired {
-                        handled_expiry=policy.as_ref().map(|input|(snapshot.version,input.meeting_enabled,input.auto_takeover,input.strict_mode));
+                        // A history boundary invalidates an in-flight probe.
+                        // Retry that expiry with the new observation epoch.
+                        handled_expiry=policy.as_ref().map(|input|(snapshot.version,input.meeting_enabled,input.auto_takeover,input.strict_mode,meeting_epoch));
                         let expected_version = snapshot.version;
                         let expected_absence_epoch = snapshot.absence_epoch;
                         let expected_policy = policy.as_ref().map(|input|(input.meeting_enabled,input.auto_takeover,input.strict_mode)).unwrap_or((false,false,false));

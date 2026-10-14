@@ -102,3 +102,10 @@
   .statistics-average-card + .statistics-average-card { border-inline-start: 0; padding-inline-start: 0; border-top: 1px solid var(--border-subtle); padding-top: 14px; }
   .statistics-interval-table { font-size: .68rem; }
 }
+
+.meeting-history-controls { margin-block: 0 1.25rem; }
+.meeting-history-controls .settings-description { margin-block: .35rem .65rem; }
+.meeting-history-confirm { padding: .9rem; margin-block: .75rem; border: 1px solid var(--border-subtle); border-radius: 12px; }
+.meeting-history-confirm p { margin-block: 0 .75rem; }
+.meeting-history-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.meeting-history-delete { margin-block-start: .35rem; }

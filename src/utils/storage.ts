@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   idleThresholdMinutes: 1,
   strictModeIgnoreIdle: false,
   meetingDetectionEnabled: true,
+  meetingHistoryEnabled: false,
   strictMode: false,
 };
 
@@ -79,6 +80,27 @@ export function loadAllStats(): DayStats[] {
 export function loadTodayStats(stats: DayStats[] = loadAllStats()): DayStats {
   const today = getTodayDateString();
   return stats.find(stat => stat.date === today) || emptyDay(today);
+}
+
+// Remove call records only. Keep activity, totals, completion IDs and other data.
+// Return the write outcome so the UI never announces a deletion that failed.
+export function clearMeetingHistory(): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.STATS);
+    if (!raw) return true;
+    const stats: unknown = JSON.parse(raw);
+    if (!Array.isArray(stats)) return false;
+    const cleared = stats.map(day => {
+      if (!day || typeof day !== 'object' || Array.isArray(day)) return day;
+      const { meetings: _meetings, ...rest } = day;
+      return rest;
+    });
+    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(cleared));
+    return true;
+  } catch (error) {
+    console.warn('Blincho: Failed to clear call history:', error);
+    return false;
+  }
 }
 
 function updateDay(date: string, update: (stat: DayStats, stats: DayStats[]) => void): DayStats {

@@ -125,14 +125,19 @@ impl MeetingStatus {
 pub fn normalize_meeting_applications(values: &[String]) -> Vec<String> {
     parsing::normalize_meeting_applications(values)
 }
+#[derive(Default)]
+struct MeetingCache {
+    revision: u64,
+    status: Option<(Instant, u64, MeetingStatus)>,
+}
 pub struct MeetingMonitor {
-    cache: Mutex<Option<(Instant, u64, MeetingStatus)>>,
+    cache: Mutex<MeetingCache>,
     test_status: Mutex<Option<MeetingStatus>>,
 }
 impl MeetingMonitor {
     pub fn new() -> Self {
         Self {
-            cache: Mutex::new(None),
+            cache: Mutex::new(MeetingCache::default()),
             test_status: Mutex::new(None),
         }
     }
@@ -152,10 +157,12 @@ impl MeetingMonitor {
             supported: true,
             applications,
         });
-        *self.cache.lock().unwrap() = None;
+        self.invalidate();
     }
     pub fn invalidate(&self) {
-        *self.cache.lock().unwrap() = None;
+        let mut cache = self.cache.lock().unwrap();
+        cache.revision = cache.revision.wrapping_add(1);
+        cache.status = None;
     }
     pub fn inactive_status(&self) -> MeetingStatus {
         let supported = self
@@ -168,6 +175,7 @@ impl MeetingMonitor {
                 self.cache
                     .lock()
                     .unwrap()
+                    .status
                     .as_ref()
                     .map(|(_, _, status)| status.supported)
             })
@@ -194,13 +202,21 @@ impl MeetingMonitor {
             return value.clone();
         }
         let mut cache = self.cache.lock().unwrap();
-        if let Some((at, generation, value)) = &*cache {
+        if let Some((at, generation, value)) = &cache.status {
             if !fresh && *generation == epoch && at.elapsed() < Duration::from_secs(10) {
                 return value.clone();
             }
         }
+        cache.revision = cache.revision.wrapping_add(1);
+        let revision = cache.revision;
+        drop(cache);
         let result = probe();
-        *cache = Some((Instant::now(), epoch, result.clone()));
+        let mut cache = self.cache.lock().unwrap();
+        // Clearing history or changing the policy may invalidate a slow probe
+        // while it runs. Such a result must never restore the old cache.
+        if cache.revision == revision {
+            cache.status = Some((Instant::now(), epoch, result.clone()));
+        }
         result
     }
 }
@@ -461,6 +477,35 @@ mod tests {
         assert!(
             !monitor
                 .check_with(0, false, || MeetingStatus::inactive(true))
+                .in_meeting
+        );
+    }
+    #[test]
+    fn invalidation_during_a_probe_cannot_restore_the_cleared_cache() {
+        let monitor = MeetingMonitor::new();
+        let result = monitor.check_with(0, false, || {
+            monitor.invalidate();
+            MeetingStatus::detected(vec!["Zoom".into()], true)
+        });
+        assert!(result.in_meeting);
+        assert!(monitor.cache.lock().unwrap().status.is_none());
+        let fresh = monitor.check_with(0, false, || MeetingStatus::inactive(true));
+        assert!(!fresh.in_meeting);
+    }
+    #[test]
+    fn an_older_probe_cannot_overwrite_a_newer_fresh_cache_sample() {
+        let monitor = MeetingMonitor::new();
+        monitor.check_with(0, false, || {
+            assert!(
+                !monitor
+                    .check_with(0, true, || MeetingStatus::inactive(true))
+                    .in_meeting
+            );
+            MeetingStatus::detected(vec!["Zoom".into()], true)
+        });
+        assert!(
+            !monitor
+                .check_with(0, false, || panic!("Newest sample should remain cached"))
                 .in_meeting
         );
     }

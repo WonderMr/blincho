@@ -15,7 +15,7 @@ Website: https://blincho.app
 - Includes exercises, a personal comfort journal and local statistics.
 - Shows a small tray preview with the next break countdown, recorded work time and completed breaks on macOS and Windows. Linux exposes the live summary in its tray menu.
 - Records daily work, absence, lock, sleep, manual pauses and rest intervals locally. Browse previous days, average and longest work intervals, and weekly averages per calendar day or day of use. Older totals stay available; missing time records remain unknown.
-- Records detected calls with their application, observed start/end and duration. Browse daily call lanes and per-app totals, average call lengths and weekly call time. Browser calls identify the browser; detection is approximate and requires meeting detection to be enabled.
+- Optionally records detected calls with their application, observed start/end and duration after you enable call history. Browse daily call lanes and per-app totals, average call lengths and weekly call time. Browser calls identify the browser; detection is approximate.
 - Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
 - Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.
 
@@ -58,6 +58,8 @@ Primary domain: `blincho.app`. Aliases `blincho.com`, `www.blincho.com` and `www
 ## Data and compatibility
 
 Settings, journal answers and statistics remain on the device. Unless background update checks are turned off, packages contact `blincho.app` for update metadata. Downloads come from GitHub. These requests do not send journal answers or activity history. No account is required.
+
+Call history is off by default and has its own switch, separate from postponing breaks during calls. It stores only observed times and normalized application names locally, without conversation content, audio, participants, meeting titles or URLs. Turn recording off to stop future records, or delete call history from Statistics while keeping your other local history.
 
 The application identity remains `com.myeyes.app`. Electron keeps its legacy `myeyes` profile. On the first Tauri desktop launch, Blincho imports settings, journal answers and statistics from a private copy of that profile into the system WebView storage. It does not change the original Electron database or overwrite an existing Tauri profile. Quit the old Electron app before the first migration so its database is stable. Windows paths that cannot be represented in the legacy LevelDB encoding require an available short path; otherwise the app shows the history recovery screen without modifying the source. Later launches use the migrated profile without importing it again.
 

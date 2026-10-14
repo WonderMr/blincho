@@ -60,7 +60,7 @@ async function launch() {
 }
 async function inspect() {
   const marker = ++sequence;
-  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,meetingProbe:${marker},stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')||'[]'),callsText:document.querySelector('.statistics-meetings')?.textContent||'',callRows:document.querySelectorAll('.statistics-meeting-list tbody tr').length,horizontalOverflow:document.querySelector('.statistics-meetings')?document.querySelector('.statistics-meetings').scrollWidth-document.querySelector('.statistics-meetings').clientWidth:0}})` });
+  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,meetingProbe:${marker},stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')||'[]'),historyEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').meetingHistoryEnabled===true,historyToggle:document.querySelector('#statistics-meeting-history-enabled')?{checked:document.querySelector('#statistics-meeting-history-enabled').checked,disabled:document.querySelector('#statistics-meeting-history-enabled').disabled}:null,deleteConfirmation:!!document.querySelector('#statistics-meeting-history-confirm-delete'),activeElementId:document.activeElement?.id||'',callsText:document.querySelector('.statistics-meetings')?.textContent||'',callRows:document.querySelectorAll('.statistics-meeting-list tbody tr').length,horizontalOverflow:document.querySelector('.statistics-meetings')?document.querySelector('.statistics-meetings').scrollWidth-document.querySelector('.statistics-meetings').clientWidth:0}})` });
   return until(value => value.renderer?.meetingProbe === marker);
 }
 async function stop() {
@@ -71,13 +71,41 @@ async function stop() {
 const savedCalls = value => value.renderer.stats.flatMap(day => day.meetings ?? []);
 const canonicalCalls = spans => spans.map(({ start, end, app }) => ({ start, end, app }))
   .sort((a, b) => a.start - b.start || a.app.localeCompare(b.app));
+async function inspectUntil(predicate) {
+  let state;
+  for (let i = 0; i < 25; i++) {
+    state = await inspect();
+    if (predicate(state)) return state;
+    await sleep(200);
+  }
+  throw Error('Renderer meeting state did not commit: ' + JSON.stringify(state.renderer));
+}
+async function selectStatistics() {
+  await control('eval', { script: `document.querySelectorAll('.nav-tabs button')[4].click()` });
+  return inspectUntil(value => value.renderer.historyToggle !== null);
+}
+async function click(id) {
+  await control('eval', { script: `document.getElementById(${JSON.stringify(id)}).click()` });
+}
 (async () => {
   console.log('Meeting smoke profile: ' + directory);
   const initial = await launch();
+  await control('meeting', { active: true, applications: ['Zoom'] });
+  await sleep(1200);
+  assert.deepEqual(read().timer.meetingSpans, [], 'A legacy profile with no history opt-in must not record calls');
+  const defaultOff = await selectStatistics();
+  assert.equal(defaultOff.renderer.historyEnabled, false);
+  assert.equal(defaultOff.renderer.historyToggle.checked, false);
+  assert.equal(defaultOff.renderer.historyToggle.disabled, false, 'Isolated modeled detection supports explicit opt-in');
+  assert.deepEqual(savedCalls(defaultOff), []);
+  await control('meeting', { active: false, applications: [] });
+  await click('statistics-meeting-history-enabled');
+  await inspectUntil(value => value.renderer.historyEnabled);
+  const optedIn = await until(value => value.timer.meetingHistoryEpoch > initial.timer.meetingHistoryEpoch);
   const input = { totalMs: 3600000, remainingMs: 3600000, manualPaused: true,
-    breakActive: false, exercising: false, expiryPending: false, version: initial.timer.version + 1,
+    breakActive: false, exercising: false, expiryPending: false, version: optedIn.timer.version + 1,
     breakSeconds: 20, strictMode: true, idleEnabled: false, idleThresholdSeconds: 60,
-    meetingEnabled: true, autoTakeover: true };
+    meetingEnabled: true, meetingHistoryEnabled: true, autoTakeover: true };
   await control('configure', { input });
   await control('meeting', { active: true, applications: ['Zoom'] });
   const started = Date.now();
@@ -118,14 +146,51 @@ const canonicalCalls = spans => spans.map(({ start, end, app }) => ({ start, end
   assert(rendered.renderer.callsText.includes('Zoom') && rendered.renderer.callsText.includes('Google Chrome'));
   assert.equal(rendered.renderer.horizontalOverflow, 0, 'Call details fit the native viewport');
   const beforeRestart = savedCalls(rendered);
+  await click('statistics-meeting-history-enabled');
+  await inspectUntil(value => !value.renderer.historyEnabled);
+  await control('meeting', { active: true, applications: ['Zoom'] });
+  await sleep(1200);
+  assert.equal(Math.max(...read().timer.meetingSpans.map(span => span.end)), finalEnd, 'Opt-out stops future recording without deleting past calls');
+  await control('meeting', { active: false, applications: [] });
   await stop();
   await launch();
   const restarted = await inspect();
   assert.deepEqual(savedCalls(restarted), beforeRestart, 'Calls persist exactly after restart without backfilling downtime');
   assert.deepEqual(restarted.timer.meetingSpans, [], 'A restarted native process starts with no fabricated old calls');
+  assert.equal(restarted.renderer.historyEnabled, false, 'Opt-out survives restart');
+  await control('show');
+  await until(value => value.visible);
+  await selectStatistics();
+  await click('statistics-meeting-history-enabled');
+  await inspectUntil(value => value.renderer.historyEnabled);
+  await control('meeting', { active: true, applications: ['Discord'] });
+  await until(value => value.timer.meetingSpans.some(span => span.app === 'Discord' && span.end - span.start >= 1500));
+  await control('meeting', { active: false, applications: [] });
+  const deletionNative = await until(value => value.timer.meetingApplications.length === 0);
+  const deletionCalls = canonicalCalls(deletionNative.timer.meetingSpans);
+  const beforeDeletion = await inspectUntil(value => JSON.stringify(canonicalCalls(savedCalls(value).filter(span => span.app === 'Discord'))) === JSON.stringify(deletionCalls));
+  assert(beforeDeletion.timer.meetingSpans.length > 0, 'Deletion is tested with a populated native buffer');
+  const callsBeforeDeletion = savedCalls(beforeDeletion);
+  await click('statistics-meeting-history-delete');
+  const confirmation = await inspectUntil(value => value.renderer.deleteConfirmation);
+  assert.deepEqual(savedCalls(confirmation), callsBeforeDeletion, 'Opening confirmation cannot delete history');
+  await click('statistics-meeting-history-confirm-delete');
+  const cleared = await inspectUntil(value => savedCalls(value).length === 0);
+  assert.deepEqual(cleared.timer.meetingSpans, [], 'Native retained spans are cleared too');
+  const focusedFeedback = await inspectUntil(value => value.renderer.activeElementId === 'statistics-meeting-history-feedback');
+  assert.equal(focusedFeedback.renderer.activeElementId, 'statistics-meeting-history-feedback', 'Successful deletion restores keyboard focus to visible feedback');
+  const legacy = cleared.renderer.stats.find(day => day.date === '2026-10-11');
+  assert.equal(legacy.focusMinutes, 42); assert.equal(legacy.breaksCompleted, 7); assert.equal(legacy.exercisesCompleted, 3);
+  await sleep(1200);
+  assert.deepEqual(savedCalls(await inspect()), [], 'Old frames cannot restore deleted calls');
+  await stop();
+  await launch();
+  const afterClearRestart = await inspect();
+  assert.deepEqual(savedCalls(afterClearRestart), [], 'Deleted call history stays deleted after restart');
+  assert.equal(afterClearRestart.renderer.stats.find(day => day.date === '2026-10-11').focusMinutes, 42);
   await stop();
   const result = { passed: true, platform: process.platform, profile: directory,
-    checks: ['native hidden heartbeat', 'manual pause and strict recording', 'app attribution and transitions', 'call end', 'renderer storage', 'statistics app rows', 'restart persistence'],
+    checks: ['legacy default off', 'explicit UI opt-in', 'native hidden heartbeat', 'manual pause and strict recording', 'app attribution and transitions', 'call end', 'renderer storage', 'statistics app rows', 'opt-out without deletion', 'restart persistence', 'explicit delete confirmation', 'native and local deletion', 'no stale replay after clearing'],
     limitation: 'Meeting and presence signals are modeled; actual app detection is tested separately by platform parsers.' };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));

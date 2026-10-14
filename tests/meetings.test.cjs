@@ -12,6 +12,7 @@ fs.writeFileSync(config, JSON.stringify({ files: [
   path.join(repo, 'src/utils/meetings.ts'), path.join(repo, 'src/utils/storage.ts'),
   path.join(repo, 'src/utils/historyTransfer.ts'), path.join(repo, 'src/utils/detector.ts'),
   path.join(repo, 'src/utils/notifications.ts'),
+  path.join(repo, 'src/utils/tauriBridge.ts'),
 ], compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', skipLibCheck: true,
   rootDir: path.join(repo, 'src'), outDir: build } }));
 execFileSync(process.execPath, [path.join(path.dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), '-p', config], { stdio: 'inherit' });
@@ -19,6 +20,8 @@ const meetings = require(path.join(build, 'utils/meetings.js'));
 const storage = require(path.join(build, 'utils/storage.js'));
 const { importHistorySnapshot } = require(path.join(build, 'utils/historyTransfer.js'));
 const detector = require(path.join(build, 'utils/detector.js'));
+const bridge = require(path.join(build, 'utils/tauriBridge.js'));
+const { normalizeTimerSettings } = require(path.join(build, 'utils/timerSession.js'));
 const values = new Map(); let writes = 0;
 global.localStorage = {
   get length() { return values.size; }, key: index => [...values.keys()][index] ?? null,
@@ -30,7 +33,94 @@ const at = (date, hour, minute = 0) => new Date(`${date}T${String(hour).padStart
 const call = (date, startHour, startMinute, endHour, endMinute, app = 'Zoom') => ({
   start: at(date, startHour, startMinute), end: at(date, endHour, endMinute), app,
 });
+const nativeFixture = path.join(build, 'native-meeting-bridge.ts');
+fs.writeFileSync(nativeFixture, `
+    import { TimerSession } from './timerSession';
+    export class NativeTimerSession extends TimerSession {
+      advance(now: number) { this.lastUpdated = now; return false; }
+      drainActivity() { super.drainActivity(); return []; }
+    }
+    export function hasNativeTimer() { return true; }
+    export function readNativeTimer() { return Promise.resolve(null); }
+    let commandQueue = Promise.resolve();
+    let historyEnabled: boolean | undefined;
+    let historyEpoch = 0;
+    export function synchronizeNativeTimer(_session: unknown, settings: { meetingHistoryEnabled: boolean }, onConfigured?: (snapshot: unknown) => void) {
+      const enabled = settings.meetingHistoryEnabled;
+      commandQueue = commandQueue.then(async () => {
+        if (historyEnabled !== undefined && historyEnabled !== enabled) historyEpoch++;
+        historyEnabled = enabled;
+        const snapshot = window.testConfigureTimer ? await window.testConfigureTimer(enabled) : { meetingHistoryEpoch: historyEpoch };
+        onConfigured?.(snapshot);
+      }).catch(() => {});
+    }
+    export function clearNativeMeetingHistory() {
+      const cleared = commandQueue.then(() => window.testClearMeetingHistory());
+      commandQueue = cleared.then(() => {}).catch(() => {});
+      return cleared;
+    }
+    export function subscribeNativeTimer(callback: unknown) { window.testNativeFrame = callback; return () => { window.testNativeFrame = null; }; }
+  `);
 test.after(() => fs.rmSync(build, { recursive: true, force: true }));
+
+test('new and legacy profiles require explicit call-history consent independently of postponement', () => {
+  values.clear();
+  assert.equal(storage.DEFAULT_SETTINGS.meetingHistoryEnabled, false);
+  assert.equal(storage.loadSettings().meetingHistoryEnabled, false);
+  localStorage.setItem('myeyes_settings_v1', JSON.stringify({ meetingDetectionEnabled: true }));
+  assert.equal(storage.loadSettings().meetingDetectionEnabled, true);
+  assert.equal(storage.loadSettings().meetingHistoryEnabled, false);
+  for (const invalid of [undefined, null, 1, 'true']) {
+    assert.equal(normalizeTimerSettings({ ...storage.DEFAULT_SETTINGS, meetingHistoryEnabled: invalid }).meetingHistoryEnabled, false);
+  }
+  const explicit = normalizeTimerSettings({ ...storage.DEFAULT_SETTINGS, meetingDetectionEnabled: false, meetingHistoryEnabled: true });
+  assert.equal(explicit.meetingHistoryEnabled, true);
+  assert.equal(explicit.meetingDetectionEnabled, false);
+  storage.saveSettings(explicit);
+  assert.equal(storage.loadSettings().meetingHistoryEnabled, true);
+});
+
+test('clearing removes only call fields and honestly returns parsing or storage failures', () => {
+  values.clear();
+  const other = day('2026-10-12', { meetings: [call('2026-10-12', 9, 0, 10, 0)], focusMinutes: 3,
+    breaksCompleted: 2, exercisesCompleted: 1, activity: [{ start: 1, end: 2, state: 'work' }],
+    completedEventIds: ['kept'], techniqueCounts: { kept: 1 }, customField: 'preserved' });
+  localStorage.setItem('myeyes_stats_v1', JSON.stringify([other]));
+  localStorage.setItem('myeyes_cvs_result_v1', 'preserved');
+  assert.equal(storage.clearMeetingHistory(), true);
+  const { meetings: _discarded, ...expected } = other;
+  assert.deepEqual(JSON.parse(localStorage.getItem('myeyes_stats_v1')), [expected]);
+  assert.equal(localStorage.getItem('myeyes_cvs_result_v1'), 'preserved');
+  localStorage.setItem('myeyes_stats_v1', 'invalid');
+  assert.equal(storage.clearMeetingHistory(), false);
+  assert.equal(localStorage.getItem('myeyes_stats_v1'), 'invalid');
+  localStorage.setItem('myeyes_stats_v1', JSON.stringify([other]));
+  const setItem = localStorage.setItem;
+  localStorage.setItem = () => { throw Error('quota fixture'); };
+  try { assert.equal(storage.clearMeetingHistory(), false); }
+  finally { localStorage.setItem = setItem; }
+  assert.deepEqual(JSON.parse(localStorage.getItem('myeyes_stats_v1')), [other]);
+});
+
+test('bridge sends independent history consent and queues native clear after settings', async () => {
+  const previous = global.window, commands = [], acknowledgements = [];
+  const snapshot = { tickCount: 10, meetingHistoryEpoch: 1, meetingSpans: [] };
+  global.window = { __TAURI__: { core: { invoke: async (name, args) => { commands.push({ name, args }); return snapshot; } } } };
+  try {
+    const { TimerSession } = require(path.join(build, 'utils/timerSession.js'));
+    bridge.synchronizeNativeTimer(new TimerSession(1200, Date.now()), { ...storage.DEFAULT_SETTINGS,
+      meetingDetectionEnabled: false, meetingHistoryEnabled: true }, value => acknowledgements.push(value));
+    assert.deepEqual(await bridge.clearNativeMeetingHistory(), snapshot);
+    assert.deepEqual(acknowledgements, [snapshot], 'successful configure acknowledges its returned snapshot');
+    assert.deepEqual(commands.map(command => command.name), ['configure_timer', 'clear_meeting_history']);
+    assert.equal(commands[0].args.input.meetingEnabled, false);
+    assert.equal(commands[0].args.input.meetingHistoryEnabled, true);
+    window.__TAURI__.core.invoke = async () => { throw Error('native clear fixture'); };
+    bridge.synchronizeNativeTimer(new TimerSession(1200, Date.now()), storage.DEFAULT_SETTINGS, value => acknowledgements.push(value));
+    await assert.rejects(bridge.clearNativeMeetingHistory(), /native clear fixture/);
+    assert.deepEqual(acknowledgements, [snapshot], 'rejected configure cannot acknowledge consent');
+  } finally { global.window = previous; }
+});
 
 test('samples merge and deduplicate within each app while preserving app changes and real gaps', () => {
   const date = '2026-10-12';
@@ -160,20 +250,10 @@ test('detector preserves boolean-only responses and sanitizes optional applicati
 test('App persists native call samples during manual pause, preserves overlap and flushes on unmount', async () => {
   const { createHarness } = require('./app.test.cjs');
   const fixture = path.join(build, 'native-meeting-bridge.ts');
-  fs.writeFileSync(fixture, `
-    import { TimerSession } from './timerSession';
-    export class NativeTimerSession extends TimerSession {
-      advance(now: number) { this.lastUpdated = now; return false; }
-      drainActivity() { super.drainActivity(); return []; }
-    }
-    export function hasNativeTimer() { return true; }
-    export function readNativeTimer() { return Promise.resolve(null); }
-    export function synchronizeNativeTimer() {}
-    export function subscribeNativeTimer(callback: unknown) { window.testNativeFrame = callback; return () => { window.testNativeFrame = null; }; }
-  `);
+
   const previous = window.__TAURI__;
   window.__TAURI__ = { core: { invoke: async () => undefined } };
-  const h = createHarness({ meetingDetectionEnabled: true, strictMode: true }, false, false, at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
+  const h = createHarness({ meetingDetectionEnabled: false, meetingHistoryEnabled: true, strictMode: true }, false, false, at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
   let destroyed = false;
   try {
     await h.settle();
@@ -207,4 +287,273 @@ test('App persists native call samples during manual pause, preserves overlap an
     if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
     delete window.testNativeFrame;
   }
+});
+
+test('App consent boundaries discard pending samples, reject old epochs and never backfill cumulative calls', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const fixture = path.join(build, 'native-meeting-bridge.ts');
+  const previous = window.__TAURI__;
+  window.__TAURI__ = { core: { invoke: async () => undefined } };
+  const h = createHarness({ meetingHistoryEnabled: true, meetingDetectionEnabled: false }, false, false,
+    at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
+  try {
+    await h.settle();
+    const start = h.now;
+    const frame = { totalMs: 1200000, remainingMs: 1200000, manualPaused: true, breakActive: false, exercising: false,
+      expiryPending: false, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+      suspended: false, breakElapsed: false, focusByDate: {}, tickCount: 1, meetingHistoryEpoch: 0, meetingApplications: ['Zoom'] };
+    await h.advance(1000);
+    window.testNativeFrame({ ...frame, meetingSpans: [{ start, end: h.now, app: 'Zoom' }] });
+    await h.settle();
+    assert.equal(h.stats().meetings, undefined, 'short manually paused sample is still pending');
+    await h.call('Navbar', 'onSelectTab', 'stats');
+    await h.captured.StatisticsView.meetingHistoryControls.onEnabledChange(false); await h.settle();
+    await h.advance(5000);
+    window.testNativeFrame({ ...frame, tickCount: 2, meetingHistoryEpoch: 1, meetingSpans: [{ start, end: h.now, app: 'Zoom' }] });
+    await h.settle();
+    assert.equal(h.stats().meetings, undefined, 'opt-out discards pending samples');
+    const enabledAt = h.now;
+    h.captured.StatisticsView.meetingHistoryControls.onEnabledChange(true); await h.settle();
+    await h.advance(5000);
+    window.testNativeFrame({ ...frame, tickCount: 3, meetingHistoryEpoch: 1, meetingSpans: [{ start, end: h.now, app: 'Zoom' }] });
+    await h.settle();
+    assert.equal(h.stats().meetings, undefined, 'delayed old epoch cannot restore samples');
+    window.testNativeFrame({ ...frame, tickCount: 4, meetingHistoryEpoch: 2, meetingSpans: [{ start, end: h.now, app: 'Zoom' }] });
+    await h.settle();
+    assert.equal(h.stats().meetings[0].start, enabledAt, 'cumulative samples are clipped to fresh opt-in');
+    assert.equal(h.captured.StatisticsView.meetingHistoryControls.enabled, true);
+    assert.equal(h.captured.StatisticsView.meetingHistoryControls.supported, true);
+    await h.call('Navbar', 'onOpenSettings');
+    assert.equal(h.captured.SettingsModal.settings.meetingDetectionEnabled, false, 'recording does not enable postponement');
+  } finally { h.destroy(); if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous; delete window.testNativeFrame; }
+});
+
+for (const acknowledgeReenable of [false, true]) test(`App rollback cannot restore discarded calls from delayed off frames ${acknowledgeReenable ? 'after' : 'before'} re-enable acknowledgement`, async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const fixture = path.join(build, 'native-meeting-bridge.ts'), previous = window.__TAURI__;
+  window.__TAURI__ = { core: { invoke: async () => undefined } };
+  let enabled = true, epoch = 0;
+  const pending = [];
+  window.testConfigureTimer = consent => {
+    if (consent === enabled) return Promise.resolve({ meetingHistoryEpoch: epoch });
+    enabled = consent; epoch++;
+    return new Promise(resolve => pending.push({ enabled: consent, epoch, resolve }));
+  };
+  const h = createHarness({ meetingHistoryEnabled: true, meetingDetectionEnabled: false }, false, false,
+    at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
+  let destroyed = false;
+  try {
+    await h.settle();
+    const start = h.now;
+    const preserved = [{ start: start - 60000, end: start - 30000, app: 'Microsoft Teams' }];
+    h.store.set('myeyes_stats_v1', JSON.stringify([day('2026-10-14', { meetings: preserved, focusMinutes: 3 })]));
+    const frame = { totalMs: 1200000, remainingMs: 1200000, manualPaused: true, breakActive: false, exercising: false,
+      expiryPending: false, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+      suspended: false, breakElapsed: false, focusByDate: {}, tickCount: 1, meetingHistoryEpoch: 0, meetingApplications: ['Zoom'] };
+    await h.advance(1000);
+    const discarded = [{ start, end: h.now, app: 'Zoom' }];
+    window.testNativeFrame({ ...frame, meetingSpans: discarded }); await h.settle();
+    assert.deepEqual(JSON.parse(JSON.stringify(h.stats().meetings)), preserved, 'short sample remains pending alongside existing history');
+    await h.call('Navbar', 'onSelectTab', 'stats');
+    await h.captured.StatisticsView.meetingHistoryControls.onEnabledChange(false); await h.settle();
+    assert.equal(pending[0].enabled, false, 'native off configuration remains in flight');
+    await h.shiftWall(-10000);
+    await h.captured.StatisticsView.meetingHistoryControls.onEnabledChange(true); await h.settle();
+    window.testNativeFrame({ ...frame, tickCount: 2, meetingHistoryEpoch: 1, meetingSpans: discarded }); await h.settle();
+    if (acknowledgeReenable) {
+      pending.shift().resolve({ ...frame, tickCount: 2, meetingHistoryEpoch: 1, meetingSpans: discarded }); await h.settle();
+      assert.equal(pending[0].enabled, true, 're-enable waits behind native opt-out');
+      const reenabled = { ...frame, tickCount: 3, meetingHistoryEpoch: 2, meetingSpans: [], meetingApplications: [] };
+      pending.shift().resolve(reenabled); await h.settle();
+      window.testNativeFrame(reenabled); await h.settle();
+    }
+    h.destroy(); destroyed = true;
+    assert.deepEqual(JSON.parse(JSON.stringify(h.stats().meetings)), preserved,
+      acknowledgeReenable ? 'acknowledged fresh native epoch cannot preserve a discarded delayed frame on unmount' : 'unacknowledged re-enable cannot persist a delayed off frame on unmount');
+  } finally {
+    if (!destroyed) h.destroy();
+    window.testConfigureTimer = () => Promise.resolve({ meetingHistoryEpoch: epoch, meetingSpans: [] });
+    for (const request of pending) request.resolve({ meetingHistoryEpoch: request.epoch, meetingSpans: [] });
+    await h.settle();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+    delete window.testNativeFrame; delete window.testConfigureTimer;
+  }
+});
+
+test('App rejects configure acknowledgement from an earlier consent generation and waits for the current one', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const fixture = path.join(build, 'native-meeting-bridge.ts'), previous = window.__TAURI__;
+  window.__TAURI__ = { core: { invoke: async () => undefined } };
+  let enabled = true, epoch = 0;
+  const pending = [];
+  window.testConfigureTimer = consent => {
+    if (consent === enabled) return Promise.resolve({ meetingHistoryEpoch: epoch });
+    enabled = consent; epoch++;
+    return new Promise(resolve => pending.push({ enabled: consent, epoch, resolve }));
+  };
+  const h = createHarness({ meetingHistoryEnabled: true }, false, false, at('2026-10-14', 9),
+    { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
+  let destroyed = false;
+  try {
+    await h.settle();
+    await h.call('Navbar', 'onSelectTab', 'stats');
+    const toggle = async value => { await h.captured.StatisticsView.meetingHistoryControls.onEnabledChange(value); await h.settle(); };
+    await toggle(false); await toggle(true);
+    pending.shift().resolve({ meetingHistoryEpoch: 1 }); await h.settle();
+    assert.equal(pending[0].epoch, 2);
+    await toggle(false); await toggle(true);
+    pending.shift().resolve({ meetingHistoryEpoch: 2 }); await h.settle();
+    assert.equal(pending[0].epoch, 3, 'latest opt-out is still pending');
+    const start = h.now;
+    const frame = { totalMs: 1200000, remainingMs: 1200000, manualPaused: true, breakActive: false, exercising: false,
+      expiryPending: false, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+      suspended: false, breakElapsed: false, focusByDate: {}, tickCount: 1, meetingHistoryEpoch: 2, meetingApplications: ['Zoom'] };
+    await h.advance(1000);
+    window.testNativeFrame({ ...frame, meetingSpans: [{ start, end: h.now, app: 'Zoom' }] }); await h.settle();
+    pending.shift().resolve({ meetingHistoryEpoch: 3 }); await h.settle();
+    assert.equal(pending[0].epoch, 4);
+    pending.shift().resolve({ meetingHistoryEpoch: 4 }); await h.settle();
+    const freshStart = h.now;
+    await h.advance(1000);
+    window.testNativeFrame({ ...frame, tickCount: 2, meetingHistoryEpoch: 4,
+      meetingSpans: [{ start: freshStart, end: h.now, app: 'Zoom' }] }); await h.settle();
+    h.destroy(); destroyed = true;
+    assert.equal(h.stats().meetings[0].start, freshStart, 'only the current-generation acknowledged sample is persisted');
+  } finally {
+    if (!destroyed) h.destroy();
+    for (const request of pending) request.resolve({ meetingHistoryEpoch: request.epoch });
+    await h.settle();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+    delete window.testNativeFrame; delete window.testConfigureTimer;
+  }
+});
+
+test('App cannot record calls after configure failure until the current consent is acknowledged', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const fixture = path.join(build, 'native-meeting-bridge.ts'), previous = window.__TAURI__;
+  window.__TAURI__ = { core: { invoke: async () => undefined } };
+  window.testConfigureTimer = async () => { throw Error('configure fixture'); };
+  const h = createHarness({ meetingHistoryEnabled: true }, false, false, at('2026-10-14', 9),
+    { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
+  let destroyed = false;
+  try {
+    await h.settle();
+    const start = h.now;
+    const frame = { totalMs: 1200000, remainingMs: 1200000, manualPaused: true, breakActive: false, exercising: false,
+      expiryPending: false, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+      suspended: false, breakElapsed: false, focusByDate: {}, tickCount: 1, meetingHistoryEpoch: 0, meetingApplications: ['Zoom'] };
+    await h.advance(1000);
+    window.testNativeFrame({ ...frame, meetingSpans: [{ start, end: h.now, app: 'Zoom' }] }); await h.settle();
+    await h.call('Navbar', 'onSelectTab', 'stats');
+    window.testConfigureTimer = async () => ({ meetingHistoryEpoch: 0 });
+    await h.call('TimerWidget', 'onTogglePlay');
+    const freshStart = h.now;
+    await h.advance(1000);
+    window.testNativeFrame({ ...frame, tickCount: 2, meetingSpans: [{ start: freshStart, end: h.now, app: 'Zoom' }] }); await h.settle();
+    h.destroy(); destroyed = true;
+    assert.equal(h.stats().meetings[0].start, freshStart, 'failed configuration never unlocks recording');
+  } finally {
+    if (!destroyed) h.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+    delete window.testNativeFrame; delete window.testConfigureTimer;
+  }
+});
+
+test('App clear queued behind current consent acknowledgement preserves the clear boundary and resumes recording', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const fixture = path.join(build, 'native-meeting-bridge.ts'), previous = window.__TAURI__;
+  window.__TAURI__ = { core: { invoke: async () => undefined } };
+  let enabled = true, epoch = 0, resolveClear, clearCalls = 0;
+  const pending = [];
+  window.testConfigureTimer = consent => {
+    if (consent === enabled) return Promise.resolve({ meetingHistoryEpoch: epoch });
+    enabled = consent; epoch++;
+    return new Promise(resolve => pending.push({ epoch, resolve }));
+  };
+  window.testClearMeetingHistory = () => { clearCalls++; return new Promise(resolve => { resolveClear = resolve; }); };
+  const h = createHarness({ meetingHistoryEnabled: true }, false, false, at('2026-10-14', 9),
+    { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
+  let destroyed = false;
+  try {
+    await h.settle();
+    await h.call('Navbar', 'onSelectTab', 'stats');
+    await h.captured.StatisticsView.meetingHistoryControls.onEnabledChange(false); await h.settle();
+    pending.shift().resolve({ meetingHistoryEpoch: 1 }); await h.settle();
+    await h.captured.StatisticsView.meetingHistoryControls.onEnabledChange(true); await h.settle();
+    assert.equal(pending[0].epoch, 2);
+    const deleting = h.captured.StatisticsView.meetingHistoryControls.onDelete(); await h.settle();
+    assert.equal(clearCalls, 0, 'clear waits for the current consent configuration');
+    pending.shift().resolve({ meetingHistoryEpoch: 2 }); await h.settle();
+    assert.equal(clearCalls, 1, 'matching configure acknowledgement arrives while clearing');
+    const frame = { totalMs: 1200000, remainingMs: 1200000, manualPaused: true, breakActive: false, exercising: false,
+      expiryPending: false, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+      suspended: false, breakElapsed: false, focusByDate: {}, tickCount: 1, meetingHistoryEpoch: 3,
+      meetingSpans: [], meetingApplications: [] };
+    epoch = 3;
+    resolveClear(frame); await deleting; await h.settle();
+    const start = h.now;
+    await h.advance(1000);
+    window.testNativeFrame({ ...frame, tickCount: 2, meetingHistoryEpoch: 2,
+      meetingSpans: [{ start, end: h.now, app: 'Microsoft Teams' }] }); await h.settle();
+    window.testNativeFrame({ ...frame, tickCount: 3,
+      meetingSpans: [{ start, end: h.now, app: 'Zoom' }] }); await h.settle();
+    h.destroy(); destroyed = true;
+    assert.equal(h.stats().meetings.length, 1);
+    assert.equal(h.stats().meetings[0].app, 'Zoom', 'clear epoch rejects older frames and recording resumes');
+  } finally {
+    if (!destroyed) h.destroy();
+    for (const request of pending) request.resolve({ meetingHistoryEpoch: request.epoch });
+    await h.settle();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+    delete window.testNativeFrame; delete window.testConfigureTimer; delete window.testClearMeetingHistory;
+  }
+});
+
+test('App native clear precedes local deletion, rejects stale frames and exposes failures without losing other statistics', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const fixture = path.join(build, 'native-meeting-bridge.ts'), previous = window.__TAURI__;
+  window.__TAURI__ = { core: { invoke: async () => undefined } };
+  const h = createHarness({ meetingHistoryEnabled: true }, false, false, at('2026-10-14', 9),
+    { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
+  try {
+    await h.settle();
+    const start = h.now;
+    const frame = { totalMs: 1200000, remainingMs: 1200000, manualPaused: true, breakActive: false, exercising: false,
+      expiryPending: false, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+      suspended: false, breakElapsed: false, focusByDate: {}, tickCount: 1, meetingHistoryEpoch: 0,
+      meetingApplications: ['Zoom'] };
+    await h.advance(5000);
+    const oldSpans = [{ start, end: h.now, app: 'Zoom' }];
+    window.testNativeFrame({ ...frame, meetingSpans: oldSpans, activitySpans: [{ start, end: h.now, state: 'manual' }] }); await h.settle();
+    await h.call('Navbar', 'onSelectTab', 'stats');
+    const persisted = h.store.get('myeyes_stats_v1');
+    window.testClearMeetingHistory = async () => { throw Error('clear IPC fixture'); };
+    await h.captured.StatisticsView.meetingHistoryControls.onDelete(); await h.settle();
+    assert.equal(h.store.get('myeyes_stats_v1'), persisted, 'native clear failure does not delete local history');
+    assert.equal(h.captured.StatisticsView.meetingHistoryControls.feedback, 'failed');
+    let resolveClear;
+    window.testClearMeetingHistory = () => new Promise(resolve => { resolveClear = resolve; });
+    const deleting = h.captured.StatisticsView.meetingHistoryControls.onDelete(); await h.settle();
+    assert.equal(h.captured.StatisticsView.meetingHistoryControls.pending, true);
+    assert.equal(h.store.get('myeyes_stats_v1'), persisted, 'local deletion waits for native invalidation');
+    await h.advance(1000);
+    window.testNativeFrame({ ...frame, tickCount: 2, meetingSpans: [{ start, end: h.now, app: 'Zoom' }] }); await h.settle();
+    resolveClear({ ...frame, tickCount: 3, meetingHistoryEpoch: 1, meetingSpans: [], meetingApplications: [] });
+    await deleting; await h.settle();
+    assert.equal(h.stats().meetings, undefined);
+    assert.equal(h.captured.StatisticsView.meetingHistoryControls.feedback, 'deleted');
+    assert.equal(h.captured.StatisticsView.meetingHistoryControls.enabled, true, 'deletion preserves consent setting');
+    const cleared = h.store.get('myeyes_stats_v1');
+    window.testNativeFrame({ ...frame, tickCount: 2, meetingSpans: oldSpans }); await h.settle();
+    window.testNativeFrame({ ...frame, tickCount: 4, meetingSpans: oldSpans }); await h.settle();
+    assert.equal(h.store.get('myeyes_stats_v1'), cleared, 'old frame or replay cannot restore deleted calls');
+    assert.equal(h.captured.StatisticsView.meetingApplications.length, 0);
+    assert.equal(h.stats().focusMinutes, 0);
+    assert(h.stats().activity?.length > 0, 'other timer history remains');
+    await h.advance(5000);
+    window.testNativeFrame({ ...frame, tickCount: 5, meetingHistoryEpoch: 1,
+      meetingSpans: [{ start: h.now - 5000, end: h.now, app: 'Zoom' }] }); await h.settle();
+    assert.equal(h.stats().meetings[0].start, h.now - 5000, 'fresh call observation resumes after clear');
+  } finally { h.destroy(); if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+    delete window.testNativeFrame; delete window.testClearMeetingHistory; }
 });

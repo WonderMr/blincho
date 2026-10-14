@@ -46,6 +46,7 @@ export interface AppSettings {
   idleThresholdMinutes: number;
   strictModeIgnoreIdle: boolean;
   meetingDetectionEnabled: boolean;
+  meetingHistoryEnabled: boolean;
   strictMode: boolean;
 }
 

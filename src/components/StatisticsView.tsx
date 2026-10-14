@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { DayStats, CVSSurveyResult, ActivityState } from '../types';
 import { analyzeDayActivity, summarizeWeek } from '../utils/activity';
 import { analyzeDayMeetings, summarizeWeekMeetings } from '../utils/meetings';
+import { MeetingHistoryControls } from './MeetingHistoryControls';
+import type { MeetingHistoryControlsProps } from './MeetingHistoryControls';
 import { Trophy, Flame, CheckCircle2, Clock, Calendar, Zap, LockKeyhole, Activity, Monitor, Coffee, Pause, ChevronDown, Phone } from 'lucide-react';
 
 interface StatisticsViewProps {
@@ -11,6 +13,7 @@ interface StatisticsViewProps {
   allStats: DayStats[];
   cvsResult: CVSSurveyResult | null;
   meetingApplications?: string[];
+  meetingHistoryControls?: Omit<MeetingHistoryControlsProps, 'id'>;
 }
 
 const localDayKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -47,7 +50,7 @@ const stateCategory = (state: TimelineState) => {
   return state;
 };
 
-export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allStats, cvsResult, meetingApplications = [] }) => {
+export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allStats, cvsResult, meetingApplications = [], meetingHistoryControls }) => {
   useI18n();
   const [selectedDate, setSelectedDate] = useState(todayStats.date);
   const history = new Map(allStats.map(day => [day.date, day]));
@@ -194,6 +197,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allS
             </table></div>
           </details>}
           <section className="statistics-meetings" aria-labelledby="daily-meetings-title">
+            {meetingHistoryControls && <MeetingHistoryControls id="statistics-meeting-history" {...meetingHistoryControls} />}
             <div className="statistics-meetings-heading">
               <h4 id="daily-meetings-title"><Phone size={17} aria-hidden="true" />{t("Созвоны")}</h4>
               <span>{t("Созвонов: {value0}", { value0: meetings.callCount })}</span>
@@ -233,7 +237,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allS
                   <dd>{formatDuration(application.totalMinutes)}<span>{t("Созвонов: {value0}", { value0: application.callCount })}</span></dd></div>)}</dl>
               </div>
             </> : <p className="statistics-history-note">{t("В этот день созвоны не записаны.")}</p>}
-            <p className="statistics-detail-note">{t("Созвоны записываются при включённом определении встреч, пока Blincho запущен.")}</p>
+            <p className="statistics-detail-note">{t("Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.")}</p>
             <p className="statistics-detail-note">{t("Для звонков в браузере показывается название браузера.")} {t("Время определяется по системным признакам и может быть приблизительным.")}</p>
             {meetings.callCount > 0 && <p className="statistics-detail-note">{t("Пересекающиеся созвоны учитываются в общем времени один раз.")}</p>}
           </section>
