@@ -106,6 +106,8 @@ jobs:
             ~/.cargo/git
             src-tauri/target
           key: blincho-rust-${{ runner.os }}-${{ matrix.rust-target }}-1.92-cmake3.31-macos14-${{ hashFiles('src-tauri/Cargo.lock', '.cargo/config.toml', '.cargo/*.cmake') }}
+          restore-keys: |
+            blincho-rust-${{ runner.os }}-${{ matrix.rust-target }}-1.92-cmake3.31-macos14-
       - name: Install pinned CMake for native history migration
         shell: bash
         run: |
