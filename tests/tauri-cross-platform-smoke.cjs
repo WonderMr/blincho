@@ -95,8 +95,10 @@ async function stop() {
   const overlay = await inspectRenderer();
   assert.equal(overlay.renderer.dialog, true);
   await until(value => !value.timer.breakActive, breakSeconds * 1000 + 8000);
-  await sleep(1200); // Include the renderer's final cleanup and following native ticks.
-  const restored = read();
+  // Native monitor/geometry recovery can defer restoration beyond one tick.
+  const restored = await until(value => !value.visible && !value.timer.breakActive, 10_000);
+  await sleep(300);
+  assert.equal(read().visible, false, 'Tray restoration remains stable after native cleanup');
   assert.equal(restored.visible, false, 'A break that began from the tray must return to the tray');
   assert.equal(restored.focused, false, 'A completed tray break must release native window focus');
   await sleep(1000);
