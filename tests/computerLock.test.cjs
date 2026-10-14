@@ -172,9 +172,9 @@ test('Electron preload exposes a zero-argument trusted lock invoke and preserves
   assert.deepEqual(call, ['lock-computer']);
 });
 
-test('Tauri compatibility bridge invokes lock_computer and preserves success and failure', async () => {
+test('Tauri compatibility bridge invokes lock_computer and preserves success and failure with CRLF source', async () => {
   const file = path.join(__dirname, '../src/utils/tauriBridge.ts');
-  const raw = fs.readFileSync(file, 'utf8').replace(/^import .*;\n/gm, '');
+  const raw = fs.readFileSync(file, 'utf8').replace(/\r?\n/g, '\r\n').replace(/^import .*;\r?\n/gm, '');
   const code = transformSync(file, raw).code.replace(/\bexport /g, '') + '\nmodule.exports = { initializeTauriBridge };';
   const calls = [];
   let failure = null;
