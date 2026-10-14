@@ -33,12 +33,15 @@ pub fn activation_policy(visible: bool) -> tauri::ActivationPolicy {
 pub fn set_dock_visible(_app: &tauri::AppHandle, _visible: bool) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let state = _app.state::<DockVisibility>();
+        let state = _app
+            .try_state::<DockVisibility>()
+            .ok_or("Dock visibility unavailable")?;
         let mut visible = state.0.lock().map_err(|e| e.to_string())?;
         if *visible != _visible {
             // The Dock-only API suppresses rapid hide/show requests. Activation
             // policy applies each transition without making native windows unhideable.
-            _app.set_activation_policy(activation_policy(_visible)).map_err(|e| e.to_string())?;
+            _app.set_activation_policy(activation_policy(_visible))
+                .map_err(|e| e.to_string())?;
             *visible = _visible;
         }
     }
@@ -50,12 +53,15 @@ pub fn reconcile_dock(app: &tauri::AppHandle) -> Result<(), String> {
     // Strict shields temporarily own activation policy and restore their
     // captured baseline. A newer tray action must supersede that baseline.
     let visible = dock_is_visible(app)?;
-    app.set_activation_policy(activation_policy(visible)).map_err(|e| e.to_string())
+    app.set_activation_policy(activation_policy(visible))
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(target_os = "macos")]
 pub fn dock_is_visible(app: &tauri::AppHandle) -> Result<bool, String> {
-    let state = app.state::<DockVisibility>();
+    let state = app
+        .try_state::<DockVisibility>()
+        .ok_or("Dock visibility unavailable")?;
     let visible = state.0.lock().map_err(|e| e.to_string())?;
     Ok(*visible)
 }
