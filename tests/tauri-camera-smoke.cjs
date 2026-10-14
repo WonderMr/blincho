@@ -37,7 +37,7 @@ async function evaluate(script) {
 (async () => {
   try {
     await until(value => value.renderer?.ready && value.timer.totalMs > 0);
-    await evaluate(`(async()=>{let detector;try{
+    await evaluate(`(async()=>{let detector;const graphics={htmlWebgl:!!document.createElement('canvas').getContext('webgl2'),offscreenWebgl:typeof OffscreenCanvas==='function'&&!!new OffscreenCanvas(1,1).getContext('webgl2')};try{
       const module=await import('./assets/${modelChunk}'); detector=await Object.values(module)[0]();
       const canvas=document.createElement('canvas');canvas.width=320;canvas.height=240;
       const ctx=canvas.getContext('2d');const gradient=ctx.createLinearGradient(0,0,320,240);gradient.addColorStop(0,'#263342');gradient.addColorStop(1,'#a8bbc9');ctx.fillStyle=gradient;ctx.fillRect(0,0,320,240);
@@ -47,7 +47,7 @@ async function evaluate(script) {
       await new Promise(resolve=>setTimeout(resolve,100));
       const toggle=document.getElementById('camera-lock-enabled');
       await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:true,detections:result.detections.length,cameraAPI:typeof navigator.mediaDevices?.getUserMedia==='function',lockAPI:typeof window.electronAPI.lockComputer==='function',lockRejected,defaultEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==false,toggleReady:!!toggle&&toggle.checked&&!toggle.disabled}}});
-    }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:false,error:String(error),stack:error?.stack}}})}finally{detector?.close()}})()`);
+    }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:false,error:String(error),stack:error?.stack,graphics}}})}finally{detector?.close()}})()`);
     const probe = (await until(value => value.renderer?.cameraSmoke)).renderer.cameraSmoke;
     assert.equal(probe.passed, true, JSON.stringify(probe)); assert.equal(probe.cameraAPI, true); assert.equal(probe.lockAPI, true); assert.equal(probe.lockRejected, true); assert.equal(probe.defaultEnabled, true); assert.equal(probe.toggleReady, true);
     console.log(JSON.stringify({ ...probe, executable, profile: directory, limitation: 'Actual camera hardware and physical locking were not invoked.' }, null, 2));
