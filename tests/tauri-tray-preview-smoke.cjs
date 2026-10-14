@@ -5,6 +5,13 @@ const path = require('node:path');
 const os = require('node:os');
 const assert = require('node:assert/strict');
 const { spawn, spawnSync } = require('node:child_process');
+const { loadNotificationAreaProof, callIndicatorReady, assertCallIndicator, assertCallRestored } = require('./support/windowsNotificationArea.cjs');
+const notificationAreaProof = loadNotificationAreaProof();
+let nativeIconRejectionObserved = false;
+function assertIndicator(tray, active) {
+  assertCallIndicator(tray, active, notificationAreaProof);
+  if (tray.callIndicatorError !== null) nativeIconRejectionObserved = true;
+}
 const root = path.resolve(__dirname, '..');
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-tray-preview-smoke-'));
 const source = path.join(directory, 'legacy.json');
@@ -68,17 +75,25 @@ async function control(operation, args = {}) {
   const hover = kind => control('tray-preview', { kind, x: anchor.x + 100, y: anchor.y });
   await control('meeting', { active: true, applications: ['Zoom'] });
   const call = await until(value => value.timer.liveMeetingEnabled && value.timer.liveMeetingStatus?.inMeeting &&
-    value.trayPreview.callIndicatorActive && value.trayPreview.tooltip.includes('Zoom'));
+    callIndicatorReady(value.trayPreview, true, notificationAreaProof) && value.trayPreview.tooltip.includes('Zoom'));
+  assertIndicator(call.trayPreview, true);
   assert.deepEqual(call.timer.liveMeetingStatus.applications, ['Zoom']);
   assert.deepEqual(call.timer.meetingSpans, [], 'Live tray calls must not opt into history');
   assert.equal(call.visible, false, 'A live call cannot open the main window');
   const callUpdates = call.trayPreview.callIndicatorUpdates;
+  const callAttempts = call.trayPreview.callIndicatorAttempts;
   await sleep(1100);
   assert.equal(read().trayPreview.callIndicatorUpdates, callUpdates, 'Stable calls do not repeatedly replace the icon');
+  assert.equal(read().trayPreview.callIndicatorAttempts, callAttempts, 'Stable calls do not retry a rejected icon before its cooldown');
+  const beforeCallHover = read();
+  if (process.platform === 'darwin') assert.notEqual(beforeCallHover.trayPreview.native.frontmostPid,
+    beforeCallHover.pid, 'A call icon update must not activate the hidden application');
   await hover('enter');
   if (process.platform !== 'linux') {
     const callPopup = await until(value => value.trayPreview.visible);
     assert.equal(callPopup.trayPreview.focused, false);
+    if (process.platform === 'darwin') assert.equal(callPopup.trayPreview.native.frontmostPid,
+      beforeCallHover.trayPreview.native.frontmostPid, 'Active-call hover preserves the foreground application');
     const scale = callPopup.trayPreview.scaleFactor;
     if (scale) assert.equal(Math.round(callPopup.trayPreview.innerSize.height / scale), 232);
     if (process.platform === 'darwin' && process.argv.includes('--screenshot')) {
@@ -91,22 +106,28 @@ async function control(operation, args = {}) {
     assert(call.trayPreview.fallbackRows.some(row => row.includes('Zoom')), 'Linux tray menu includes the active call app');
   }
   await control('meeting', { active: false, applications: [] });
-  const inactive = await until(value => value.timer.liveMeetingStatus?.inMeeting === false && !value.trayPreview.callIndicatorActive);
-  assert(inactive.trayPreview.callIndicatorUpdates > callUpdates, 'Call end restores the regular icon');
+  const inactive = await until(value => value.timer.liveMeetingStatus?.inMeeting === false &&
+    callIndicatorReady(value.trayPreview, false, notificationAreaProof) &&
+    value.trayPreview.callStatus === value.trayPreview.summary.meetingInactiveLabel);
+  assertCallRestored(call.trayPreview, inactive.trayPreview, notificationAreaProof);
   assert.deepEqual(inactive.timer.meetingSpans, []);
   await control('meeting', { active: true, applications: ['Google Chrome'] });
-  await until(value => value.trayPreview.callIndicatorActive && value.trayPreview.tooltip.includes('Google Chrome'));
-  const live = read();
+  const live = await until(value => value.timer.liveMeetingStatus?.inMeeting &&
+    callIndicatorReady(value.trayPreview, true, notificationAreaProof) && value.trayPreview.tooltip.includes('Google Chrome'));
+  assertIndicator(live.trayPreview, true);
+  assert(live.trayPreview.callIndicatorAttempts > inactive.trayPreview.callIndicatorAttempts,
+    'A new call attempts icon application immediately after the prior call ended');
   const disabledInput = { totalMs: 3_600_000, remainingMs: live.timer.remainingMs, manualPaused: false,
     breakActive: false, exercising: false, expiryPending: false, version: live.timer.version + 1,
     breakSeconds: 20, strictMode: false, idleEnabled: false, idleThresholdSeconds: 60,
     meetingEnabled: false, meetingHistoryEnabled: false, autoTakeover: true };
   await control('configure', { input: disabledInput });
   const disabled = await until(value => !value.timer.liveMeetingEnabled && value.timer.liveMeetingStatus === null &&
-    !value.trayPreview.callIndicatorActive && value.trayPreview.callStatus === value.trayPreview.summary.meetingDisabledLabel);
+    callIndicatorReady(value.trayPreview, false, notificationAreaProof) && value.trayPreview.callStatus === value.trayPreview.summary.meetingDisabledLabel);
+  assertCallRestored(live.trayPreview, disabled.trayPreview, notificationAreaProof);
   assert.deepEqual(disabled.timer.meetingSpans, [], 'Disabling detection cannot create history');
   await control('meeting', { active: false, applications: [] });
-  console.log('PASS: live call icon, app status, end and disable work with history off and without focus or repeated icon updates.');
+  console.log('PASS: live call app status, end and disable work with history off and without focus or repeated icon attempts.');
   if (process.platform === 'linux') {
     await until(value => value.trayPreview.fallbackRows.length === 4 && value.trayPreview.fallbackRows[0].includes('Next break'));
     await hover('enter');
@@ -170,7 +191,12 @@ async function control(operation, args = {}) {
     await control('hide');
     console.log('PASS: strict break guard suppresses preview and retains its shield/focus behavior.');
   }
-  fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify({ passed: true, platform: process.platform, final: read() }, null, 2));
+  const notificationArea = nativeIconRejectionObserved
+    ? 'unavailable: same-machine native SDK proof confirmed ARM64 CI NIM_ADD rejection; visible icon remains unverified'
+    : 'native call icon and restoration successfully applied';
+  console.log('Notification area: ' + notificationArea);
+  fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify({ passed: true, platform: process.platform,
+    notificationArea, final: read() }, null, 2));
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   if (child.exitCode === null && child.signalCode === null && !launchError) {
     try { await control('quit'); } catch { child.kill(); }
