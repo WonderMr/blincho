@@ -4,6 +4,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const { performance } = require('node:perf_hooks');
 const { createLinuxSessionProbe } = require('./linuxSession.cjs');
+const { createComputerLocker } = require(path.join(__dirname, 'lockComputer.cjs'));
 const { locales, isLocale, resolveLocale } = require('./locales.cjs');
 const { createUpdateController, registerUpdateIpc } = require('./updater.cjs');
 
@@ -82,6 +83,9 @@ let linuxPresenceConfirmed = process.platform !== 'linux';
 let linuxProbeFailureReported = false;
 let powerGeneration = 0;
 const linuxSession = process.platform === 'linux' ? createLinuxSessionProbe({ execute: execFile, env: process.env, now: () => performance.now() }) : null;
+const lockComputer = createComputerLocker({ execute: execFile, platform: process.platform, env: process.env,
+  confirmed: async () => locked || powerMonitor.getSystemIdleState(1) === 'locked',
+});
 let breakWindowState = null;
 let fullscreenGeneration = 0;
 let pendingFullscreenRestore = null;
@@ -458,6 +462,12 @@ ipcMain.handle('get-system-idle-time', () => {
   } catch (err) {
     throw new Error('System idle time is unavailable');
   }
+});
+
+ipcMain.handle('lock-computer', event => {
+  requireMainRenderer(event);
+  if (suspended || isQuitting) throw Error('Computer locking is unavailable while the session is suspended');
+  return lockComputer();
 });
 
 function releaseBreakPresentation() {

@@ -532,5 +532,10 @@
   "Звонок": "Chamada",
   "Нет активного звонка": "Nenhuma chamada em andamento",
   "Статус звонка неизвестен": "Estado da chamada desconhecido",
-  "Определение звонков отключено": "Detecção de chamadas desativada"
+  "Определение звонков отключено": "Detecção de chamadas desativada",
+  "Блокировать компьютер, если никого нет": "Bloquear o computador se não houver ninguém",
+  "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "No final de um intervalo de trabalho, a câmera verifica se há uma pessoa. Se ninguém for detectado, o computador é bloqueado. A verificação ocorre no dispositivo; as imagens não são salvas nem enviadas. É necessária permissão para usar a câmera. Se a câmera ou a verificação não estiver disponível, o bloqueio é ignorado.",
+  "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Disponível no aplicativo para desktop com suporte à câmera. O navegador não bloqueia o computador.",
+  "Камера не обнаружила человека. Компьютер заблокирован.": "A câmera não detectou nenhuma pessoa. O computador está bloqueado.",
+  "Не удалось заблокировать компьютер.": "Não foi possível bloquear o computador."
 }

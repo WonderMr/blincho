@@ -532,5 +532,10 @@
   "Звонок": "Cuộc gọi",
   "Нет активного звонка": "Không có cuộc gọi đang diễn ra",
   "Статус звонка неизвестен": "Chưa rõ trạng thái cuộc gọi",
-  "Определение звонков отключено": "Đã tắt phát hiện cuộc gọi"
+  "Определение звонков отключено": "Đã tắt phát hiện cuộc gọi",
+  "Блокировать компьютер, если никого нет": "Khóa máy tính khi không có ai",
+  "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Khi kết thúc khoảng làm việc, camera kiểm tra xem có người hay không. Nếu không phát hiện ai, máy tính sẽ bị khóa. Việc kiểm tra diễn ra trên thiết bị; hình ảnh không được lưu hay gửi đi. Cần cấp quyền camera. Nếu camera hoặc chức năng kiểm tra không khả dụng, thao tác khóa sẽ được bỏ qua.",
+  "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Có trong ứng dụng máy tính hỗ trợ camera. Trình duyệt không khóa máy tính.",
+  "Камера не обнаружила человека. Компьютер заблокирован.": "Camera không phát hiện người. Máy tính đã bị khóa.",
+  "Не удалось заблокировать компьютер.": "Không thể khóa máy tính."
 }

@@ -20,6 +20,9 @@ pub struct TimerInput {
     pub meeting_enabled: bool,
     #[serde(default)]
     pub meeting_history_enabled: bool,
+    // Older or incomplete renderer commands must not grant camera access.
+    #[serde(default)]
+    pub camera_lock_enabled: bool,
     #[serde(default = "default_takeover")]
     pub auto_takeover: bool,
 }
@@ -82,6 +85,12 @@ pub struct Timer {
     meeting_clock_floor: i64,
 }
 impl Timer {
+    #[cfg(any(target_os = "linux", test))]
+    pub fn camera_lock_enabled(&self) -> bool {
+        self.input
+            .as_ref()
+            .is_some_and(|input| input.camera_lock_enabled)
+    }
     pub fn new(now: i64) -> Self {
         Self {
             input: None,
@@ -642,6 +651,7 @@ mod tests {
         });
         let legacy_input: TimerInput = serde_json::from_value(legacy.clone()).unwrap();
         assert!(!legacy_input.meeting_history_enabled);
+        assert!(!legacy_input.camera_lock_enabled);
         let mut timer = Timer::new(0);
         timer.configure(legacy_input, 0).unwrap();
         assert!(!timer.meeting_sample_allowed());
@@ -791,6 +801,35 @@ mod tests {
         assert!(!live.in_meeting && live.supported);
         assert!(live.applications.is_empty());
         assert!(timer.snapshot.meeting_spans.is_empty());
+    }
+    #[test]
+    fn camera_grant_follows_current_configuration_without_restart() {
+        let mut timer = Timer::new(0);
+        assert!(!timer.camera_lock_enabled());
+        let mut settings = input();
+        timer.configure(settings.clone(), 0).unwrap();
+        assert!(timer.camera_lock_enabled());
+        settings.camera_lock_enabled = false;
+        timer.configure(settings.clone(), 250).unwrap();
+        assert!(!timer.camera_lock_enabled());
+        settings.camera_lock_enabled = true;
+        timer.configure(settings, 500).unwrap();
+        assert!(timer.camera_lock_enabled());
+    }
+    #[test]
+    fn rejected_configuration_cannot_reenable_camera() {
+        let mut timer = Timer::new(0);
+        let mut settings = input();
+        settings.camera_lock_enabled = false;
+        settings.version = 2;
+        timer.configure(settings, 0).unwrap();
+        assert!(timer.configure(input(), 250).is_err());
+        assert!(!timer.camera_lock_enabled());
+        let mut invalid = input();
+        invalid.version = 2;
+        invalid.total_ms = f64::NAN;
+        assert!(timer.configure(invalid, 500).is_err());
+        assert!(!timer.camera_lock_enabled());
     }
     #[test]
     fn reenable_discards_retained_calls_even_after_clock_rollback() {
@@ -1232,6 +1271,7 @@ mod tests {
             idle_threshold_seconds: 60.,
             meeting_enabled: false,
             meeting_history_enabled: false,
+            camera_lock_enabled: true,
             auto_takeover: true,
         }
     }

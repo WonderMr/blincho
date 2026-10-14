@@ -60,6 +60,38 @@ pub fn observe_power(callback: extern "C" fn(i32)) -> Result<(), String> {
 pub fn power_source() -> &'static str {
     native::power_source()
 }
+pub fn lock_computer(test_profile: bool) -> Result<bool, String> {
+    lock_computer_with(
+        test_profile || std::env::var_os("BLINCHO_PROTOTYPE_TEST_DIR").is_some(),
+        native::request_lock,
+        native::lock_confirmed,
+        || std::thread::sleep(Duration::from_millis(50)),
+    )
+}
+fn lock_computer_with(
+    test_profile: bool,
+    request: impl FnOnce() -> Result<(), String>,
+    mut confirmed: impl FnMut() -> Option<bool>,
+    mut wait: impl FnMut(),
+) -> Result<bool, String> {
+    if test_profile {
+        return Err("Computer locking is disabled in test profiles".into());
+    }
+    request()?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    // A successful native request can be asynchronous or ignored by a desktop
+    // without a screen locker. Only confirmed state is reported as success.
+    for _ in 0..60 {
+        if confirmed() == Some(true) {
+            return Ok(true);
+        }
+        if Instant::now() >= deadline {
+            break;
+        }
+        wait();
+    }
+    Err("The computer lock could not be confirmed".into())
+}
 pub fn notifications_initialize(clicked: extern "C" fn()) {
     native::notifications_initialize(clicked);
 }
@@ -340,6 +372,55 @@ pub fn open_external(url: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn test_profiles_never_issue_a_lock_request() {
+        assert!(lock_computer_with(
+            true,
+            || panic!("Must not lock"),
+            || panic!("Must not probe"),
+            || panic!("Must not wait")
+        )
+        .is_err());
+    }
+    #[test]
+    fn lock_request_errors_are_preserved_without_probing() {
+        assert_eq!(
+            lock_computer_with(
+                false,
+                || Err("Native failure".into()),
+                || panic!("Must not probe"),
+                || panic!("Must not wait")
+            ),
+            Err("Native failure".into())
+        );
+    }
+    #[test]
+    fn accepted_lock_request_waits_for_confirmed_state() {
+        let mut samples = [Some(false), None, Some(true)].into_iter();
+        let mut waits = 0;
+        assert_eq!(
+            lock_computer_with(false, || Ok(()), || samples.next().unwrap(), || waits += 1),
+            Ok(true)
+        );
+        assert_eq!(waits, 2);
+    }
+    #[test]
+    fn accepted_but_unconfirmed_lock_requests_fail() {
+        for state in [Some(false), None] {
+            let mut probes = 0;
+            assert!(lock_computer_with(
+                false,
+                || Ok(()),
+                || {
+                    probes += 1;
+                    state
+                },
+                || {}
+            )
+            .is_err());
+            assert_eq!(probes, 60);
+        }
+    }
     #[test]
     fn focus_restoration_requires_own_foreground_and_original_external_target() {
         assert!(may_restore_focus(10, Some(10), 20, true));

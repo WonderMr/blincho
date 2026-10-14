@@ -532,5 +532,10 @@
   "Звонок": "Hovor",
   "Нет активного звонка": "Žádný probíhající hovor",
   "Статус звонка неизвестен": "Stav hovoru není znám",
-  "Определение звонков отключено": "Rozpoznávání hovorů je vypnuté"
+  "Определение звонков отключено": "Rozpoznávání hovorů je vypnuté",
+  "Блокировать компьютер, если никого нет": "Zamknout počítač, když nikdo není přítomen",
+  "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Na konci pracovního intervalu kamera ověří, zda je někdo přítomen. Pokud nikoho nezjistí, počítač se zamkne. Kontrola probíhá v zařízení; snímky se neukládají ani neodesílají. Je nutné oprávnění ke kameře. Pokud kamera nebo kontrola nejsou dostupné, zamknutí se přeskočí.",
+  "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Dostupné v desktopové aplikaci s podporou kamery. Prohlížeč počítač nezamyká.",
+  "Камера не обнаружила человека. Компьютер заблокирован.": "Kamera nezjistila žádnou osobu. Počítač je zamčený.",
+  "Не удалось заблокировать компьютер.": "Počítač se nepodařilo zamknout."
 }
