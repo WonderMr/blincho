@@ -185,7 +185,7 @@ test('Tauri compatibility bridge invokes lock_computer and preserves success and
     return true;
   } }, event: { listen: async () => () => {} } } };
   const context = { window, document: { documentElement: { dataset: {} }, addEventListener() {} },
-    TimerSession: class {}, module: { exports: {} }, setTimeout, clearTimeout, console };
+    TimerSession: class {}, installWindowDrag() {}, module: { exports: {} }, setTimeout, clearTimeout, console };
   vm.runInNewContext(code, context);
   await context.module.exports.initializeTauriBridge();
   assert.equal(await window.electronAPI.lockComputer(), true);
