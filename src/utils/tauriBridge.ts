@@ -2,7 +2,7 @@ import { gatherLegacyHistory } from './historyTransfer';
 import { createHistoryRecovery } from './historyRecovery';
 import type { HistoryStartupResult } from './historyRecovery';
 import { TimerSession, PresenceReason } from './timerSession';
-import type { AppSettings } from '../types';
+import type { AppSettings, ActivitySpan } from '../types';
 import type {} from './notifications';
 import type { UpdateState } from './updates';
 
@@ -11,6 +11,7 @@ export interface NativeTimerSnapshot {
   exercising: boolean; expiryPending: boolean; version: number; reasons: PresenceReason[];
   absentSince: number | null; absenceEpoch: number; idleSeconds: number; locked: boolean; suspended: boolean;
   meetingPostponedEpoch?: number; breakElapsed: boolean; breakEndAt?: number | null; focusByDate: Record<string, number>; tickCount: number;
+  activitySpans?: ActivitySpan[];
 }
 interface TauriGlobal {
   core: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };
@@ -29,6 +30,7 @@ let historyRecovery: ReturnType<typeof createHistoryRecovery> | undefined;
 
 export class NativeTimerSession extends TimerSession {
   advance(now: number): boolean { this.lastUpdated = now; return false; }
+  drainActivity(): ActivitySpan[] { super.drainActivity(); return []; }
 }
 export function hasNativeTimer(): boolean { return !!window.__TAURI__; }
 export function subscribeNativeTimer(callback: (snapshot: NativeTimerSnapshot) => void): () => void {

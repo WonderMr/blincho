@@ -1,4 +1,5 @@
-import { AppSettings, DayStats, CVSSurveyResult } from '../types';
+import { AppSettings, DayStats, CVSSurveyResult, ActivitySpan } from '../types';
+import { normalizeActivity, splitActivityByDay } from './activity';
 import { normalizeTimerSettings } from './timerSession';
 import { CVS_SURVEY_QUESTIONS } from '../data/cvsQuestions';
 
@@ -64,6 +65,7 @@ export function loadAllStats(): DayStats[] {
       /^\d{4}-\d{2}-\d{2}$/.test(stat.date) &&
       [stat.breaksCompleted, stat.exercisesCompleted, stat.focusMinutes].every(value =>
         typeof value === 'number' && Number.isFinite(value) && value >= 0))
+      .map(stat => ({ ...stat, ...(stat.activity !== undefined ? { activity: normalizeActivity(stat.activity, stat.date) } : {}) }))
       .sort((a, b) => a.date.localeCompare(b.date));
   } catch {
     return [];
@@ -106,6 +108,33 @@ export function recordFocusSeconds(seconds: number, date = getTodayDateString())
   return updateDay(date, stat => {
     if (Number.isFinite(seconds) && seconds > 0) stat.focusMinutes += seconds / 60;
   });
+}
+
+export function recordActivitySpans(spans: ActivitySpan[]): void {
+  recordTimerProgress([], spans);
+}
+
+// Focus totals and timeline observations share one snapshot and one write,
+// including heartbeats that cross local midnight.
+export function recordTimerProgress(focus: [string, number][], spans: ActivitySpan[]): void {
+  const activity = splitActivityByDay(spans);
+  const validFocus = focus.filter(([date, seconds]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(seconds) && seconds > 0);
+  if (!validFocus.length && !activity.size) return;
+  const stats = loadAllStats();
+  const history = new Map(stats.map(day => [day.date, day]));
+  const getDay = (date: string) => {
+    let day = history.get(date);
+    if (!day) { day = emptyDay(date); history.set(date, day); }
+    return day;
+  };
+  for (const [date, seconds] of validFocus) getDay(date).focusMinutes += seconds / 60;
+  for (const [date, entries] of activity) {
+    const day = getDay(date);
+    day.activity = normalizeActivity([...(day.activity ?? []), ...entries], date);
+  }
+  try {
+    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify([...history.values()].sort((a, b) => a.date.localeCompare(b.date))));
+  } catch (error) { console.warn('Blincho: Failed to save timer progress:', error); }
 }
 
 export function recordBreakCompleted(workMinutesGained = 0, eventId?: string): DayStats {

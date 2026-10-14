@@ -49,6 +49,14 @@ export interface AppSettings {
   strictMode: boolean;
 }
 
+export type ActivityState = 'work' | 'idle' | 'locked' | 'suspended' | 'hidden' | 'unconfirmed' | 'manual' | 'break' | 'exercise';
+
+export interface ActivitySpan {
+  start: number;
+  end: number;
+  state: ActivityState;
+}
+
 export interface DayStats {
   date: string; // YYYY-MM-DD
   breaksCompleted: number;
@@ -56,6 +64,8 @@ export interface DayStats {
   focusMinutes: number;
   techniqueCounts?: Record<string, number>;
   completedEventIds?: string[];
+  // Older aggregate-only history has no timeline and remains readable.
+  activity?: ActivitySpan[];
 }
 
 export interface CVSSurveyQuestion {

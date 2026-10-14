@@ -2,6 +2,15 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.7.0]
+
+### Added
+
+- Hover over the macOS or Windows tray icon to see the next break countdown and today's recorded work time and completed breaks, without interrupting the foreground application. Linux tray menus show the same live summary.
+- Explore daily activity timelines with recorded work, inactivity, screen lock, sleep, manual pause, breaks and exercises. Select previous days and inspect exact intervals, first and last work, and average and longest work sessions.
+- Compare weekly averages per calendar day and per day of use. Preserve older totals and explicitly identify hours without detailed records.
+- Keep activity history locally, split observations and focus across local midnight, and distinguish unconfirmed time and future hours. Localize the new statistics in all 30 supported languages.
+
 ## [1.6.4]
 
 ### Fixed

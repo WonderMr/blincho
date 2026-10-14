@@ -13,6 +13,8 @@ Website: https://blincho.app
 - Keeps the desktop timer running in Rust when the window is hidden or minimized.
 - Restores the window on its previous monitor after lock or sleep, keeping hidden and minimized windows in the background. If that monitor is disconnected, the window returns to an available screen.
 - Includes exercises, a personal comfort journal and local statistics.
+- Shows a small tray preview with the next break countdown, recorded work time and completed breaks on macOS and Windows. Linux exposes the live summary in its tray menu.
+- Records daily work, absence, lock, sleep, manual pauses and rest intervals locally. Browse previous days, average and longest work intervals, and weekly averages per calendar day or day of use. Older totals stay available; missing time records remain unknown.
 - Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
 - Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.
 
