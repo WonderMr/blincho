@@ -565,11 +565,29 @@ fn test_control_on_main(app: &tauri::AppHandle) {
             "release-and-hide" => {
                 let input: TimerInput =
                     serde_json::from_value(command["input"].clone()).map_err(|e| e.to_string())?;
+                let shield_count = platform::strict_shield_count();
+                let (observed_at, deadline) = {
+                    let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+                    sample(&mut timer);
+                    let observed_at = Utc::now().timestamp_millis();
+                    if !timer.strict() || shield_count <= 0 {
+                        return Err("No active strict guard".into());
+                    }
+                    let deadline = timer
+                        .snapshot
+                        .break_end_at
+                        .filter(|deadline| *deadline > observed_at)
+                        .ok_or("No active strict guard")?;
+                    (observed_at, deadline)
+                };
                 configure_timer(input, app.clone())?;
                 // Execute the accepted hide before queued native strict teardown
                 // in one UI turn, reproducing the stale-policy restoration race.
                 desktop_command("hide".into(), None, app.clone())?;
                 presentation_on_main(app, false, true)?;
+                return Ok(json!({"ok":true,"id":command["id"],"guardPrecondition":{
+                    "shieldCount":shield_count,"observedAt":observed_at,"deadline":deadline
+                }}));
             }
             "tray-rest" => request_tray_break(app)?,
             "maximize" => {
