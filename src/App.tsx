@@ -396,7 +396,7 @@ export const App: React.FC = () => {
               return;
             }
             console.warn('Blincho: Computer lock was not confirmed.');
-            setNoticeMessage("Не удалось заблокировать компьютер.");
+            if (mountedRef.current) setNoticeMessage("Не удалось заблокировать компьютер.");
           } catch (error) {
             console.warn('Blincho: Computer lock failed:', error);
             if (mountedRef.current) setNoticeMessage("Не удалось заблокировать компьютер.");
