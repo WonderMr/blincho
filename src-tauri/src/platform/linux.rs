@@ -674,11 +674,11 @@ pub fn meeting_status() -> MeetingStatus {
     let status =
         bounded_probe("pactl", &["--format=json", "list", "source-outputs"]).and_then(|outputs| {
             bounded_probe("pactl", &["--format=json", "list", "sources"])
-                .and_then(|sources| parsing::pulse_meeting_status(&outputs, &sources))
+                .and_then(|sources| parsing::pulse_meeting_applications(&outputs, &sources))
         });
-    MeetingStatus {
-        in_meeting: status.unwrap_or(false),
-        supported: status.is_some(),
+    match status {
+        Some(applications) => MeetingStatus::detected(applications, true),
+        None => MeetingStatus::inactive(false),
     }
 }
 pub fn meeting_supported() -> bool {

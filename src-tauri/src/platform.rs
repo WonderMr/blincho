@@ -103,10 +103,31 @@ use std::{
 pub struct MeetingStatus {
     pub in_meeting: bool,
     pub supported: bool,
+    pub applications: Vec<String>,
+}
+impl MeetingStatus {
+    pub fn detected(applications: Vec<String>, supported: bool) -> Self {
+        let applications = normalize_meeting_applications(&applications);
+        Self {
+            in_meeting: supported && !applications.is_empty(),
+            supported,
+            applications,
+        }
+    }
+    pub fn inactive(supported: bool) -> Self {
+        Self {
+            in_meeting: false,
+            supported,
+            applications: vec![],
+        }
+    }
+}
+pub fn normalize_meeting_applications(values: &[String]) -> Vec<String> {
+    parsing::normalize_meeting_applications(values)
 }
 pub struct MeetingMonitor {
     cache: Mutex<Option<(Instant, u64, MeetingStatus)>>,
-    test_status: Mutex<Option<bool>>,
+    test_status: Mutex<Option<MeetingStatus>>,
 }
 impl MeetingMonitor {
     pub fn new() -> Self {
@@ -115,30 +136,70 @@ impl MeetingMonitor {
             test_status: Mutex::new(None),
         }
     }
-    pub fn set_test_status(&self, value: bool) {
-        *self.test_status.lock().unwrap() = Some(value);
+    pub fn set_test_status(&self, active: bool, applications: Vec<String>) {
+        let applications = if active {
+            let applications = normalize_meeting_applications(&applications);
+            if applications.is_empty() {
+                vec!["unknown".into()]
+            } else {
+                applications
+            }
+        } else {
+            vec![]
+        };
+        *self.test_status.lock().unwrap() = Some(MeetingStatus {
+            in_meeting: active,
+            supported: true,
+            applications,
+        });
+        *self.cache.lock().unwrap() = None;
+    }
+    pub fn invalidate(&self) {
+        *self.cache.lock().unwrap() = None;
+    }
+    pub fn inactive_status(&self) -> MeetingStatus {
+        let supported = self
+            .test_status
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|status| status.supported)
+            .or_else(|| {
+                self.cache
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|(_, _, status)| status.supported)
+            })
+            .unwrap_or(cfg!(target_os = "macos"));
+        self.invalidate();
+        MeetingStatus::inactive(supported)
     }
     pub fn check(&self, epoch: u64, absent: bool) -> MeetingStatus {
         if absent {
-            *self.cache.lock().unwrap() = None;
-            return MeetingStatus {
-                in_meeting: false,
-                supported: meeting_supported(),
-            };
+            return self.inactive_status();
         }
-        if let Some(value) = *self.test_status.lock().unwrap() {
-            return MeetingStatus {
-                in_meeting: value,
-                supported: true,
-            };
+        self.check_with(epoch, false, native::meeting_status)
+    }
+    pub fn check_fresh(&self, epoch: u64) -> MeetingStatus {
+        self.check_with(epoch, true, native::meeting_status)
+    }
+    fn check_with(
+        &self,
+        epoch: u64,
+        fresh: bool,
+        probe: impl FnOnce() -> MeetingStatus,
+    ) -> MeetingStatus {
+        if let Some(value) = self.test_status.lock().unwrap().as_ref() {
+            return value.clone();
         }
         let mut cache = self.cache.lock().unwrap();
         if let Some((at, generation, value)) = &*cache {
-            if *generation == epoch && at.elapsed() < Duration::from_secs(10) {
+            if !fresh && *generation == epoch && at.elapsed() < Duration::from_secs(10) {
                 return value.clone();
             }
         }
-        let result = native::meeting_status();
+        let result = probe();
         *cache = Some((Instant::now(), epoch, result.clone()));
         result
     }
@@ -180,7 +241,7 @@ pub(super) fn bounded_probe(program: &str, args: &[&str]) -> Option<String> {
         None
     }
 }
-pub fn active_meeting_assertion(output: &str) -> bool {
+pub fn active_meeting_applications(output: &str) -> Vec<String> {
     static SUMMARY: OnceLock<Regex> = OnceLock::new();
     static ASSERTION: OnceLock<Regex> = OnceLock::new();
     let summary = SUMMARY
@@ -189,18 +250,18 @@ pub fn active_meeting_assertion(output: &str) -> bool {
         .captures(output)
         .is_some_and(|capture| capture[1].parse::<u32>().is_ok_and(|value| value > 0))
     {
-        return false;
+        return vec![];
     }
     let assertion = ASSERTION.get_or_init(|| {
         Regex::new(r#"(?i)\bpid\s+\d+\((.+?)\):.*?\b\d+:\d+:\d+\s+(\w+)\s+named:\s*"([^"]*)""#)
             .unwrap()
     });
-    output
+    let applications = output
         .lines()
         .filter_map(|line| assertion.captures(line))
-        .any(|capture| {
+        .filter_map(|capture| {
             if &capture[2] != "PreventUserIdleDisplaySleep" {
-                return false;
+                return None;
             }
             let owner = capture[1].trim().to_lowercase();
             let name = capture[3].to_lowercase();
@@ -223,12 +284,25 @@ pub fn active_meeting_assertion(output: &str) -> bool {
                 "microsoft edge",
             ]
             .contains(&owner.as_str());
-            known
+            let meeting = known
                 || browser
                     && (name == "webrtc"
                         || name.starts_with("webrtc ")
-                        || name.contains("meet.google.com"))
+                        || name.contains("meet.google.com"));
+            meeting
+                .then(|| parsing::meeting_application(&owner).map(String::from))
+                .flatten()
         })
+        .collect::<Vec<_>>();
+    normalize_meeting_applications(&applications)
+}
+#[cfg(any(target_os = "macos", test))]
+fn needs_zoom_capture_probe(applications: &[String]) -> bool {
+    !applications.iter().any(|application| application == "Zoom")
+}
+#[cfg(test)]
+pub fn active_meeting_assertion(output: &str) -> bool {
+    !active_meeting_applications(output).is_empty()
 }
 pub fn open_external(url: &str) -> Result<(), String> {
     if url.len() > 4096 {
@@ -296,6 +370,99 @@ mod tests {
             &assertion("zoom.us", "PreventUserIdleDisplaySleep", "meeting")
                 .replace("Sleep 1", "Sleep 0")
         ));
+    }
+    #[test]
+    fn meeting_assertions_attribute_multiple_apps_without_retaining_titles() {
+        let output = [
+            assertion(
+                "CptHost",
+                "PreventUserIdleDisplaySleep",
+                "Alice's Zoom meeting",
+            ),
+            assertion("zoom.us", "PreventUserIdleDisplaySleep", "private call"),
+            assertion(
+                "Google Chrome",
+                "PreventUserIdleDisplaySleep",
+                "WebRTC https://meet.google.com/private-room",
+            ),
+            assertion(
+                "Microsoft Teams",
+                "PreventUserIdleDisplaySleep",
+                "private customer",
+            ),
+            assertion("Firefox", "PreventUserIdleDisplaySleep", "Playing video"),
+        ]
+        .join("\n");
+        assert_eq!(
+            active_meeting_applications(&output),
+            ["Google Chrome", "Microsoft Teams", "Zoom"]
+        );
+    }
+    #[test]
+    fn modeled_meeting_status_keeps_legacy_boolean_and_filters_applications() {
+        let monitor = MeetingMonitor::new();
+        monitor.set_test_status(true, vec![]);
+        let unknown = monitor.check(0, false);
+        assert!(unknown.in_meeting && unknown.supported);
+        assert_eq!(unknown.applications, ["unknown"]);
+        monitor.set_test_status(
+            true,
+            vec![
+                "Zoom.exe".into(),
+                "CptHost".into(),
+                "private meeting title".into(),
+            ],
+        );
+        assert_eq!(monitor.check(0, false).applications, ["Zoom"]);
+        monitor.set_test_status(false, vec!["Zoom".into()]);
+        let inactive = monitor.check(0, false);
+        assert!(!inactive.in_meeting);
+        assert!(inactive.applications.is_empty());
+    }
+    #[test]
+    fn another_assertion_does_not_suppress_the_zoom_capture_fallback() {
+        let applications = active_meeting_applications(&assertion(
+            "Microsoft Teams",
+            "PreventUserIdleDisplaySleep",
+            "private call",
+        ));
+        assert!(needs_zoom_capture_probe(&applications));
+        assert!(needs_zoom_capture_probe(&["Google Chrome".into()]));
+        assert!(!needs_zoom_capture_probe(&[
+            "Zoom".into(),
+            "Microsoft Teams".into()
+        ]));
+    }
+    #[test]
+    fn expiry_probe_bypasses_cached_positive_and_negative_background_samples() {
+        let monitor = MeetingMonitor::new();
+        let zoom = || MeetingStatus::detected(vec!["Zoom".into()], true);
+        let inactive = || MeetingStatus::inactive(true);
+        assert!(monitor.check_with(0, false, zoom).in_meeting);
+        assert!(monitor.check_with(0, false, inactive).in_meeting);
+        assert!(!monitor.check_with(0, true, inactive).in_meeting);
+        assert!(!monitor.check_with(0, false, zoom).in_meeting);
+        assert!(monitor.check_with(0, true, zoom).in_meeting);
+    }
+    #[test]
+    fn absence_returns_inactive_without_probing_and_invalidates_old_cache() {
+        let monitor = MeetingMonitor::new();
+        assert!(
+            monitor
+                .check_with(0, false, || MeetingStatus::detected(
+                    vec!["Zoom".into()],
+                    true
+                ))
+                .in_meeting
+        );
+        let absent = monitor.check(0, true);
+        assert!(!absent.in_meeting && absent.supported);
+        assert!(absent.applications.is_empty());
+        assert!(
+            !monitor
+                .check_with(0, false, || MeetingStatus::inactive(true))
+                .in_meeting
+        );
     }
     #[test]
     fn unsafe_external_schemes_do_not_open_any_program() {

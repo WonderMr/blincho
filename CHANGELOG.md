@@ -2,6 +2,14 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.7.2]
+
+### Added
+
+- Show detected calls in daily statistics with their application, observed start and end, duration, per-app timelines and totals, average and longest call, and weekly call time.
+- Record calls in the native background timer while the window is hidden, the timer is manually paused or strict mode is enabled. Keep call history locally across restarts and local midnight, and count overlapping calls only once in total elapsed time.
+- Attribute detected calls to normalized desktop or browser application names on macOS, Windows and Linux. Localize call statistics in all 30 supported languages. Call detection remains approximate, requires the existing meeting detection setting, and does not record conversation contents.
+
 ## [1.7.1]
 
 ### Added

@@ -1,9 +1,11 @@
 // Intelligent Idle and Meeting / Presentation Detection Service
+import { normalizeMeetingApplications } from './meetings';
 
 export interface MeetingStatus {
   inMeeting: boolean;
   details?: string;
   supported?: boolean;
+  applications?: string[];
 }
 
 let lastPageActivity = Date.now();
@@ -32,7 +34,7 @@ export async function detectActiveMeeting(): Promise<MeetingStatus> {
   if (window.electronAPI?.checkMeetingActive) {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      const status = await Promise.race([
+      const status: MeetingStatus = await Promise.race([
         Promise.resolve().then(() => window.electronAPI!.checkMeetingActive!()),
         new Promise<MeetingStatus>(resolve => {
           timeout = setTimeout(() => {
@@ -45,7 +47,9 @@ export async function detectActiveMeeting(): Promise<MeetingStatus> {
         console.warn('Blincho: Invalid meeting detection response.');
         return { inMeeting: false, supported: false };
       }
-      return status;
+      return { ...status, ...(status.applications !== undefined ? {
+        applications: status.inMeeting ? normalizeMeetingApplications(status.applications) : [],
+      } : {}) };
     } catch (error) {
       console.warn('Blincho: Meeting detection failed:', error);
       return { inMeeting: false, supported: false };
