@@ -16,6 +16,15 @@ if ($AllowUnavailableNotificationArea -and
     throw 'Unavailable notification-area diagnostics are limited to the GitHub Actions ARM64 image.'
 }
 
+# Every invocation supersedes a previous preflight. A recovered notification area
+# must not leave an earlier unavailable classification in later smoke steps.
+foreach ($name in 'BLINCHO_WINDOWS_NOTIFICATION_AREA_PROOF', 'BLINCHO_WINDOWS_NOTIFICATION_AREA_PROOF_SHA256', 'BLINCHO_WINDOWS_DESKTOP_SESSION_ID') {
+    [Environment]::SetEnvironmentVariable($name, '', 'Process')
+    if ($env:GITHUB_ACTIONS -eq 'true' -and $env:GITHUB_ENV) {
+        [IO.File]::AppendAllText($env:GITHUB_ENV, "$name=`n", [Text.UTF8Encoding]::new($false))
+    }
+}
+
 # Explorer can exist before its notification area accepts icons. Probe the actual
 # add/tooltip-update/delete operations used by tray-icon before running GUI tests.
 # https://learn.microsoft.com/windows/win32/api/shellapi/nf-shellapi-shell_notifyiconw
@@ -155,16 +164,48 @@ if ($AllowUnavailableNotificationArea -and $failure -eq 'NIM_ADD returned false'
     $sdkOutput = @(& (Join-Path $PSScriptRoot 'diagnose-windows-tray.ps1') | Tee-Object -Variable sdkLines)
     foreach ($line in $sdkOutput) { if ($line -is [string]) { Write-Host $line } }
     $sdkText = ($sdkLines | ForEach-Object { $_.ToString() }) -join "`n"
-    if ($sdkText -notmatch 'SDK pointer=8 size=976 hwnd=8 icon=32 tip=40 guid=952 balloon=968' -or
-        $sdkText -notmatch 'responsive=1 response=0 messagingError=0') {
+    $sdkText = $sdkText.Replace("`r", '')
+    $layout = [regex]::Matches($sdkText, '(?m)^SDK pointer=8 size=976 hwnd=8 icon=32 tip=40 guid=952 balloon=968$')
+    $taskbar = [regex]::Matches($sdkText, '(?m)^taskbar=((?:0x)?[A-Fa-f0-9]+) pid=(\d+) tid=(\d+) responsive=1 response=0 messagingError=0$')
+    if ($layout.Count -ne 1 -or $taskbar.Count -ne 1 -or
+        [Convert]::ToUInt64($taskbar[0].Groups[1].Value.Replace('0x', ''), 16) -eq 0 -or
+        [uint32]$taskbar[0].Groups[2].Value -ne $taskbarProcessId -or
+        [uint32]$taskbar[0].Groups[3].Value -eq 0 -or
+        [regex]::Matches($sdkText, '(?m)^STA initialization=0000000[01]$').Count -ne 1) {
         throw 'ARM64 notification-area exception requires matching native SDK layout and a responsive taskbar.'
     }
     foreach ($variant in 'A-static-no-message', 'A2-static-message', 'B-registered-message', 'C-registered-message-STA') {
-        if ($sdkText -notmatch "(?m)^$variant window=.+ add=0 durationMs=" -or
-            $sdkText -notmatch "(?m)^$variant addAfterPump=0$") {
+        $flags = if ($variant -eq 'A-static-no-message') { 6 } else { 7 }
+        $callback = if ($variant -eq 'A-static-no-message') { 0 } else { 6002 }
+        $initial = [regex]::Matches($sdkText, "(?m)^$variant window=((?:0x)?[A-Fa-f0-9]+) flags=$flags callback=$callback add=0 durationMs=\d+$")
+        if ($initial.Count -ne 1 -or
+            [Convert]::ToUInt64($initial[0].Groups[1].Value.Replace('0x', ''), 16) -eq 0 -or
+            [regex]::Matches($sdkText, "(?m)^$variant addAfterPump=0$").Count -ne 1 -or
+            [regex]::Matches($sdkText, "(?m)^$variant .+$").Count -ne 2) {
             throw "ARM64 notification-area exception requires native SDK rejection for $variant."
         }
     }
+    if (-not $env:RUNNER_TEMP -or -not $env:GITHUB_ENV -or -not $env:COMPUTERNAME -or
+        -not $env:GITHUB_RUN_ID -or -not $env:GITHUB_RUN_ATTEMPT -or -not $env:GITHUB_JOB -or -not $env:GITHUB_SHA) {
+        throw 'ARM64 notification-area exception requires a complete same-job proof handoff.'
+    }
+    $proof = [ordered]@{
+        schemaVersion = 1; classification = 'unavailable'; probe = 'native-windows-sdk'; architecture = 'arm64'
+        generatedAt = [DateTime]::UtcNow.ToString('o'); machine = $env:COMPUTERNAME
+        sessionId = $sessionId; taskbarProcessId = $taskbarProcessId
+        github = [ordered]@{ runId = $env:GITHUB_RUN_ID; runAttempt = $env:GITHUB_RUN_ATTEMPT; job = $env:GITHUB_JOB; sha = $env:GITHUB_SHA }
+        sourceHashes = [ordered]@{
+            sdkProbe = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $PSScriptRoot 'windows-tray-sdk-probe.cpp')).Hash.ToLowerInvariant()
+            sdkDiagnostic = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $PSScriptRoot 'diagnose-windows-tray.ps1')).Hash.ToLowerInvariant()
+            desktopPreparation = (Get-FileHash -Algorithm SHA256 -LiteralPath $PSCommandPath).Hash.ToLowerInvariant()
+        }
+        sdkOutput = $sdkText
+    }
+    $proofPath = Join-Path $env:RUNNER_TEMP ('blincho-notification-area-proof-' + [Guid]::NewGuid() + '.json')
+    [IO.File]::WriteAllText($proofPath, ($proof | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    $proofHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $proofPath).Hash.ToLowerInvariant()
+    $handoff = "BLINCHO_WINDOWS_NOTIFICATION_AREA_PROOF=$proofPath`nBLINCHO_WINDOWS_NOTIFICATION_AREA_PROOF_SHA256=$proofHash`nBLINCHO_WINDOWS_DESKTOP_SESSION_ID=$sessionId`n"
+    [IO.File]::AppendAllText($env:GITHUB_ENV, $handoff, [Text.UTF8Encoding]::new($false))
     Write-Warning "ARM64 CI notification area rejected NIM_ADD, independently confirmed by the SDK in this same machine. Notification-area display remains unverified. Real application renderer, history, timer and package checks still run. $previousState"
     return
 }

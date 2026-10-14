@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Gespreksgeschiedenis verwijderd.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Kan de gespreksgeschiedenis niet verwijderen. Probeer het opnieuw.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Gesprekken worden alleen vastgelegd als het opslaan van de geschiedenis is ingeschakeld en Blincho actief is.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Gesprekken vastleggen is alleen beschikbaar in de desktop-app van Blincho."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Gesprekken vastleggen is alleen beschikbaar in de desktop-app van Blincho.",
+  "Звонок": "Gesprek",
+  "Нет активного звонка": "Geen actief gesprek",
+  "Статус звонка неизвестен": "Gespreksstatus onbekend",
+  "Определение звонков отключено": "Gespreksdetectie uit"
 }

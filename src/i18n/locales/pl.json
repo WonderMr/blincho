@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Historia rozmów została usunięta.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Nie udało się usunąć historii rozmów. Spróbuj ponownie.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Rozmowy są zapisywane tylko przy włączonym zapisie historii i działającym Blincho.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Zapisywanie rozmów jest dostępne tylko w aplikacji komputerowej Blincho."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Zapisywanie rozmów jest dostępne tylko w aplikacji komputerowej Blincho.",
+  "Звонок": "Rozmowa",
+  "Нет активного звонка": "Brak trwającej rozmowy",
+  "Статус звонка неизвестен": "Stan rozmowy nieznany",
+  "Определение звонков отключено": "Wykrywanie rozmów wyłączone"
 }

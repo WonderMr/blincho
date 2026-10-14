@@ -7,6 +7,8 @@ interface TraySummary {
   title: string; nextBreakLabel: string; focusLabel: string; breaksLabel: string;
   pausedLabel: string; absentLabel: string; breakLabel: string; exerciseLabel: string;
   readyLabel: string; focusValue: string; breaksValue: string; todayLabel: string;
+  meetingLabel?: string; meetingInactiveLabel?: string; meetingUnknownLabel?: string;
+  meetingDisabledLabel?: string; unknownMeetingAppLabel?: string;
   theme?: string; colorPalette?: string;
 }
 interface PreviewState { timer: NativeTimerSnapshot; summary: TraySummary | null }
@@ -69,11 +71,25 @@ export default function TrayPreview() {
 
   if (!summary || !timer) return <div className="tray-preview-shell" aria-busy="true" />;
   const progress = timer.totalMs > 0 ? Math.max(0, Math.min(1, 1 - timer.remainingMs / timer.totalMs)) : 0;
+  const meeting = timer.liveMeetingStatus;
+  const meetingState = !timer.liveMeetingEnabled ? 'disabled' : !meeting?.supported ? 'unknown'
+    : meeting.inMeeting ? 'active' : 'inactive';
+  const applications = meeting?.applications.length
+    ? meeting.applications.map(app => app === 'unknown' ? summary.unknownMeetingAppLabel : app).join(', ')
+    : summary.unknownMeetingAppLabel;
+  const meetingText = meetingState === 'active' ? `${summary.meetingLabel}: ${applications}`
+    : meetingState === 'disabled' ? summary.meetingDisabledLabel
+    : meetingState === 'unknown' ? summary.meetingUnknownLabel : summary.meetingInactiveLabel;
   return (
     <section className="tray-preview-shell" aria-label={summary.title}>
       <header className="tray-preview-heading"><span className="tray-preview-brand" aria-hidden="true">B</span><strong>Blincho</strong><span>{summary.todayLabel}</span></header>
       <div className="tray-preview-clock-row"><span>{timerLabel(summary, timer)}</span><strong className="tray-preview-countdown">{previewCountdown(timer)}</strong></div>
       <div className="tray-preview-progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>
+      {summary.meetingLabel && meetingText && <div className="tray-preview-meeting" data-meeting-state={meetingState} title={meetingText}>
+        <span className="tray-preview-meeting-dot" aria-hidden="true" />
+        <span className="tray-preview-meeting-text">{meetingState === 'active'
+          ? <>{summary.meetingLabel}: <bdi>{applications}</bdi></> : meetingText}</span>
+      </div>}
       <dl className="tray-preview-totals">
         <div><dt>{summary.focusLabel}</dt><dd>{summary.focusValue}</dd></div>
         <div><dt>{summary.breaksLabel}</dt><dd>{summary.breaksValue}</dd></div>

@@ -5,6 +5,13 @@ const path = require('node:path');
 const os = require('node:os');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
+const { loadNotificationAreaProof, callIndicatorReady, assertCallIndicator, assertCallRestored } = require('./support/windowsNotificationArea.cjs');
+const notificationAreaProof = loadNotificationAreaProof();
+let nativeIconRejectionObserved = false;
+function assertIndicator(tray, active) {
+  assertCallIndicator(tray, active, notificationAreaProof);
+  if (tray.callIndicatorError !== null) nativeIconRejectionObserved = true;
+}
 const root = path.resolve(__dirname, '..');
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-meetings-smoke-'));
 const source = path.join(directory, 'legacy.json');
@@ -91,14 +98,48 @@ async function click(id) {
   console.log('Meeting smoke profile: ' + directory);
   const initial = await launch();
   await control('meeting', { active: true, applications: ['Zoom'] });
+  const liveDefaultOff = await until(value => value.timer.liveMeetingEnabled && value.timer.liveMeetingStatus?.inMeeting &&
+    callIndicatorReady(value.trayPreview, true, notificationAreaProof) && value.trayPreview.tooltip.includes('Zoom'));
+  assertIndicator(liveDefaultOff.trayPreview, true);
+  assert.deepEqual(liveDefaultOff.timer.liveMeetingStatus.applications, ['Zoom']);
+  assert.equal(liveDefaultOff.visible, false, 'Live calls cannot show the hidden window');
+  assert.equal(liveDefaultOff.focused, false, 'Live calls cannot steal focus');
   await sleep(1200);
   assert.deepEqual(read().timer.meetingSpans, [], 'A legacy profile with no history opt-in must not record calls');
+  assert.equal(read().trayPreview.callIndicatorAttempts, liveDefaultOff.trayPreview.callIndicatorAttempts,
+    'Stable calls cannot retry rejected icons before the cooldown');
+  assert.equal(read().trayPreview.callIndicatorUpdates, liveDefaultOff.trayPreview.callIndicatorUpdates,
+    'Stable calls cannot repeatedly replace icons');
   const defaultOff = await selectStatistics();
   assert.equal(defaultOff.renderer.historyEnabled, false);
   assert.equal(defaultOff.renderer.historyToggle.checked, false);
   assert.equal(defaultOff.renderer.historyToggle.disabled, false, 'Isolated modeled detection supports explicit opt-in');
   assert.deepEqual(savedCalls(defaultOff), []);
   await control('meeting', { active: false, applications: [] });
+  const inactiveDefaultOff = await until(value => value.timer.liveMeetingStatus?.inMeeting === false &&
+    callIndicatorReady(value.trayPreview, false, notificationAreaProof) &&
+    value.trayPreview.callStatus === value.trayPreview.summary.meetingInactiveLabel);
+  assertCallRestored(liveDefaultOff.trayPreview, inactiveDefaultOff.trayPreview, notificationAreaProof);
+  // Detection and history remain independent even when the host cannot show icons.
+  await control('meeting', { active: true, applications: ['Google Chrome'] });
+  const beforeDisable = await until(value => value.timer.liveMeetingStatus?.inMeeting &&
+    callIndicatorReady(value.trayPreview, true, notificationAreaProof) && value.trayPreview.tooltip.includes('Google Chrome'));
+  assertIndicator(beforeDisable.trayPreview, true);
+  assert(beforeDisable.trayPreview.callIndicatorAttempts > inactiveDefaultOff.trayPreview.callIndicatorAttempts,
+    'A new call immediately attempts icon application after call end');
+  const detectionInput = { totalMs: 3600000, remainingMs: beforeDisable.timer.remainingMs, manualPaused: false,
+    breakActive: false, exercising: false, expiryPending: false, version: beforeDisable.timer.version + 1,
+    breakSeconds: 20, strictMode: true, idleEnabled: false, idleThresholdSeconds: 60,
+    meetingEnabled: false, meetingHistoryEnabled: false, autoTakeover: true };
+  await control('configure', { input: detectionInput });
+  const disabled = await until(value => !value.timer.liveMeetingEnabled && value.timer.liveMeetingStatus === null &&
+    callIndicatorReady(value.trayPreview, false, notificationAreaProof) &&
+    value.trayPreview.callStatus === value.trayPreview.summary.meetingDisabledLabel);
+  assertCallRestored(beforeDisable.trayPreview, disabled.trayPreview, notificationAreaProof);
+  assert.deepEqual(disabled.timer.meetingSpans, [], 'Disabling live detection cannot opt into history');
+  await control('meeting', { active: false, applications: [] });
+  await control('configure', { input: { ...detectionInput, meetingEnabled: true, version: disabled.timer.version + 1 } });
+  await until(value => value.timer.liveMeetingEnabled && value.timer.liveMeetingStatus?.inMeeting === false);
   await click('statistics-meeting-history-enabled');
   await inspectUntil(value => value.renderer.historyEnabled);
   const optedIn = await until(value => value.timer.meetingHistoryEpoch > initial.timer.meetingHistoryEpoch);
@@ -110,13 +151,23 @@ async function click(id) {
   await control('meeting', { active: true, applications: ['Zoom'] });
   const started = Date.now();
   const zoom = await until(value => !value.visible && value.timer.manualPaused &&
-    value.timer.meetingSpans.some(span => span.app === 'Zoom' && span.end - span.start >= 1500));
+    value.timer.meetingSpans.some(span => span.app === 'Zoom' && span.end - span.start >= 1500) &&
+    callIndicatorReady(value.trayPreview, true, notificationAreaProof) && value.trayPreview.tooltip.includes('Zoom'));
+  assertIndicator(zoom.trayPreview, true);
   assert(zoom.timer.meetingSpans.every(span => span.start >= started - 1000), 'First detection must not backfill startup time');
   assert(zoom.timer.meetingApplications.includes('Zoom'));
   await control('meeting', { active: true, applications: ['Google Chrome'] });
-  await until(value => value.timer.meetingSpans.some(span => span.app === 'Google Chrome' && span.end - span.start >= 1500));
+  const chrome = await until(value => value.timer.meetingSpans.some(span => span.app === 'Google Chrome' && span.end - span.start >= 1500) &&
+    callIndicatorReady(value.trayPreview, true, notificationAreaProof) && value.trayPreview.tooltip.includes('Google Chrome'));
+  assertIndicator(chrome.trayPreview, true);
+  if (zoom.trayPreview.callIndicatorActive) {
+    assert.equal(chrome.trayPreview.callIndicatorUpdates, zoom.trayPreview.callIndicatorUpdates,
+      'Changing call apps keeps the already applied badge');
+  }
   await control('meeting', { active: false, applications: [] });
-  const ended = await until(value => value.timer.meetingApplications.length === 0);
+  const ended = await until(value => value.timer.meetingApplications.length === 0 &&
+    value.timer.liveMeetingStatus?.inMeeting === false && callIndicatorReady(value.trayPreview, false, notificationAreaProof));
+  assertCallRestored(chrome.trayPreview, ended.trayPreview, notificationAreaProof);
   const expectedCalls = canonicalCalls(ended.timer.meetingSpans);
   const finalEnd = Math.max(...ended.timer.meetingSpans.map(span => span.end));
   await sleep(1200);
@@ -149,9 +200,15 @@ async function click(id) {
   await click('statistics-meeting-history-enabled');
   await inspectUntil(value => !value.renderer.historyEnabled);
   await control('meeting', { active: true, applications: ['Zoom'] });
+  const optedOutCall = await until(value => value.timer.liveMeetingStatus?.inMeeting &&
+    callIndicatorReady(value.trayPreview, true, notificationAreaProof) && value.trayPreview.tooltip.includes('Zoom'));
+  assertIndicator(optedOutCall.trayPreview, true);
   await sleep(1200);
   assert.equal(Math.max(...read().timer.meetingSpans.map(span => span.end)), finalEnd, 'Opt-out stops future recording without deleting past calls');
   await control('meeting', { active: false, applications: [] });
+  const optedOutEnd = await until(value => value.timer.liveMeetingStatus?.inMeeting === false &&
+    callIndicatorReady(value.trayPreview, false, notificationAreaProof));
+  assertCallRestored(optedOutCall.trayPreview, optedOutEnd.trayPreview, notificationAreaProof);
   await stop();
   await launch();
   const restarted = await inspect();
@@ -190,7 +247,10 @@ async function click(id) {
   assert.equal(afterClearRestart.renderer.stats.find(day => day.date === '2026-10-11').focusMinutes, 42);
   await stop();
   const result = { passed: true, platform: process.platform, profile: directory,
-    checks: ['legacy default off', 'explicit UI opt-in', 'native hidden heartbeat', 'manual pause and strict recording', 'app attribution and transitions', 'call end', 'renderer storage', 'statistics app rows', 'opt-out without deletion', 'restart persistence', 'explicit delete confirmation', 'native and local deletion', 'no stale replay after clearing'],
+    notificationArea: nativeIconRejectionObserved
+      ? 'unavailable: same-machine native SDK proof confirmed ARM64 CI NIM_ADD rejection; visible icon remains unverified'
+      : 'native call icon and restoration successfully applied',
+    checks: ['live call tray with history off', 'inactive and disabled detection', 'native icon success or independently proven rejection diagnostics', 'legacy default off', 'explicit UI opt-in', 'native hidden heartbeat', 'manual pause and strict recording', 'app attribution and transitions', 'call end', 'renderer storage', 'statistics app rows', 'opt-out without deletion', 'restart persistence', 'explicit delete confirmation', 'native and local deletion', 'no stale replay after clearing'],
     limitation: 'Meeting and presence signals are modeled; actual app detection is tested separately by platform parsers.' };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));

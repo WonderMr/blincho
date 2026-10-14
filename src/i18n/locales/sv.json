@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Samtalshistoriken har raderats.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Det gick inte att radera samtalshistoriken. Försök igen.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Samtal registreras bara när sparande av historik är aktiverat och Blincho körs.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Registrering av samtal är bara tillgänglig i Blinchos datorapp."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Registrering av samtal är bara tillgänglig i Blinchos datorapp.",
+  "Звонок": "Samtal",
+  "Нет активного звонка": "Inget pågående samtal",
+  "Статус звонка неизвестен": "Samtalsstatus okänd",
+  "Определение звонков отключено": "Samtalsdetektering avstängd"
 }
