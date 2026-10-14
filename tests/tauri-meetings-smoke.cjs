@@ -17,7 +17,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-meetings-smoke-
 const source = path.join(directory, 'legacy.json');
 fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
   myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 60, breakSeconds: 20,
-    idleDetectionEnabled: false, meetingDetectionEnabled: true, strictMode: true,
+    idleDetectionEnabled: false, meetingDetectionEnabled: true, cameraLockEnabled: false, strictMode: true,
     soundEnabled: false, notificationsEnabled: false }),
   myeyes_stats_v1: JSON.stringify([{ date: '2026-10-11', breaksCompleted: 7, exercisesCompleted: 3, focusMinutes: 42 }]),
   'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),

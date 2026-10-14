@@ -169,7 +169,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   const source = path.join(directory, 'legacy.json');
   fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
     myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 60, breakSeconds,
-      strictMode, idleDetectionEnabled: false, meetingDetectionEnabled: false,
+      strictMode, idleDetectionEnabled: false, meetingDetectionEnabled: false, cameraLockEnabled: false,
       autoTakeoverModal: true, soundEnabled: false, notificationsEnabled: false }),
     'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
   } }));

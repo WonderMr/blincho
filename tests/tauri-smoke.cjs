@@ -9,7 +9,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-tauri-smoke-'))
 const source = path.join(directory, 'legacy.json');
 const fixture = { schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
   myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 10, breakSeconds: 4, idleDetectionEnabled: false,
-    meetingDetectionEnabled: false, strictMode: true, soundEnabled: false, notificationsEnabled: false }),
+    meetingDetectionEnabled: false, cameraLockEnabled: false, strictMode: true, soundEnabled: false, notificationsEnabled: false }),
   myeyes_stats_v1: '[{"date":"2026-10-11","breaksCompleted":7,"exercisesCompleted":3,"focusMinutes":42,"techniqueCounts":{"blink":3},"completedEventIds":["legacy-break"]}]',
   myeyes_cvs_result_v1: '{"date":"2026-10-11","score":9,"maxScore":18,"level":"self-check","title":"Самопроверка симптомов","recommendations":[]}',
   'blincho-language-v1': '{"preference":"ru","acknowledged":true}'
