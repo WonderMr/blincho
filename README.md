@@ -10,7 +10,7 @@ Website: https://blincho.app
 
 - Reminds you to take short breaks and supports configurable work/break intervals.
 - Pauses timing when you are away, the screen locks or the computer sleeps.
-- Can check the camera at the end of a work interval and lock the computer if no person is detected. Enabled by default in desktop Settings, requires camera permission, and skips locking when the camera or check is unavailable. Frames are processed locally, never saved or uploaded.
+- Can check the camera at the end of a work interval and lock the computer if no person is detected. Disabled by default. Enabling it in desktop Settings immediately checks camera access and requests permission when needed. Denied or unavailable access leaves the setting off. Frames are processed locally, never saved or uploaded; an unavailable interval check preserves the ordinary reminder.
 - Keeps the desktop timer running in Rust when the window is hidden or minimized.
 - Restores the window on its previous monitor after lock or sleep, keeping hidden and minimized windows in the background. If that monitor is disconnected, the window returns to an available screen.
 - Includes exercises, a personal comfort journal and local statistics.

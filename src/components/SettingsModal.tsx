@@ -9,12 +9,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AppSettings } from '../types';
 import { soundSynth } from '../audio/soundSynth';
 import { showEyeBreakNotification, requestNotificationPermission } from '../utils/notifications';
+import { requestCameraAccess } from '../utils/cameraAccess';
+import { hasNativeTimer, readNativeTimer } from '../utils/tauriBridge';
 import { X, Volume2, Shield, Check, Clock, Monitor } from 'lucide-react';
 
 interface SettingsModalProps {
   settings: AppSettings;
   onUpdateSettings: (newSettings: AppSettings) => void;
   onClose: () => void;
+  onCameraAccessPendingChange?: (pending: boolean) => void;
   updates?: UpdateControls;
   meetingHistoryControls?: Omit<MeetingHistoryControlsProps, 'id'>;
 }
@@ -46,13 +49,23 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ id, title, description, checked, 
   </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, updates, meetingHistoryControls }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, onCameraAccessPendingChange, updates, meetingHistoryControls }) => {
   const { preference, suggestedLocale, SUPPORTED_LANGUAGES, setLanguagePreference } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const [notificationFeedback, setNotificationFeedback] = useState('');
   const [notificationPending, setNotificationPending] = useState(false);
+  const [cameraPending, setCameraPending] = useState(false);
+  const [cameraFeedback, setCameraFeedback] = useState('');
+  const cameraRequestRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(false);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const updateSettingsRef = useRef(onUpdateSettings);
+  updateSettingsRef.current = onUpdateSettings;
+  const cameraPendingChangeRef = useRef(onCameraAccessPendingChange);
+  cameraPendingChangeRef.current = onCameraAccessPendingChange;
   const nativeApi = window.electronAPI as (NonNullable<Window['electronAPI']> & { meetingDetectionSupported?: boolean; lockComputer?: () => Promise<boolean> }) | undefined;
   const isNative = nativeApi?.isElectron === true;
   const meetingSupported = isNative && nativeApi?.meetingDetectionSupported === true;
@@ -60,7 +73,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   const notificationsSupported = isNative || 'Notification' in window;
   const notificationsBlocked = !isNative && 'Notification' in window && Notification.permission === 'denied';
 
+  const updateCameraSetting = (enabled: boolean) => {
+    const updated = { ...settingsRef.current, cameraLockEnabled: enabled };
+    settingsRef.current = updated;
+    updateSettingsRef.current(updated);
+  };
+  const cancelCameraRequest = (showFeedback = false) => {
+    const request = cameraRequestRef.current;
+    if (!request) return;
+    cameraRequestRef.current = null;
+    request.abort();
+    updateCameraSetting(false);
+    cameraPendingChangeRef.current?.(false);
+    if (mountedRef.current) {
+      setCameraPending(false);
+      if (showFeedback) setCameraFeedback("Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.");
+    }
+  };
+  const closeSettings = () => { cancelCameraRequest(); onClose(); };
+  onCloseRef.current = closeSettings;
+  const handleCameraChange = async (enabled: boolean) => {
+    if (!enabled) {
+      if (cameraRequestRef.current) cancelCameraRequest(true);
+      else { updateCameraSetting(false); setCameraFeedback(''); }
+      return;
+    }
+    if (!cameraLockSupported || cameraRequestRef.current) return;
+    const request = new AbortController();
+    cameraRequestRef.current = request;
+    setCameraPending(true);
+    setCameraFeedback('');
+    // Gate expiry and cancel an old detection before enabling the native video grant.
+    cameraPendingChangeRef.current?.(true);
+    updateCameraSetting(true);
+    const result = await requestCameraAccess(request.signal, async () => {
+      // Linux permits video only after configure_timer has applied the latest settings.
+      if (hasNativeTimer() && !(await readNativeTimer())) throw new Error('Native camera configuration unavailable');
+    });
+    if (!mountedRef.current || cameraRequestRef.current !== request || request.signal.aborted) return;
+    cameraRequestRef.current = null;
+    if (result !== 'granted') updateCameraSetting(false);
+    cameraPendingChangeRef.current?.(false);
+    setCameraPending(false);
+    setCameraFeedback(result === 'granted' ? "Доступ к камере разрешён." : result === 'unavailable'
+      ? "Камера недоступна. Проверьте подключение и попробуйте снова."
+      : "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.");
+  };
+
   useEffect(() => {
+    mountedRef.current = true;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -87,6 +148,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
     };
     document.addEventListener('keydown', handleKey, true);
     return () => {
+      mountedRef.current = false;
+      cancelCameraRequest();
       document.removeEventListener('keydown', handleKey, true);
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
@@ -94,12 +157,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   }, []);
 
   const handleChange = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    onUpdateSettings({ ...settings, [key]: value,
-      ...(key === 'workMinutes' || key === 'breakSeconds' ? { timerPreset: 'custom' as const } : {}) });
+    const updated = { ...settingsRef.current, [key]: value,
+      ...(key === 'workMinutes' || key === 'breakSeconds' ? { timerPreset: 'custom' as const } : {}) };
+    settingsRef.current = updated;
+    onUpdateSettings(updated);
   };
   const selectPreset = (preset: AppSettings['timerPreset']) => {
-    onUpdateSettings({ ...settings, timerPreset: preset,
-      ...(preset === '20-20-20' ? { workMinutes: 20, breakSeconds: 20 } : preset === 'pomodoro' ? { workMinutes: 25, breakSeconds: 300 } : {}) });
+    const updated = { ...settingsRef.current, timerPreset: preset,
+      ...(preset === '20-20-20' ? { workMinutes: 20, breakSeconds: 20 } : preset === 'pomodoro' ? { workMinutes: 25, breakSeconds: 300 } : {}) };
+    settingsRef.current = updated;
+    onUpdateSettings(updated);
   };
   const testSound = () => {
     const enabled = soundSynth.enabled;
@@ -129,12 +196,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   };
 
   return (
-    <div className="modal-backdrop settings-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-backdrop settings-backdrop" onClick={e => { if (e.target === e.currentTarget) closeSettings(); }}>
       <div ref={dialogRef} className="modal-box settings-dialog" role="dialog" aria-modal="true"
         aria-labelledby="settings-dialog-title" aria-describedby="settings-save-description">
         <header className="settings-dialog-header">
           <div><span className="section-eyebrow">{t("Удобный ритм")}</span><h2 id="settings-dialog-title">{t("Настройки")}</h2></div>
-          <button type="button" className="btn-icon" onClick={onClose} title={t("Закрыть (Esc)")} aria-label={t("Закрыть настройки")}><X size={20} /></button>
+          <button type="button" className="btn-icon" onClick={closeSettings} title={t("Закрыть (Esc)")} aria-label={t("Закрыть настройки")}><X size={20} /></button>
         </header>
         <p id="settings-save-description" className="settings-save-note">{t("Изменения применяются сразу. Новый интервал работы начинает отсчёт заново.")}</p>
         <nav className="settings-section-nav" aria-label={t("Разделы настроек")}>
@@ -231,7 +298,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
             {meetingHistoryControls && <MeetingHistoryControls id="settings-meeting-history" {...meetingHistoryControls} />}
             <ToggleRow id="camera-lock-enabled" title={t("Блокировать компьютер, если никого нет")}
               description={`${t("В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.")}${cameraLockSupported ? '' : ` ${t("Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.")}`}`}
-              checked={cameraLockSupported && settings.cameraLockEnabled} disabled={!cameraLockSupported} onChange={value => handleChange('cameraLockEnabled', value)} />
+              checked={cameraLockSupported && settings.cameraLockEnabled} disabled={!cameraLockSupported} onChange={value => { void handleCameraChange(value); }} />
+            {cameraLockSupported && <p className="settings-description">{t("При включении проверяется доступ к камере. Если нужно, система запросит разрешение.")}</p>}
+            {(cameraPending || cameraFeedback) && <p className="settings-feedback" role="status">{cameraPending ? t("Запрашиваем доступ к камере…") : t(cameraFeedback)}</p>}
+            {cameraLockSupported && nativeApi?.platform === 'darwin' && <p className="settings-description">{t("На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.")}</p>}
             <ToggleRow id="idle-detection" title={t("Автопауза без активности")}
               description={isNative ? t("Отсутствие мыши и клавиатуры не означает, что вы отошли: чтение тоже считается неактивностью.") : t("Учитывает ввод только на этой странице и скрытие вкладки. Активность в других приложениях недоступна.")}
               checked={settings.idleDetectionEnabled} onChange={value => handleChange('idleDetectionEnabled', value)} />

@@ -537,5 +537,11 @@
   "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Na konci pracovního intervalu kamera ověří, zda je někdo přítomen. Pokud nikoho nezjistí, počítač se zamkne. Kontrola probíhá v zařízení; snímky se neukládají ani neodesílají. Je nutné oprávnění ke kameře. Pokud kamera nebo kontrola nejsou dostupné, zamknutí se přeskočí.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Dostupné v desktopové aplikaci s podporou kamery. Prohlížeč počítač nezamyká.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "Kamera nezjistila žádnou osobu. Počítač je zamčený.",
-  "Не удалось заблокировать компьютер.": "Počítač se nepodařilo zamknout."
+  "Не удалось заблокировать компьютер.": "Počítač se nepodařilo zamknout.",
+  "При включении проверяется доступ к камере. Если нужно, система запросит разрешение.": "Při zapnutí této možnosti se ověří přístup ke kameře. V případě potřeby systém požádá o oprávnění.",
+  "Запрашиваем доступ к камере…": "Žádáme o přístup ke kameře…",
+  "Доступ к камере разрешён.": "Přístup ke kameře je povolen.",
+  "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Přístup ke kameře není povolen. Povolte jej v nastavení systému a poté tuto možnost znovu zapněte.",
+  "Камера недоступна. Проверьте подключение и попробуйте снова.": "Kamera není dostupná. Zkontrolujte připojení a zkuste to znovu.",
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "V macOS: Nastavení systému → Soukromí a zabezpečení → Kamera."
 }

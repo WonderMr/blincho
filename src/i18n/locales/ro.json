@@ -537,5 +537,11 @@
   "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "La sfârșitul unui interval de lucru, camera verifică dacă este prezentă o persoană. Dacă nu detectează pe nimeni, computerul se blochează. Verificarea se face pe dispozitiv; imaginile nu sunt salvate sau trimise. Este necesară permisiunea pentru cameră. Dacă aceasta sau verificarea nu este disponibilă, blocarea este omisă.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Disponibil în aplicația desktop cu suport pentru cameră. Browserul nu blochează computerul.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "Camera nu a detectat nicio persoană. Computerul este blocat.",
-  "Не удалось заблокировать компьютер.": "Computerul nu a putut fi blocat."
+  "Не удалось заблокировать компьютер.": "Computerul nu a putut fi blocat.",
+  "При включении проверяется доступ к камере. Если нужно, система запросит разрешение.": "Când activezi această opțiune, se verifică accesul la cameră. Dacă este necesar, sistemul va cere permisiunea.",
+  "Запрашиваем доступ к камере…": "Se solicită accesul la cameră…",
+  "Доступ к камере разрешён.": "Accesul la cameră este permis.",
+  "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Accesul la cameră nu este permis. Permite-l în configurările sistemului, apoi activează din nou această opțiune.",
+  "Камера недоступна. Проверьте подключение и попробуйте снова.": "Camera nu este disponibilă. Verifică conexiunea și încearcă din nou.",
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Pe macOS: Configurări sistem → Intimitate și securitate → Cameră."
 }

@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   strictModeIgnoreIdle: false,
   meetingDetectionEnabled: true,
   meetingHistoryEnabled: false,
-  cameraLockEnabled: true,
+  cameraLockEnabled: false,
   strictMode: false,
 };
 
