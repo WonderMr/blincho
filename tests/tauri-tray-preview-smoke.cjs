@@ -102,6 +102,17 @@ async function control(operation, args = {}) {
 
     await control('show');
     const configured = await until(value => value.visible && value.focused);
+    if (process.platform === 'darwin') {
+      await control('minimize');
+      await until(value => value.minimized);
+      await hover('enter');
+      await until(value => value.trayPreview.visible && value.minimized);
+      await control('reopen');
+      await until(value => value.visible && !value.minimized && value.focused && value.trayPreview.dockVisible);
+      await hover('leave');
+      await until(value => !value.trayPreview.visible);
+      console.log('PASS: modeled Dock reopen restores the real minimized main window while its preview is visible.');
+    }
     const input = { totalMs: 3_600_000, remainingMs: 3_600_000, manualPaused: false,
       breakActive: true, exercising: false, expiryPending: false, version: configured.timer.version + 1,
       breakSeconds: 20, strictMode: true, idleEnabled: false, idleThresholdSeconds: 60,
