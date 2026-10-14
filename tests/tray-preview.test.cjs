@@ -42,6 +42,10 @@ const summary = { date: '2026-10-14', locale: 'es', title: 'Hoy', todayLabel: 'H
   nextBreakLabel: 'Próximo descanso', focusLabel: 'Tiempo de trabajo', breaksLabel: 'Descansos hoy',
   pausedLabel: 'Pausa', absentLabel: 'Sin actividad', breakLabel: 'Descanso', exerciseLabel: 'Ejercicio',
   readyLabel: 'Hora de descansar', focusValue: '65 min', breaksValue: '4', theme: 'light', colorPalette: 'ocean' };
+const callSummary = { ...summary, meetingLabel: 'Llamada', meetingInactiveLabel: 'Sin llamada activa',
+  meetingUnknownLabel: 'Estado de llamada desconocido', meetingDisabledLabel: 'Detección de llamadas desactivada',
+  unknownMeetingAppLabel: 'Aplicación desconocida' };
+const activeCall = { inMeeting: true, supported: true, applications: ['Zoom', 'Microsoft Teams'] };
 
 test('preview displays native countdown and localized daily data using only its read endpoint', async () => {
   const h = previewHarness({ timer, summary });
@@ -73,5 +77,75 @@ test('preview clock clamps invalid values, rounds countdown up and uses the acti
     assert.equal(h.countdown({ ...timer, remainingMs: 1 }), '00:01');
     assert.equal(h.countdown({ ...timer, breakActive: true, breakEndAt: 119_001 }, 100_000), '00:20');
     assert.equal(h.countdown({ ...timer, breakActive: true, breakEndAt: 99_999 }, 100_000), '00:00');
+  } finally { h.destroy(); }
+});
+
+test('preview shows live call apps independently of recorded history and timer phase', async () => {
+  const h = previewHarness({ timer: { ...timer, liveMeetingEnabled: true, liveMeetingStatus: activeCall,
+    meetingSpans: [], meetingApplications: [] }, summary: callSummary });
+  try {
+    await h.settle();
+    const row = h.host.querySelector('[data-meeting-state="active"]');
+    assert(row, 'the transient native status must be visible even without recorded calls');
+    assert.equal(row.textContent, 'Llamada: Zoom, Microsoft Teams');
+    assert.equal(row.getAttribute('title'), row.textContent, 'the full app names remain available when the row truncates');
+    assert(h.host.textContent.includes('Próximo descanso01:02'));
+    for (const [phase, label] of [
+      [{ manualPaused: true }, 'Pausa'], [{ reasons: ['locked'] }, 'Sin actividad'],
+      [{ breakActive: true, breakEndAt: 120_000 }, 'Descanso'], [{ exercising: true }, 'Ejercicio'],
+      [{ expiryPending: true }, 'Hora de descansar'],
+    ]) {
+      h.emit('native-timer', { ...timer, ...phase, liveMeetingEnabled: true, liveMeetingStatus: activeCall });
+      assert(h.host.textContent.includes(label), `call status does not replace ${label}`);
+      assert.equal(h.host.querySelector('[data-meeting-state="active"]').textContent, 'Llamada: Zoom, Microsoft Teams');
+    }
+    assert.deepEqual(h.invocations, ['tray_preview_state'], 'the preview cannot probe, configure or persist calls');
+    assert.equal(h.warnings.length, 0);
+  } finally { h.destroy(); }
+});
+
+test('preview distinguishes disabled, unknown, unsupported and inactive call detection', async () => {
+  const h = previewHarness({ timer, summary: callSummary });
+  try {
+    await h.settle();
+    const cases = [
+      [{ liveMeetingEnabled: false, liveMeetingStatus: activeCall }, 'disabled', callSummary.meetingDisabledLabel],
+      [{ liveMeetingEnabled: true, liveMeetingStatus: null }, 'unknown', callSummary.meetingUnknownLabel],
+      [{ liveMeetingEnabled: true, liveMeetingStatus: { ...activeCall, supported: false } }, 'unknown', callSummary.meetingUnknownLabel],
+      [{ liveMeetingEnabled: true, liveMeetingStatus: { ...activeCall, inMeeting: false } }, 'inactive', callSummary.meetingInactiveLabel],
+      [{}, 'disabled', callSummary.meetingDisabledLabel],
+    ];
+    for (const [status, state, label] of cases) {
+      h.emit('native-timer', { ...timer, ...status });
+      const row = h.host.querySelector(`[data-meeting-state="${state}"]`);
+      assert(row, state);
+      assert.equal(row.textContent, label);
+      assert(h.host.textContent.includes('Próximo descanso01:02'));
+      assert(!row.textContent.includes('Zoom'), 'inactive or unavailable detection must not show stale apps');
+    }
+  } finally { h.destroy(); }
+});
+
+test('live call events replace app names and use localized unknown-app fallback with RTL isolation', async () => {
+  const h = previewHarness({ timer: { ...timer, liveMeetingEnabled: true, liveMeetingStatus: activeCall }, summary: callSummary });
+  try {
+    await h.settle();
+    h.emit('native-timer', { ...timer, liveMeetingEnabled: true,
+      liveMeetingStatus: { ...activeCall, applications: [] } });
+    assert.equal(h.host.querySelector('[data-meeting-state="active"]').textContent, 'Llamada: Aplicación desconocida');
+    for (const applications of [['unknown'], ['Zoom', 'unknown']]) {
+      h.emit('native-timer', { ...timer, liveMeetingEnabled: true,
+        liveMeetingStatus: { ...activeCall, applications } });
+      assert.equal(h.host.querySelector('[data-meeting-state="active"]').textContent,
+        applications.length === 1 ? 'Llamada: Aplicación desconocida' : 'Llamada: Zoom, Aplicación desconocida');
+    }
+    h.emit('tray-preview-summary', { ...callSummary, locale: 'he', meetingLabel: 'שיחה' });
+    h.emit('native-timer', { ...timer, liveMeetingEnabled: true,
+      liveMeetingStatus: { ...activeCall, applications: ['FaceTime'] } });
+    assert.equal(doc.documentElement.dir, 'rtl');
+    assert.equal(h.host.querySelector('[data-meeting-state="active"]').textContent, 'שיחה: FaceTime');
+    assert.equal(h.host.querySelector('bdi').textContent, 'FaceTime');
+    assert(!h.host.textContent.includes('Zoom'));
+    assert.deepEqual(h.invocations, ['tray_preview_state']);
   } finally { h.destroy(); }
 });

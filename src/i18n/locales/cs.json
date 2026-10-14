@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Historie hovorů byla smazána.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Historii hovorů se nepodařilo smazat. Zkuste to znovu.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Hovory se zaznamenávají pouze při zapnutém ukládání historie a spuštěném Blincho.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Záznam hovorů je dostupný pouze v aplikaci Blincho pro počítače."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Záznam hovorů je dostupný pouze v aplikaci Blincho pro počítače.",
+  "Звонок": "Hovor",
+  "Нет активного звонка": "Žádný probíhající hovor",
+  "Статус звонка неизвестен": "Stav hovoru není znám",
+  "Определение звонков отключено": "Rozpoznávání hovorů je vypnuté"
 }

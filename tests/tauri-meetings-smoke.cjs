@@ -91,6 +91,9 @@ async function click(id) {
   console.log('Meeting smoke profile: ' + directory);
   const initial = await launch();
   await control('meeting', { active: true, applications: ['Zoom'] });
+  const liveDefaultOff = await until(value => value.timer.liveMeetingEnabled && value.timer.liveMeetingStatus?.inMeeting &&
+    value.trayPreview.callIndicatorActive && value.trayPreview.tooltip.includes('Zoom'));
+  assert.deepEqual(liveDefaultOff.timer.liveMeetingStatus.applications, ['Zoom']);
   await sleep(1200);
   assert.deepEqual(read().timer.meetingSpans, [], 'A legacy profile with no history opt-in must not record calls');
   const defaultOff = await selectStatistics();
@@ -190,7 +193,7 @@ async function click(id) {
   assert.equal(afterClearRestart.renderer.stats.find(day => day.date === '2026-10-11').focusMinutes, 42);
   await stop();
   const result = { passed: true, platform: process.platform, profile: directory,
-    checks: ['legacy default off', 'explicit UI opt-in', 'native hidden heartbeat', 'manual pause and strict recording', 'app attribution and transitions', 'call end', 'renderer storage', 'statistics app rows', 'opt-out without deletion', 'restart persistence', 'explicit delete confirmation', 'native and local deletion', 'no stale replay after clearing'],
+    checks: ['live call tray with history off', 'legacy default off', 'explicit UI opt-in', 'native hidden heartbeat', 'manual pause and strict recording', 'app attribution and transitions', 'call end', 'renderer storage', 'statistics app rows', 'opt-out without deletion', 'restart persistence', 'explicit delete confirmation', 'native and local deletion', 'no stale replay after clearing'],
     limitation: 'Meeting and presence signals are modeled; actual app detection is tested separately by platform parsers.' };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));

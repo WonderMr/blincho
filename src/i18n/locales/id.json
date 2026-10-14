@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Riwayat panggilan dihapus.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Tidak dapat menghapus riwayat panggilan. Coba lagi.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Panggilan hanya dicatat saat penyimpanan riwayat aktif dan Blincho sedang berjalan.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Pencatatan panggilan hanya tersedia di aplikasi desktop Blincho."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Pencatatan panggilan hanya tersedia di aplikasi desktop Blincho.",
+  "Звонок": "Panggilan",
+  "Нет активного звонка": "Tidak ada panggilan aktif",
+  "Статус звонка неизвестен": "Status panggilan tidak diketahui",
+  "Определение звонков отключено": "Deteksi panggilan nonaktif"
 }
