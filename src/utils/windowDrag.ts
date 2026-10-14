@@ -67,7 +67,7 @@ export function shouldStartWindowDrag(event: MouseEvent): boolean {
   if (target.closest(INTERACTIVE_SELECTOR) || target.closest(OVERLAY_SELECTOR)) return false;
   const document = target.ownerDocument;
   const view = document.defaultView;
-  if (!view || document.getSelection()?.isCollapsed === false) return false;
+  if (!view) return false;
   const cursor = view.getComputedStyle(target).cursor;
   if (['pointer', 'text', 'vertical-text', 'grab', 'grabbing', 'not-allowed'].includes(cursor)) return false;
   if (isScrollbarPress(target, event, view)) return false;
