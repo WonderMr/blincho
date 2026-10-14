@@ -95,8 +95,10 @@ function checkShell(layout) {
   for (const button of layout.navControls) {
     assert(button.left >= layout.nav.left && button.right <= layout.nav.right, 'Every sidebar control stays inside the sidebar');
     assert(button.width >= 44 && button.height >= 44, 'Sidebar controls retain usable hit targets');
+    assert(button.scrollWidth <= button.clientWidth, 'Complete translated button labels fit inside their controls');
   }
   for (const item of layout.statistics) assert(item.scrollWidth <= item.clientWidth, 'Statistics values and dates fit their columns');
+  if (layout.page === 'stats') assert(layout.statistics[4].height >= 44, 'The date control retains a 44px hit target');
 }
 (async () => {
   const results = [];
@@ -130,9 +132,9 @@ function checkShell(layout) {
     }
     const dragMarker = ++sequence;
     await control('eval', { script: `(() => {
-      const api = window.__TAURI__.window, original = api.getCurrentWindow;
+      const api = window.__TAURI__.window, original = api.Window.prototype.startDragging;
       let starts = 0;
-      api.getCurrentWindow = () => ({startDragging: async () => { starts++; }});
+      api.Window.prototype.startDragging = async () => { starts++; };
       const press = (element,x,y,button=0) => element.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,button,clientX:x,clientY:y}));
       const middle = element => {const r=element.getBoundingClientRect();return [(r.left+r.right)/2,(r.top+r.bottom)/2];};
       try {
@@ -145,7 +147,7 @@ function checkShell(layout) {
         const text=range.getClientRects()[0];press(heading,text.left+3,text.top+3);
         press(main,mr.right-1,mr.top+100); press(nav,nr.left+5,nr.top+100,2);
         window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${dragMarker},drag:{freeStarts,afterProtected:starts}}});
-      } finally { api.getCurrentWindow=original; }
+      } finally { api.Window.prototype.startDragging=original; }
     })()` });
     const drag = (await until(value => value.renderer?.marker === dragMarker)).renderer.drag;
     assert.equal(drag.freeStarts,3,'Sidebar, page margin and titlebar route to native drag');
