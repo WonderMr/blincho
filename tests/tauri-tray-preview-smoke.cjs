@@ -17,7 +17,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-tray-preview-sm
 const source = path.join(directory, 'legacy.json');
 fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
   myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 60, breakSeconds: 20,
-    idleDetectionEnabled: false, meetingDetectionEnabled: true, meetingHistoryEnabled: false, strictMode: false,
+    idleDetectionEnabled: false, meetingDetectionEnabled: true, meetingHistoryEnabled: false, cameraLockEnabled: false, strictMode: false,
     soundEnabled: false, notificationsEnabled: false }),
   'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
 } }));

@@ -12,7 +12,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-native-smoke-')
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.join(root, 'src-tauri/target', ...(process.env.RUST_TARGET ? [process.env.RUST_TARGET] : []), 'debug', process.platform === 'win32' ? 'blincho.exe' : 'blincho');
 const source = path.join(directory, 'legacy.json');
 fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
-  myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 10, breakSeconds, idleDetectionEnabled: false, meetingDetectionEnabled: false, strictMode: false, soundEnabled: false, notificationsEnabled: false }),
+  myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 10, breakSeconds, idleDetectionEnabled: false, meetingDetectionEnabled: false, cameraLockEnabled: false, strictMode: false, soundEnabled: false, notificationsEnabled: false }),
   myeyes_stats_v1: JSON.stringify([{ date: '2026-10-11', breaksCompleted: 7, exercisesCompleted: 3, focusMinutes: 42, techniqueCounts: { blink: 3 }, completedEventIds: ['legacy-break'] }]),
   'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
 } }));
