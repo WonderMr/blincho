@@ -7,7 +7,7 @@ const { transformSync } = require('rolldown/utils');
 const { createHarness } = require('./app.test.cjs');
 const repo = path.resolve(__dirname, '..');
 
-function cameraHarness({ results = [[], [], []], black = false, cameraError, modelError, frozen = false, muted = false, missing = false, late = false } = {}) {
+function cameraHarness({ results = [[], [], []], black = false, cameraError, modelError, frozen = false, repeatedPixels = false, muted = false, missing = false, late = false } = {}) {
   const file = path.join(repo, 'src/utils/cameraPresence.ts');
   const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/export (const|function) /g, '$1 ');
   const module = { exports: {} }; const timers = new Map(); let next = 0, now = 0, time = 0, stopped = 0, closed = 0, detections = 0, acquisitions = 0, release;
@@ -20,7 +20,7 @@ function cameraHarness({ results = [[], [], []], black = false, cameraError, mod
   const check = module.exports.createCameraPresenceChecker({
     mediaDevices: () => missing ? undefined : { async getUserMedia(constraints) { acquisitions++; assert.equal(constraints.audio, false); if (cameraError) throw cameraError; if (late) await new Promise(resolve => { release = resolve; }); return stream; } },
     createVideo: () => ({ readyState: 4, videoWidth: 640, videoHeight: 480, get currentTime() { if (!frozen) time++; return time; }, async play() {}, pause() {} }),
-    createCanvas: () => ({ getContext: () => ({ drawImage() {}, getImageData: () => ({ data: pixels }) }) }),
+    createCanvas: () => ({ getContext: () => ({ drawImage() { if (!black && !repeatedPixels) pixels[0]++; }, getImageData: () => ({ data: pixels }) }) }),
     async loadDetector() { if (modelError) throw modelError; return { detect() { const categories = results[detections++] ?? []; return { detections: categories.length ? [{ categories }] : [] }; }, close() { closed++; } }; },
     now: () => now,
   });
@@ -46,6 +46,10 @@ test('missing/denied camera, model failure, black/covered and muted camera never
 test('frozen video cannot be counted as three consecutive frames', async () => {
   const h = cameraHarness({ frozen: true }); const pending = h.check(); for (let i = 0; i < 10; i++) await h.frame();
   assert.equal(await pending, 'unavailable'); assert.equal(h.detections, 1); assert.equal(h.closed, 1);
+});
+test('repeated image content with advancing video timestamps cannot establish absence', async () => {
+  const h = cameraHarness({ repeatedPixels: true }); const pending = h.check(); await h.frame(); await h.frame();
+  assert.equal(await pending, 'unavailable'); assert.equal(h.detections, 1); assert.equal(h.closed, 1); assert(h.stopped > 0);
 });
 test('timeout stops a camera stream that arrives after the check has already ended', async () => {
   const h = cameraHarness({ late: true }); const pending = h.check(); await h.timeout(); assert.equal(await pending, 'unavailable');
@@ -97,4 +101,11 @@ test('disable then reenable during post-camera presence sampling cancels the old
   h.electronAPI.getPowerState = async () => ({ suspended: false, locked: false });
   release({ suspended: false, locked: false }); await h.settle();
   assert.equal(locks, 0); h.destroy();
+});
+test('new input cancels an in-flight camera absence decision', async () => {
+  const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60 }); let resolve, locks = 0;
+  h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(() => new Promise(done => { resolve = done; }));
+  await h.settle(); await h.advance(1000); assert(resolve);
+  await h.emit('mousemove'); resolve('absent'); await h.settle();
+  assert.equal(locks, 0); assert.equal(h.active.has('BreakOverlay'), true); h.destroy();
 });
