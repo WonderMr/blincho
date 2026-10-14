@@ -2,6 +2,8 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
+#[cfg(any(target_os = "linux", test))]
+mod camera_permission;
 mod history;
 mod platform;
 mod startup;
@@ -430,6 +432,13 @@ async fn legacy_history(app: tauri::AppHandle) -> Result<Option<history::History
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
+async fn lock_computer(app: tauri::AppHandle) -> Result<bool, String> {
+    let test_profile = app.state::<Runtime>().test_dir.is_some();
+    tauri::async_runtime::spawn_blocking(move || platform::lock_computer(test_profile))
+        .await
+        .map_err(|error| error.to_string())?
+}
+#[tauri::command]
 async fn notification_permission(app: tauri::AppHandle) -> Result<bool, String> {
     platform::notification_permission(&app).await
 }
@@ -843,7 +852,7 @@ fn main() {
             desktop_command,
             legacy_history,
             renderer_report,
-            get_runtime_metadata, desktop_info, preferred_languages, notification_permission, notification_send, attention, open_external,
+            get_runtime_metadata, desktop_info, preferred_languages, notification_permission, notification_send, lock_computer, attention, open_external,
             set_locale, update_get_state, update_set_policy, update_check, update_skip, update_download, update_open_download, check_meeting_active,
             tray_preview::tray_preview_state, tray_preview::tray_preview_summary
             ];
@@ -999,6 +1008,8 @@ fn main() {
             });
             ui::set_locale(app.handle(), startup_locale)?;
             let _main_window = builder.build()?;
+            #[cfg(target_os = "linux")]
+            camera_permission::install(&_main_window)?;
             if let Err(error) = tray_preview::initialize(app.handle()) {
                 eprintln!("Tray preview initialization: {error}");
             }

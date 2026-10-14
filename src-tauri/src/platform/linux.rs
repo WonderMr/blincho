@@ -369,6 +369,32 @@ fn session_path(connection: &Connection) -> Option<OwnedObjectPath> {
             manager.call("GetSession", &(session_id,)).ok()
         })
 }
+pub fn request_lock() -> Result<(), String> {
+    let connection = system_bus().map_err(|error| error.to_string())?;
+    let path = session_path(&connection).ok_or("The current Linux session is unavailable")?;
+    let session = Proxy::new(
+        &connection,
+        LOGIN_SERVICE,
+        path.as_str(),
+        "org.freedesktop.login1.Session",
+    )
+    .map_err(|error| error.to_string())?;
+    session
+        .call::<_, _, ()>("Lock", &())
+        .map_err(|error| error.to_string())
+}
+pub fn lock_confirmed() -> Option<bool> {
+    let connection = system_bus().ok()?;
+    let path = session_path(&connection)?;
+    let session = Proxy::new(
+        &connection,
+        LOGIN_SERVICE,
+        path.as_str(),
+        "org.freedesktop.login1.Session",
+    )
+    .ok()?;
+    session.get_property("LockedHint").ok()
+}
 fn logind_locked(connection: &Connection) -> Option<bool> {
     let path = session_path(connection)?;
     // Read fresh properties; never infer an unlocked session from a failed D-Bus call.

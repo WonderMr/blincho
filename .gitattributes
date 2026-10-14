@@ -1,0 +1,3 @@
+public/camera/* -text
+public/camera/*.wasm binary
+public/camera/group* binary

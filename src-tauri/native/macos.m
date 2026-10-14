@@ -79,6 +79,26 @@ int blincho_session_locked(void) {
     if (!session) return -1;
     return [session[@"CGSSessionScreenIsLocked"] boolValue] || ![session[(__bridge NSString *)kCGSessionOnConsoleKey] boolValue];
 }
+int blincho_lock_confirmed(void) {
+    NSDictionary *session = CFBridgingRelease(CGSessionCopyCurrentDictionary());
+    if (!session) return -1;
+    return [session[@"CGSSessionScreenIsLocked"] boolValue] ? 1 : 0;
+}
+int blincho_request_lock(void) {
+    @autoreleasepool {
+        // macOS has no public session-lock API. Resolve this private entry point
+        // at runtime, as Hammerspoon does, and let Rust confirm the lock state.
+        // https://github.com/Hammerspoon/hammerspoon/blob/master/extensions/caffeinate/libcaffeinate.m
+        NSURL *url = [NSURL fileURLWithPath:@"/System/Library/PrivateFrameworks/login.framework"];
+        CFBundleRef bundle = CFBundleCreate(kCFAllocatorDefault, (__bridge CFURLRef)url);
+        if (!bundle) return -1;
+        void (*lockScreen)(void) = (void (*)(void))CFBundleGetFunctionPointerForName(bundle, CFSTR("SACLockScreenImmediate"));
+        if (!lockScreen) { CFRelease(bundle); return -1; }
+        lockScreen();
+        CFRelease(bundle);
+        return 1;
+    }
+}
 
 // A normal foreground NSWindow cannot cover another application's fullscreen
 // Space. Nonactivating accessory panels cover those Spaces and own pointer input.

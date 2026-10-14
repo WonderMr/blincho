@@ -268,6 +268,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve portable package filename' }
           $env:BLINCHO_PROTOTYPE_EXECUTABLE = Join-Path "$PWD/release-upload" $artifact
           node tests/tauri-cross-platform-smoke.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows runtime smoke failed' }
+          node tests/tauri-camera-smoke.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows camera model smoke failed' }
       - name: Launch the verified Linux AppImage
         if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         shell: bash
@@ -276,7 +279,7 @@ jobs:
           artifact=$(node --input-type=module -e 'import { artifactName } from "./scripts/release-lib.mjs"; console.log(artifactName(...process.argv.slice(1)))' "$version" linux '${{ matrix.architecture }}' AppImage)
           export BLINCHO_PROTOTYPE_EXECUTABLE="$PWD/release-upload/$artifact"
           export APPIMAGE_EXTRACT_AND_RUN=1
-          xvfb-run -a dbus-run-session -- bash -c 'openbox >/dev/null 2>&1 & node tests/tauri-cross-platform-smoke.cjs'
+          xvfb-run -a dbus-run-session -- bash -c 'openbox >/dev/null 2>&1 & node tests/tauri-cross-platform-smoke.cjs && node tests/tauri-camera-smoke.cjs'
       - name: Launch the verified macOS archive
         if: matrix.platform == 'macos' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         shell: bash
@@ -287,6 +290,7 @@ jobs:
           ditto -x -k "release-upload/$artifact" "$bundle_directory"
           export BLINCHO_PROTOTYPE_EXECUTABLE="$bundle_directory/Blincho.app/Contents/MacOS/blincho"
           node tests/tauri-cross-platform-smoke.cjs
+          node tests/tauri-camera-smoke.cjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: packages-${{ matrix.platform }}-${{ matrix.architecture }}

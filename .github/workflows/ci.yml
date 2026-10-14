@@ -150,6 +150,16 @@ jobs:
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-openbox.log 2>&1 & node tests/tauri-cross-platform-smoke.cjs'
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test offline camera model in native WebView
+        if: runner.os != 'Linux'
+        run: node tests/tauri-camera-smoke.cjs
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test offline camera model in Linux WebView
+        if: runner.os == 'Linux'
+        run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/dev/null 2>&1 & node tests/tauri-camera-smoke.cjs'
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
       - name: Smoke test tray preview without stealing focus
         if: runner.os != 'Linux'
         run: node tests/tauri-tray-preview-smoke.cjs

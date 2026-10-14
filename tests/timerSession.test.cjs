@@ -18,6 +18,24 @@ const storage = require(path.join(buildDirectory, 'utils/storage.js'));
 const saved = new Map();
 global.localStorage = { getItem: key => saved.get(key) || null, setItem: (key, value) => saved.set(key, value) };
 
+assert.equal(storage.DEFAULT_SETTINGS.cameraLockEnabled, false, 'new profiles leave camera absence locking off');
+assert.equal(storage.loadSettings().cameraLockEnabled, false, 'an empty profile uses the disabled default');
+saved.set('myeyes_settings_v1', JSON.stringify({ workMinutes: 20 }));
+assert.equal(storage.loadSettings().cameraLockEnabled, false, 'profiles saved before the setting migrate to disabled');
+for (const value of [null, 0, 1, 'false', {}, []]) {
+  saved.set('myeyes_settings_v1', JSON.stringify({ cameraLockEnabled: value }));
+  assert.equal(storage.loadSettings().cameraLockEnabled, false, 'invalid stored camera preferences use the disabled default');
+}
+storage.saveSettings({ ...storage.DEFAULT_SETTINGS, cameraLockEnabled: false });
+assert.equal(JSON.parse(saved.get('myeyes_settings_v1')).cameraLockEnabled, false, 'an explicit opt-out is stored');
+assert.equal(storage.loadSettings().cameraLockEnabled, false, 'an explicit opt-out survives loading');
+assert.equal(normalizeTimerSettings({ ...storage.DEFAULT_SETTINGS, cameraLockEnabled: undefined }).cameraLockEnabled, false);
+assert.equal(normalizeTimerSettings({ ...storage.DEFAULT_SETTINGS, cameraLockEnabled: false }).cameraLockEnabled, false);
+storage.saveSettings({ ...storage.DEFAULT_SETTINGS, cameraLockEnabled: true });
+assert.equal(storage.loadSettings().cameraLockEnabled, true, 'an explicit opt-in survives loading');
+assert.equal(normalizeTimerSettings({ ...storage.DEFAULT_SETTINGS, cameraLockEnabled: true }).cameraLockEnabled, true);
+saved.delete('myeyes_settings_v1');
+
 const session = new TimerSession(1200, 0);
 session.setReason('idle', false, 500);
 assert.equal(session.lastUpdated, 0, 'an unchanged pause reason must not discard elapsed time');

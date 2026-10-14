@@ -532,5 +532,16 @@
   "Звонок": "Appel",
   "Нет активного звонка": "Aucun appel en cours",
   "Статус звонка неизвестен": "État de l’appel inconnu",
-  "Определение звонков отключено": "Détection des appels désactivée"
+  "Определение звонков отключено": "Détection des appels désactivée",
+  "Блокировать компьютер, если никого нет": "Verrouiller l’ordinateur si personne n’est présent",
+  "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "À la fin d’un intervalle de travail, la caméra vérifie si une personne est présente. Si personne n’est détecté, l’ordinateur se verrouille. La vérification s’effectue sur l’appareil ; les images ne sont ni enregistrées ni envoyées. L’autorisation d’utiliser la caméra est requise. Si la caméra ou la vérification est indisponible, le verrouillage est ignoré.",
+  "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Disponible dans l’application de bureau avec prise en charge de la caméra. Le navigateur ne verrouille pas l’ordinateur.",
+  "Камера не обнаружила человека. Компьютер заблокирован.": "La caméra n’a détecté personne. L’ordinateur est verrouillé.",
+  "Не удалось заблокировать компьютер.": "Impossible de verrouiller l’ordinateur.",
+  "При включении проверяется доступ к камере. Если нужно, система запросит разрешение.": "L’activation de cette option vérifie l’accès à la caméra. Si nécessaire, le système demandera une autorisation.",
+  "Запрашиваем доступ к камере…": "Demande d’accès à la caméra…",
+  "Доступ к камере разрешён.": "L’accès à la caméra est autorisé.",
+  "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "L’accès à la caméra n’est pas autorisé. Autorisez-le dans les réglages du système, puis activez à nouveau cette option.",
+  "Камера недоступна. Проверьте подключение и попробуйте снова.": "La caméra n’est pas disponible. Vérifiez sa connexion et réessayez.",
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Sur macOS : Réglages Système → Confidentialité et sécurité → Caméra."
 }
