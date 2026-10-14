@@ -173,10 +173,11 @@ test('App persists native call samples during manual pause, preserves overlap an
   `);
   const previous = window.__TAURI__;
   window.__TAURI__ = { core: { invoke: async () => undefined } };
-  const h = createHarness({ meetingDetectionEnabled: true, strictMode: true }, false, false, at('2026-10-14', 9), { 'src/utils/tauriBridge.ts': fixture });
+  const h = createHarness({ meetingDetectionEnabled: true, strictMode: true }, false, false, at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: fixture });
   let destroyed = false;
   try {
     await h.settle();
+    assert.equal(typeof window.testNativeFrame, 'function', 'The native fixture is loaded using the platform path separator');
     const start = h.now;
     const frame = { totalMs: 1200000, remainingMs: 1200000, manualPaused: true, breakActive: false, exercising: false,
       expiryPending: false, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
