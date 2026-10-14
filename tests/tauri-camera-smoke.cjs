@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const assert = require('node:assert/strict');
-const { spawn } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-camera-smoke-'));
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.join(root, 'src-tauri/target', ...(process.env.RUST_TARGET ? [process.env.RUST_TARGET] : []), 'debug', process.platform === 'win32' ? 'blincho.exe' : 'blincho');
@@ -15,9 +15,10 @@ fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date
   myeyes_settings_v1: JSON.stringify({ workMinutes: 60, meetingDetectionEnabled: false, idleDetectionEnabled: false, soundEnabled: false, notificationsEnabled: false }),
   'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
 } }));
-const child = spawn(executable, [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory, BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
-let output = '', launchError, sequence = 0;
+const child = spawn(executable, [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory, BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+let output = '', launchError, sequence = 0, closed = false;
 child.stdout.on('data', data => { output += data; }); child.stderr.on('data', data => { output += data; }); child.on('error', error => { launchError = error; });
+child.once('close', () => { closed = true; });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(predicate, timeout = 30000) {
   const end = Date.now() + timeout;
@@ -30,9 +31,46 @@ async function until(predicate, timeout = 30000) {
   }
   throw Error('Camera smoke timed out: ' + output);
 }
-async function evaluate(script) {
-  fs.writeFileSync(path.join(directory, 'control.tmp'), JSON.stringify({ id: ++sequence, operation: 'eval', script }));
+async function control(operation, args = {}) {
+  fs.writeFileSync(path.join(directory, 'control.tmp'), JSON.stringify({ id: ++sequence, operation, ...args }));
   fs.renameSync(path.join(directory, 'control.tmp'), path.join(directory, 'control.json'));
+}
+async function evaluate(script) { await control('eval', { script }); }
+async function waitForClose(timeout) {
+  const deadline = Date.now() + timeout;
+  while (!closed && Date.now() < deadline) await sleep(50);
+  return closed;
+}
+function terminateTree(signal) {
+  if (!child.pid) return;
+  if (process.platform === 'win32') {
+    try { execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', timeout: 1000, windowsHide: true }); }
+    catch { child.kill(signal); }
+  } else {
+    // AppImage wrappers and their native children share our dedicated group.
+    try { process.kill(-child.pid, signal); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+  }
+}
+async function stop() {
+  try {
+    if (launchError) return;
+    // Target the native test profile first. quit may exit before response.json
+    // is written, so wait for close, including any descendant-owned pipes.
+    await control('quit');
+    if (!await waitForClose(5000)) throw Error('Camera smoke did not quit within 5 seconds: ' + output);
+    assert.equal(child.exitCode, 0, 'Camera smoke exited during shutdown: ' + output);
+  } finally {
+    try {
+      if (!closed) {
+        terminateTree('SIGTERM');
+        if (!await waitForClose(1000)) { terminateTree('SIGKILL'); await waitForClose(1000); }
+      }
+    } finally {
+      // A surviving descendant can retain wrapper pipes after its exit. Bound
+      // our own event-loop lifetime even when process-tree cleanup fails.
+      child.stdout?.destroy(); child.stderr?.destroy(); child.unref();
+    }
+  }
 }
 (async () => {
   try {
@@ -52,5 +90,7 @@ async function evaluate(script) {
     const probe = (await until(value => value.renderer?.cameraSmoke)).renderer.cameraSmoke;
     assert.equal(probe.passed, true, JSON.stringify(probe)); assert.equal(probe.webglRequests, 0); assert.equal(probe.cameraAPI, true); assert.equal(probe.lockAPI, true); assert.equal(probe.lockRejected, true); assert.equal(probe.defaultEnabled, true); assert.equal(probe.toggleReady, true);
     console.log(JSON.stringify({ ...probe, executable, profile: directory, limitation: 'Actual camera hardware and physical locking were not invoked.' }, null, 2));
-  } finally { child.kill('SIGTERM'); }
+  } finally {
+    try { await stop(); } catch (error) { console.error(error); process.exitCode = 1; }
+  }
 })().catch(error => { console.error(error); process.exitCode = 1; });
