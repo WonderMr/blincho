@@ -2,7 +2,7 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
-## [1.7.0]
+## [1.7.1]
 
 ### Added
 
@@ -10,6 +10,11 @@ Release notes are curated here before a version tag is pushed. The website keeps
 - Explore daily activity timelines with recorded work, inactivity, screen lock, sleep, manual pause, breaks and exercises. Select previous days and inspect exact intervals, first and last work, and average and longest work sessions.
 - Compare weekly averages per calendar day and per day of use. Preserve older totals and explicitly identify hours without detailed records.
 - Keep activity history locally, split observations and focus across local midnight, and distinguish unconfirmed time and future hours. Localize the new statistics in all 30 supported languages.
+
+### Fixed
+
+- Retry macOS strict-break focus while native window deminiaturization is pending, and stop requests at the real break deadline or an absence.
+- Restore a minimized macOS main window when reopening from the Dock, including while its tray preview is visible.
 
 ## [1.6.4]
 

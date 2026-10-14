@@ -274,6 +274,11 @@ impl Timer {
             && self.input.as_ref().is_some_and(|input| input.strict_mode)
     }
 
+    #[cfg(any(target_os = "macos", test))]
+    pub fn strict_at(&self, now: i64) -> bool {
+        self.strict() && self.break_end.is_some_and(|deadline| now < deadline)
+    }
+
     fn activity_state(&self) -> String {
         for reason in ["suspended", "locked", "unconfirmed", "idle"] {
             if self.snapshot.reasons.iter().any(|value| value == reason) {
@@ -508,6 +513,73 @@ mod tests {
         t.tick(3200, Some(0.), Some(true));
         assert!(!t.strict());
         assert!(!t.snapshot.break_active);
+    }
+    #[test]
+    fn queued_strict_focus_checks_actual_deadline_before_next_tick() {
+        let mut timer = Timer::new(1000);
+        let mut settings = input();
+        settings.break_active = true;
+        timer.configure(settings, 1000).unwrap();
+        timer.tick(2750, Some(0.), Some(false));
+        assert!(timer.strict());
+        assert!(!timer.snapshot.break_elapsed);
+        assert!(timer.strict_at(2999));
+        assert!(!timer.strict_at(3000));
+        assert!(!timer.strict_at(3001));
+        // The queued decision must expire even before the next timer tick.
+        assert!(!timer.snapshot.break_elapsed);
+    }
+    #[test]
+    fn queued_strict_focus_rechecks_policy_and_cancellation() {
+        let mut timer = Timer::new(0);
+        assert!(!timer.strict_at(0));
+        let mut settings = input();
+        settings.break_active = true;
+        timer.configure(settings.clone(), 0).unwrap();
+        assert!(timer.strict_at(250));
+
+        settings.version = 1;
+        settings.strict_mode = false;
+        timer.configure(settings.clone(), 300).unwrap();
+        assert!(timer.snapshot.break_active);
+        assert!(!timer.strict_at(500));
+
+        settings.version = 2;
+        settings.strict_mode = true;
+        timer.configure(settings.clone(), 600).unwrap();
+        assert!(timer.strict_at(750));
+        settings.version = 3;
+        settings.break_active = false;
+        timer.configure(settings, 800).unwrap();
+        assert!(!timer.strict_at(1000));
+        assert_eq!(timer.snapshot.break_end_at, None);
+    }
+    #[test]
+    fn queued_strict_focus_rechecks_absence_and_stays_cancelled_on_return() {
+        for (leave, back) in [(1, 2), (3, 4)] {
+            let mut timer = Timer::new(0);
+            let mut settings = input();
+            settings.break_active = true;
+            timer.configure(settings, 0).unwrap();
+            assert!(timer.strict_at(250));
+            timer.power(leave, 300);
+            assert!(!timer.strict_at(500));
+            timer.power(back, 600);
+            timer.tick(750, Some(0.), Some(false));
+            assert!(!timer.strict_at(1000));
+            assert_eq!(timer.snapshot.break_end_at, None);
+        }
+        for (idle, locked) in [(Some(61.), Some(false)), (None, None)] {
+            let mut timer = Timer::new(0);
+            let mut settings = input();
+            settings.break_active = true;
+            timer.configure(settings, 0).unwrap();
+            assert!(timer.strict_at(250));
+            timer.tick(300, idle, locked);
+            assert!(!timer.strict_at(500));
+            timer.tick(750, Some(0.), Some(false));
+            assert!(!timer.strict_at(1000));
+        }
     }
     #[test]
     fn unknown_and_long_gap_pause_clock() {
