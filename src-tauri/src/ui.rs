@@ -13,6 +13,78 @@ pub struct NativeUi {
     pub guards: Mutex<Vec<MenuItem<tauri::Wry>>>,
 }
 
+#[cfg(target_os = "macos")]
+struct DockVisibility(Mutex<bool>);
+
+pub fn initialize_dock(_app: &tauri::AppHandle, _visible: bool) {
+    #[cfg(target_os = "macos")]
+    _app.manage(DockVisibility(Mutex::new(_visible)));
+}
+
+#[cfg(target_os = "macos")]
+pub fn activation_policy(visible: bool) -> tauri::ActivationPolicy {
+    if visible {
+        tauri::ActivationPolicy::Regular
+    } else {
+        tauri::ActivationPolicy::Accessory
+    }
+}
+
+pub fn set_dock_visible(_app: &tauri::AppHandle, _visible: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let state = _app
+            .try_state::<DockVisibility>()
+            .ok_or("Dock visibility unavailable")?;
+        let mut visible = state.0.lock().map_err(|e| e.to_string())?;
+        if *visible != _visible {
+            // The Dock-only API suppresses rapid hide/show requests. Activation
+            // policy applies each transition without making native windows unhideable.
+            _app.set_activation_policy(activation_policy(_visible))
+                .map_err(|e| e.to_string())?;
+            *visible = _visible;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub fn reconcile_dock(app: &tauri::AppHandle) -> Result<(), String> {
+    // Strict shields temporarily own activation policy and restore their
+    // captured baseline. A newer tray action must supersede that baseline.
+    let visible = dock_is_visible(app)?;
+    app.set_activation_policy(activation_policy(visible))
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
+pub fn dock_is_visible(app: &tauri::AppHandle) -> Result<bool, String> {
+    let state = app
+        .try_state::<DockVisibility>()
+        .ok_or("Dock visibility unavailable")?;
+    let visible = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(*visible)
+}
+
+pub fn show_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let previous = dock_is_visible(window.app_handle())?;
+    set_dock_visible(window.app_handle(), true)?;
+    let result = window.show().map_err(|e| e.to_string());
+    #[cfg(target_os = "macos")]
+    if result.is_err() {
+        if let Err(error) = set_dock_visible(window.app_handle(), previous) {
+            eprintln!("Dock rollback: {error}");
+        }
+    }
+    result
+}
+
+pub fn hide_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|e| e.to_string())?;
+    set_dock_visible(window.app_handle(), false)
+}
+
 #[cfg(target_os = "windows")]
 struct HiddenStartup {
     position: tauri::PhysicalPosition<i32>,

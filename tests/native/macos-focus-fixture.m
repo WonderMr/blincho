@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -21,7 +22,7 @@ static void finish(int status) {
     exit(status);
 }
 
-static NSNumber *requestID(NSString *path) {
+static NSDictionary *readRequest(NSString *path) {
     NSData *bytes = [NSData dataWithContentsOfFile:path];
     if (!bytes) return nil;
     NSError *error = nil;
@@ -35,7 +36,7 @@ static NSNumber *requestID(NSString *path) {
         fprintf(stderr, "Focus fixture control: %s\n", error.localizedDescription.UTF8String);
         finish(EXIT_FAILURE);
     }
-    return request[@"id"];
+    return request;
 }
 
 int main(int argc, const char **argv) {
@@ -70,30 +71,54 @@ int main(int argc, const char **argv) {
         pid_t parent = getppid();
         NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:240];
         __block unsigned long long sequence = 0;
+        __block pid_t observedPID = 0;
+        __block pid_t lastFrontmostPID = -1;
+        NSMutableArray *focusChanges = [NSMutableArray new];
         void (^report)(void) = ^{
             NSRunningApplication *frontmost = NSWorkspace.sharedWorkspace.frontmostApplication;
+            pid_t frontmostPID = frontmost ? frontmost.processIdentifier : 0;
+            long long reportedAtMs = (long long)(NSDate.date.timeIntervalSince1970 * 1000);
+            if (frontmostPID != lastFrontmostPID) {
+                if (focusChanges.count == 32) [focusChanges removeObjectAtIndex:0];
+                [focusChanges addObject:@{@"pid": @(frontmostPID), @"atMs": @(reportedAtMs)}];
+                lastFrontmostPID = frontmostPID;
+            }
+            NSRunningApplication *observed = observedPID > 0
+                ? [NSRunningApplication runningApplicationWithProcessIdentifier:observedPID] : nil;
             writeJSON([directory stringByAppendingPathComponent:@"state.json"], @{
                 @"pid": @(getpid()), @"windowNumber": @(window.windowNumber),
-                @"frontmostPID": @(frontmost ? frontmost.processIdentifier : 0),
+                @"frontmostPID": @(frontmostPID), @"focusChanges": focusChanges.copy,
                 @"visible": @(window.visible), @"key": @(window.keyWindow),
                 @"active": @(NSApp.active), @"sample": @(++sequence),
-                @"reportedAtMs": @((long long)(NSDate.date.timeIntervalSince1970 * 1000))
+                @"observedPID": @(observedPID),
+                @"observedActivationPolicy": observed ? @(observed.activationPolicy) : NSNull.null,
+                @"reportedAtMs": @(reportedAtMs)
             });
         };
         report();
         [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer) {
             (void)timer;
             if (getppid() != parent || [deadline timeIntervalSinceNow] <= 0) finish(EXIT_SUCCESS);
-            NSNumber *stop = requestID([directory stringByAppendingPathComponent:@"stop"]);
+            NSDictionary *stop = readRequest([directory stringByAppendingPathComponent:@"stop"]);
             if (stop) {
-                writeJSON([directory stringByAppendingPathComponent:@"response.json"], @{@"id": stop, @"ok": @YES});
+                writeJSON([directory stringByAppendingPathComponent:@"response.json"], @{@"id": stop[@"id"], @"ok": @YES});
                 finish(EXIT_SUCCESS);
             }
-            NSNumber *activate = requestID([directory stringByAppendingPathComponent:@"activate"]);
+            NSDictionary *observe = readRequest([directory stringByAppendingPathComponent:@"observe-app"]);
+            if (observe) {
+                NSNumber *pid = observe[@"pid"];
+                if (![pid isKindOfClass:NSNumber.class] || pid.longLongValue <= 0 || pid.longLongValue > INT_MAX) {
+                    fprintf(stderr, "Focus fixture invalid observed PID\n");
+                    finish(EXIT_FAILURE);
+                }
+                observedPID = pid.intValue;
+                writeJSON([directory stringByAppendingPathComponent:@"response.json"], @{@"id": observe[@"id"], @"ok": @YES});
+            }
+            NSDictionary *activate = readRequest([directory stringByAppendingPathComponent:@"activate"]);
             if (activate) {
                 [window makeKeyAndOrderFront:nil];
                 [NSApp activateIgnoringOtherApps:YES];
-                writeJSON([directory stringByAppendingPathComponent:@"response.json"], @{@"id": activate, @"ok": @YES});
+                writeJSON([directory stringByAppendingPathComponent:@"response.json"], @{@"id": activate[@"id"], @"ok": @YES});
             }
             report();
         }];

@@ -109,7 +109,7 @@ fn foreground_expiry(
                 eprintln!("Window placement: {error}");
             }
             let _ = window.unminimize();
-            let _ = window.show();
+            let _ = ui::show_window(&window);
             let _ = window.set_focus();
             let _ = window_session::remember(&window);
         }
@@ -186,7 +186,12 @@ fn presentation_on_main(app: &tauri::AppHandle, strict: bool, release: bool) -> 
                     .lock()
                     .map(|timer| timer.strict())
                     .unwrap_or(false);
-                platform::window_level(pointer as *mut _, strict)
+                platform::window_level(pointer as *mut _, strict);
+                if !strict {
+                    if let Err(error) = ui::reconcile_dock(&handle) {
+                        eprintln!("Dock restoration: {error}");
+                    }
+                }
             })
             .map_err(|e| e.to_string())?;
     }
@@ -210,7 +215,7 @@ fn show_manual(app: &tauri::AppHandle) -> Result<(), String> {
         eprintln!("Window placement: {error}");
     }
     window.unminimize().map_err(|e| e.to_string())?;
-    window.show().map_err(|e| e.to_string())?;
+    ui::show_window(&window)?;
     window.set_focus().map_err(|e| e.to_string())?;
     if let Err(error) = window_session::remember(&window) {
         eprintln!("Window session: {error}");
@@ -247,7 +252,7 @@ fn foreground_with_break(app: &tauri::AppHandle, begin_break: bool) -> Result<()
         eprintln!("Window placement: {error}");
     }
     window.unminimize().map_err(|e| e.to_string())?;
-    window.show().map_err(|e| e.to_string())?;
+    ui::show_window(&window)?;
     window.set_focus().map_err(|e| e.to_string())?;
     if let Err(error) = window_session::remember(&window) {
         eprintln!("Window session: {error}");
@@ -290,7 +295,7 @@ fn desktop_command(
                 return Err("Strict break active".into());
             }
             let window = window(&app)?;
-            window.hide().map_err(|e| e.to_string())?;
+            ui::hide_window(&window)?;
             window_session::background_action(&window, true, false)?;
             window_session::remember(&window)
         }
@@ -557,6 +562,36 @@ fn test_control_on_main(app: &tauri::AppHandle) {
             "hide" => desktop_command("hide".into(), None, app.clone())?,
             "minimize" => desktop_command("minimize".into(), None, app.clone())?,
             "show" => show_manual(app)?,
+            "release-and-hide" => {
+                let input: TimerInput =
+                    serde_json::from_value(command["input"].clone()).map_err(|e| e.to_string())?;
+                #[cfg(target_os = "macos")]
+                let shield_count = platform::strict_shield_count();
+                #[cfg(not(target_os = "macos"))]
+                let shield_count = 0;
+                let (observed_at, deadline) = {
+                    let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+                    sample(&mut timer);
+                    let observed_at = Utc::now().timestamp_millis();
+                    if !timer.strict() || shield_count <= 0 {
+                        return Err("No active strict guard".into());
+                    }
+                    let deadline = timer
+                        .snapshot
+                        .break_end_at
+                        .filter(|deadline| *deadline > observed_at)
+                        .ok_or("No active strict guard")?;
+                    (observed_at, deadline)
+                };
+                configure_timer(input, app.clone())?;
+                // Execute the accepted hide before queued native strict teardown
+                // in one UI turn, reproducing the stale-policy restoration race.
+                desktop_command("hide".into(), None, app.clone())?;
+                presentation_on_main(app, false, true)?;
+                return Ok(json!({"ok":true,"id":command["id"],"guardPrecondition":{
+                    "shieldCount":shield_count,"observedAt":observed_at,"deadline":deadline
+                }}));
+            }
             "tray-rest" => request_tray_break(app)?,
             "maximize" => {
                 let window = window(app)?;
@@ -658,7 +693,7 @@ fn main() {
     #[cfg(target_os = "macos")]
     let autostart_builder =
         autostart_builder.macos_launcher(tauri_plugin_autostart::MacosLauncher::LaunchAgent);
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             let autostart = args.iter().any(|arg| arg == "--autostart");
             let handle = app.clone();
@@ -685,6 +720,13 @@ fn main() {
             set_locale, update_get_state, update_set_policy, update_check, update_skip, update_download, update_open_download, check_meeting_active
         ])
         .setup(move |app| {
+            ui::initialize_dock(app.handle(), !hidden);
+            #[cfg(target_os = "macos")]
+            if hidden {
+                // Native launch activation has finished. Allow hidden windows
+                // and tray reopening before constructing the webview.
+                ui::reconcile_dock(app.handle())?;
+            }
             let test_dir = std::env::var_os("BLINCHO_PROTOTYPE_TEST_DIR").map(PathBuf::from);
             let profile = match &test_dir {
                 Some(path) => path.join("profile"),
@@ -896,9 +938,16 @@ fn main() {
                     if !runtime.quitting.load(Ordering::SeqCst) {
                         api.prevent_close();
                         if !strict {
-                            let _ = window.hide();
-                            if let Some(main) = window.app_handle().get_webview_window("main") {
-                                let _ = window_session::background_action(&main, true, false);
+                            if let Some(main) = window
+                                .app_handle()
+                                .get_webview_window(window.label())
+                            {
+                                match ui::hide_window(&main) {
+                                    Ok(()) => {
+                                        let _ = window_session::background_action(&main, true, false);
+                                    }
+                                    Err(error) => eprintln!("Close window: {error}"),
+                                }
                                 let _ = window_session::remember(&main);
                             }
                         }
@@ -918,14 +967,33 @@ fn main() {
             }
         })
         .build(context)
-        .expect("Blincho failed to start")
-        .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                if let Some(runtime)=app.try_state::<Runtime>() {runtime.quitting.store(true,Ordering::SeqCst);runtime.updates.dispose();}
+        .expect("Blincho failed to start");
+    #[cfg(target_os = "macos")]
+    let mut app = app;
+    #[cfg(target_os = "macos")]
+    // Tao activates the application while finishing launch, even with no window.
+    // Keep autostart non-activating until that phase has completed.
+    app.set_activation_policy(if hidden {
+        tauri::ActivationPolicy::Prohibited
+    } else {
+        tauri::ActivationPolicy::Regular
+    });
+    app.run(|app, event| {
+        if let tauri::RunEvent::Exit = event {
+            if let Some(runtime) = app.try_state::<Runtime>() {
+                runtime.quitting.store(true, Ordering::SeqCst);
+                runtime.updates.dispose();
             }
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { has_visible_windows: false, .. } = event {
-                if let Err(error) = show_manual(app) { eprintln!("Reopen: {error}"); }
+        }
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen {
+            has_visible_windows: false,
+            ..
+        } = event
+        {
+            if let Err(error) = show_manual(app) {
+                eprintln!("Reopen: {error}");
             }
-        });
+        }
+    });
 }
