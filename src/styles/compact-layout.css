@@ -1,5 +1,5 @@
 /* Content column beside the sidebar, using the shared semantic palettes. */
-.app-workspace > .main-content { container: content-column / inline-size; min-width: 0; width: 100%; max-width: 1180px; padding: 28px 36px 36px; gap: 24px; }
+.app-workspace > .main-content { container: content-column / inline-size; min-width: 0; width: 100%; max-width: 1180px; padding: 20px 24px 28px; gap: 18px; }
 .main-content .dashboard-header { padding: 0; gap: 4px; }
 .dashboard-eyebrow { font-size: .75rem; color: var(--text-secondary); }
 .main-content .dashboard-title { font-size: 1.65rem; line-height: 1.25; letter-spacing: -.025em; }
@@ -20,8 +20,8 @@
 .main-content .feature-status-row { display: inline-flex; align-items: center; gap: 7px; padding: 0; border: 0; background: transparent; font-size: .72rem; color: var(--text-secondary); line-height: 1.5; }
 .feature-status-row > svg { flex-shrink: 0; }
 .main-content > :is(.library-view, .survey-view, .ergonomics-view, .statistics-view) { width: 100%; max-width: none; min-width: 0; }
-.main-content .view-header { margin-bottom: 22px; }
-.main-content .view-header h2 { font-size: 1.65rem; line-height: 1.3; }
+.main-content .view-header { margin-bottom: 4px; padding: 0; }
+.main-content .view-header h2 { font-size: 1.5rem; line-height: 1.3; }
 .main-content .view-header p { font-size: .85rem; line-height: 1.65; max-width: 68ch; }
 .main-content .glass-card { box-shadow: none; border-radius: 12px; }
 .main-content .library-routine-banner { padding: 20px; margin-bottom: 20px; }
@@ -32,9 +32,11 @@
 .main-content .technique-card-footer { border: 0; padding: 0; justify-content: center; gap: 12px; }
 .main-content .technique-card-footer .btn { min-height: 44px; font-size: .82rem; }
 .main-content .survey-question-card { border-radius: 10px; padding: 18px; }
-.main-content .statistics-metric { border: 0; border-inline-start: 1px solid var(--border-subtle); border-radius: 0; box-shadow: none; background: transparent; padding: 12px 18px; }
+.main-content .statistics-view { gap: 16px; }
+.main-content .statistics-metric { border: 0; border-inline-start: 1px solid var(--border-subtle); border-radius: 0; box-shadow: none; background: transparent; padding: 10px 14px; min-width: 0; }
 .main-content .statistics-metric:first-child { border-inline-start: 0; }
-.main-content .statistics-metrics { gap: 12px 0; }
+.main-content .statistics-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 0; }
+.main-content .statistics-metric .metric-val { font-size: clamp(1.35rem, 3cqw, 1.7rem); line-height: 1.25; margin: 10px 0 4px; overflow-wrap: normal; word-break: normal; }
 
 /* Keep native macOS scrolling below the titlebar. The grid supplies the sidebar
    height, avoiding stale dynamic viewport units when WKWebView resizes. */
@@ -53,8 +55,8 @@
   html[data-runtime="tauri"] .app-workspace > .main-content {
     min-height: 0;
     overflow-y: auto;
-    padding-block: clamp(20px, 3vh, 28px) clamp(24px, 4vh, 36px);
-    gap: clamp(16px, 2.5vh, 24px);
+    padding-block: 20px 28px;
+    gap: 18px;
   }
 }
 @container content-column (max-width: 600px) {
@@ -62,13 +64,15 @@
   .main-content .technique-card-footer { align-items: stretch; }
   .main-content .ergonomics-principles-grid { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 1100px) and (min-width: 761px) {
-  .app-workspace { --sidebar-width: 232px; }
-  .app-workspace > .main-content { padding-inline: 24px; }
+@container content-column (max-width: 740px) {
   .main-content .statistics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .main-content .statistics-metric:nth-child(odd) { border-inline-start: 0; }
+}
+@media (max-width: 1100px) and (min-width: 761px) {
+  .app-workspace > .main-content { padding-inline: 20px; }
 }
 @media (max-width: 760px) {
-  .app-workspace > .main-content { padding: 22px 20px 28px; gap: 20px; }
+  .app-workspace > .main-content { padding: 18px 20px 24px; gap: 16px; }
   .main-content .dashboard-title, .main-content .view-header h2 { font-size: 1.5rem; }
   .recommended-exercise { flex-wrap: wrap; gap: 10px; }
   .recommended-exercise .btn { margin-inline-start: auto; }

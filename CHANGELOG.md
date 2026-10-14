@@ -2,6 +2,14 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.1]
+
+### Improved
+
+- Use a narrower sidebar and tighter, consistent spacing across the main views. Keep navigation controls fully visible, including settings and sound at the minimum desktop window size.
+- Adapt statistics to the available content width, with readable metric columns and a date selector that stays inside the page. Preserve translated labels and comfortable control sizes.
+- Drag the native desktop window from empty areas of the sidebar, page margins and cards. Keep controls, text selection, scrolling and modal interactions available.
+
 ## [1.8.0]
 
 ### Added

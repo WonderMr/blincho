@@ -14,6 +14,7 @@ Website: https://blincho.app
 - Keeps the desktop timer running in Rust when the window is hidden or minimized.
 - Restores the window on its previous monitor after lock or sleep, keeping hidden and minimized windows in the background. If that monitor is disconnected, the window returns to an available screen.
 - Includes exercises, a personal comfort journal and local statistics.
+- Uses a compact sidebar with fully visible controls and statistics that adapt to the available content width. Drag the native desktop window from empty page or sidebar space while retaining text selection, scrolling and controls.
 - Shows a small tray preview with the next break countdown, recorded work time, completed breaks and current call status on macOS and Windows. A phone badge marks a detected call on the tray icon. Linux exposes the live summary and call application in its tray menu.
 - Records daily work, absence, lock, sleep, manual pauses and rest intervals locally. Browse previous days, average and longest work intervals, and weekly averages per calendar day or day of use. Older totals stay available; missing time records remain unknown.
 - Optionally records detected calls with their application, observed start/end and duration after you enable call history. Browse daily call lanes and per-app totals, average call lengths and weekly call time. Browser calls identify the browser; detection is approximate.
@@ -37,7 +38,7 @@ npm start
 
 On macOS, run `npm run tauri:test` for Rust and history migration checks, `npm run tauri:build:mac` to build `release/tauri-macos/Blincho.app`, or `npm run tauri:test:mac` for an isolated native smoke test. Install Blincho in `/Applications` before using its login startup feature so the registered executable has a stable path. Windows and Linux builds use `npm run tauri:build:win` and `npm run tauri:build:linux`.
 
-Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at several window sizes, through resize/restore and across all five pages. It uses synthetic settings and a separate WebKit profile. The document and titlebar stay fixed; long page content and sidebar controls retain their own scrolling. AppKit can clamp requested dimensions to the screen's available work area. The reopen check reports a skip when macOS cannot confirm presence, while the viewport checks still run.
+Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at several window sizes, through resize/restore and across all five pages, plus statistics and sidebar controls in all 30 languages at three widths. It uses synthetic settings and a separate WebKit profile. The document and titlebar stay fixed; long page content and sidebar controls retain their own scrolling. AppKit can clamp requested dimensions to the screen's available work area. The reopen check reports a skip when macOS cannot confirm presence, while the viewport checks still run.
 
 ## Website
 
