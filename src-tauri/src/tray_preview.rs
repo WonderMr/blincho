@@ -4,11 +4,14 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
 };
+use std::time::{Duration, Instant};
 use tauri::{tray::TrayIconEvent, Emitter, Manager};
+
+mod call_icon;
 
 pub const LABEL: &str = "tray-preview";
 const WIDTH: f64 = 308.;
-const HEIGHT: f64 = 198.;
+const HEIGHT: f64 = 232.;
 
 /// Localized display data comes from the one main renderer that owns statistics.
 /// The preview never imports history, writes settings or configures the timer.
@@ -31,10 +34,40 @@ pub struct Summary {
     focus_value: String,
     breaks_value: String,
     today_label: String,
+    #[serde(default = "default_meeting_label")]
+    meeting_label: String,
+    #[serde(default = "default_meeting_inactive_label")]
+    meeting_inactive_label: String,
+    #[serde(default = "default_meeting_unknown_label")]
+    meeting_unknown_label: String,
+    #[serde(default = "default_meeting_disabled_label")]
+    meeting_disabled_label: String,
+    #[serde(default = "default_unknown_meeting_app_label")]
+    unknown_meeting_app_label: String,
     #[serde(default)]
     theme: String,
     #[serde(default)]
     color_palette: String,
+}
+
+fn default_meeting_label() -> String {
+    "Call".into()
+}
+
+fn default_meeting_inactive_label() -> String {
+    "No active call".into()
+}
+
+fn default_meeting_unknown_label() -> String {
+    "Call status unavailable".into()
+}
+
+fn default_meeting_disabled_label() -> String {
+    "Call detection disabled".into()
+}
+
+fn default_unknown_meeting_app_label() -> String {
+    "Unknown app".into()
 }
 
 impl Summary {
@@ -63,6 +96,11 @@ impl Summary {
             &self.focus_value,
             &self.breaks_value,
             &self.today_label,
+            &self.meeting_label,
+            &self.meeting_inactive_label,
+            &self.meeting_unknown_label,
+            &self.meeting_disabled_label,
+            &self.unknown_meeting_app_label,
             &self.theme,
             &self.color_palette,
         ] {
@@ -78,9 +116,71 @@ impl Summary {
 pub struct Preview {
     summary: Mutex<Option<Summary>>,
     tooltip: Mutex<String>,
+    call_indicator: Mutex<CallIndicator>,
     clicked: AtomicBool,
     #[cfg(target_os = "linux")]
     menu_rows: Mutex<Vec<tauri::menu::MenuItem<tauri::Wry>>>,
+}
+
+#[derive(Default)]
+struct CallIndicator {
+    active: bool,
+    updates: u64,
+    attempts: u64,
+    applying: bool,
+    retry: Option<(bool, Instant)>,
+    last_error: Option<String>,
+    images: Option<(tauri::image::Image<'static>, tauri::image::Image<'static>)>,
+}
+
+impl CallIndicator {
+    fn needs_update(&self, active: bool) -> bool {
+        self.needs_update_at(active, Instant::now())
+    }
+
+    fn needs_update_at(&self, active: bool, now: Instant) -> bool {
+        self.active != active
+            && !self.applying
+            && self
+                .retry
+                .as_ref()
+                .is_none_or(|(wanted, deadline)| *wanted != active || now >= *deadline)
+    }
+
+    fn failed(&mut self, active: bool, now: Instant, error: String) {
+        self.applying = false;
+        self.retry = Some((active, now + Duration::from_secs(3)));
+        self.last_error = Some(error);
+    }
+
+    fn clear_obsolete_error(&mut self, active: bool) {
+        if self.active == active {
+            self.retry = None;
+            self.last_error = None;
+        }
+    }
+
+    fn applied(&mut self, active: bool) {
+        self.active = active;
+        self.updates += 1;
+        self.applying = false;
+        self.retry = None;
+        self.last_error = None;
+    }
+
+    fn image(&mut self, active: bool) -> tauri::Result<tauri::image::Image<'static>> {
+        if self.images.is_none() {
+            let original = tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
+                include_bytes!("../../assets/trayTemplate.png")
+            } else {
+                include_bytes!("../../assets/icon.png")
+            })?;
+            let calling = call_icon::with_call_badge(&original, cfg!(target_os = "macos"));
+            self.images = Some((original, calling));
+        }
+        let (original, calling) = self.images.as_ref().unwrap();
+        Ok(if active { calling } else { original }.clone())
+    }
 }
 
 #[derive(Serialize)]
@@ -135,7 +235,12 @@ pub fn append_menu_summary(
         use tauri::menu::{MenuItem, PredefinedMenuItem};
         _menu.append(&PredefinedMenuItem::separator(_app)?)?;
         let mut rows = Vec::new();
-        for id in ["preview-next", "preview-focus", "preview-breaks"] {
+        for id in [
+            "preview-next",
+            "preview-call",
+            "preview-focus",
+            "preview-breaks",
+        ] {
             let row = MenuItem::with_id(_app, id, "Blincho", false, None::<&str>)?;
             _menu.append(&row)?;
             rows.push(row);
@@ -208,6 +313,31 @@ pub fn hide(app: &tauri::AppHandle) {
 }
 
 pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
+    let state = app.state::<Preview>();
+    let (indicator_active, indicator_updates, indicator_attempts, indicator_error) = state
+        .call_indicator
+        .lock()
+        .map(|indicator| {
+            (
+                Some(indicator.active),
+                Some(indicator.updates),
+                Some(indicator.attempts),
+                indicator.last_error.clone(),
+            )
+        })
+        .unwrap_or_default();
+    let call_status = state
+        .summary
+        .lock()
+        .ok()
+        .and_then(|summary| summary.clone())
+        .and_then(|summary| {
+            app.state::<Runtime>()
+                .timer
+                .lock()
+                .ok()
+                .map(|timer| meeting_label(&summary, &timer.snapshot))
+        });
     let window = app.get_webview_window(LABEL);
     #[cfg(target_os = "macos")]
     let native = macos::diagnostics(window.as_ref());
@@ -223,8 +353,11 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
         .menu_rows
         .lock()
         .ok()
-        .map(|rows| rows.iter().filter_map(|row| row.text().ok()).collect())
-        .unwrap_or_default();
+        .map(|rows| rows.clone())
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|row| row.text().ok())
+        .collect();
     #[cfg(not(target_os = "linux"))]
     let fallback_rows: Vec<String> = Vec::new();
     serde_json::json!({
@@ -232,10 +365,18 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
         "focused": window.as_ref().and_then(|w| w.is_focused().ok()),
         "position": window.as_ref().and_then(|w| w.outer_position().ok()),
         "size": window.as_ref().and_then(|w| w.outer_size().ok()),
+        "innerSize": window.as_ref().and_then(|w| w.inner_size().ok()),
+        "scaleFactor": window.as_ref().and_then(|w| w.scale_factor().ok()),
         "summary": app.state::<Preview>().summary.lock().ok().and_then(|s| s.clone()),
         "native": native,
         "dockVisible": dock_visible,
         "fallbackRows": fallback_rows,
+        "callIndicatorActive": indicator_active,
+        "callIndicatorUpdates": indicator_updates,
+        "callIndicatorAttempts": indicator_attempts,
+        "callIndicatorError": indicator_error,
+        "tooltip": state.tooltip.lock().ok().map(|tooltip| tooltip.clone()),
+        "callStatus": call_status,
     })
 }
 
@@ -427,11 +568,94 @@ fn timer_label<'a>(summary: &'a Summary, snapshot: &Snapshot) -> &'a str {
     }
 }
 
+fn call_active(snapshot: &Snapshot) -> bool {
+    snapshot.live_meeting_enabled
+        && snapshot
+            .live_meeting_status
+            .as_ref()
+            .is_some_and(|status| status.supported && status.in_meeting)
+}
+
+fn meeting_label(summary: &Summary, snapshot: &Snapshot) -> String {
+    if !snapshot.live_meeting_enabled {
+        return summary.meeting_disabled_label.clone();
+    }
+    let Some(status) = snapshot
+        .live_meeting_status
+        .as_ref()
+        .filter(|status| status.supported)
+    else {
+        return summary.meeting_unknown_label.clone();
+    };
+    if !status.in_meeting {
+        return summary.meeting_inactive_label.clone();
+    }
+    let apps: Vec<&str> = status
+        .applications
+        .iter()
+        .map(|app| {
+            if app == "unknown" {
+                summary.unknown_meeting_app_label.as_str()
+            } else {
+                app.as_str()
+            }
+        })
+        .filter(|app| !app.trim().is_empty())
+        .collect();
+    let apps = if apps.is_empty() {
+        summary.unknown_meeting_app_label.clone()
+    } else {
+        apps.join(", ")
+    };
+    format!("{}: {}", summary.meeting_label, apps)
+}
+
+fn update_call_indicator(app: &tauri::AppHandle, snapshot: &Snapshot, state: &Preview) {
+    let active = call_active(snapshot);
+    let Some(tray) = app.tray_by_id("blincho") else {
+        return;
+    };
+    let image = {
+        let Ok(mut indicator) = state.call_indicator.lock() else {
+            return;
+        };
+        indicator.clear_obsolete_error(active);
+        if !indicator.needs_update(active) {
+            return;
+        }
+        indicator.attempts += 1;
+        match indicator.image(active) {
+            Ok(image) => {
+                indicator.applying = true;
+                image
+            }
+            Err(error) => {
+                indicator.failed(active, Instant::now(), error.to_string());
+                eprintln!("Tray call indicator: {error}");
+                return;
+            }
+        }
+    };
+    // Never hold a state mutex while dispatching synchronously to the UI thread.
+    // This atomic operation also keeps macOS template tinting without a second render.
+    let result = tray.set_icon_with_as_template(Some(image), cfg!(target_os = "macos"));
+    if let Ok(mut indicator) = state.call_indicator.lock() {
+        match result {
+            Ok(()) => indicator.applied(active),
+            Err(error) => {
+                indicator.failed(active, Instant::now(), error.to_string());
+                eprintln!("Tray call indicator: {error}");
+            }
+        }
+    }
+}
+
 pub fn update(app: &tauri::AppHandle, snapshot: &Snapshot, strict: bool) {
     if strict {
         hide(app);
     }
     let state = app.state::<Preview>();
+    update_call_indicator(app, snapshot, &state);
     let Some(summary) = state.summary.lock().ok().and_then(|s| s.clone()) else {
         return;
     };
@@ -441,19 +665,22 @@ pub fn update(app: &tauri::AppHandle, snapshot: &Snapshot, strict: bool) {
             timer_label(&summary, snapshot),
             countdown(snapshot)
         ),
+        meeting_label(&summary, snapshot),
         format!("{}: {}", summary.focus_label, summary.focus_value),
         format!("{}: {}", summary.breaks_label, summary.breaks_value),
     ];
-    let tooltip = format!("{}\n{}\n{}\n{}", summary.title, rows[0], rows[1], rows[2]);
-    let Ok(mut previous) = state.tooltip.lock() else {
-        return;
-    };
-    if *previous == tooltip {
-        return;
+    let tooltip = format!("{}\n{}", summary.title, rows.join("\n"));
+    {
+        let Ok(mut previous) = state.tooltip.lock() else {
+            return;
+        };
+        if *previous == tooltip {
+            return;
+        }
+        *previous = tooltip.clone();
     }
-    *previous = tooltip.clone();
     #[cfg(target_os = "linux")]
-    if let Ok(items) = state.menu_rows.lock() {
+    if let Ok(items) = state.menu_rows.lock().map(|items| items.clone()) {
         for (item, text) in items.iter().zip(&rows) {
             let _ = item.set_text(text);
         }
@@ -541,6 +768,170 @@ mod macos {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn summary() -> Summary {
+        serde_json::from_value(serde_json::json!({
+            "date": "2026-10-14", "focusMinutes": 12.0, "breaksCompleted": 2,
+            "locale": "ru", "title": "Blincho", "nextBreakLabel": "До перерыва",
+            "focusLabel": "Работа", "breaksLabel": "Перерывы", "pausedLabel": "Пауза",
+            "absentLabel": "Нет активности", "breakLabel": "Перерыв", "exerciseLabel": "Упражнение",
+            "readyLabel": "Пора отдохнуть", "focusValue": "12 мин", "breaksValue": "2",
+            "todayLabel": "Сегодня", "meetingLabel": "Звонок", "meetingInactiveLabel": "Нет активного звонка",
+            "meetingUnknownLabel": "Статус звонка неизвестен", "meetingDisabledLabel": "Определение звонков выключено",
+            "unknownMeetingAppLabel": "Неизвестное приложение"
+        })).unwrap()
+    }
+
+    #[test]
+    fn call_status_uses_live_snapshot_and_translated_labels_in_every_state() {
+        let summary = summary();
+        let mut snapshot = crate::timer::Timer::new(0).snapshot;
+        snapshot.live_meeting_enabled = false;
+        snapshot.live_meeting_status = Some(crate::platform::MeetingStatus {
+            in_meeting: true,
+            supported: true,
+            applications: vec!["Zoom".into()],
+        });
+        assert!(!call_active(&snapshot));
+        assert_eq!(
+            meeting_label(&summary, &snapshot),
+            "Определение звонков выключено"
+        );
+        snapshot.live_meeting_enabled = true;
+        assert!(call_active(&snapshot));
+        assert_eq!(meeting_label(&summary, &snapshot), "Звонок: Zoom");
+        assert!(snapshot.meeting_spans.is_empty());
+        assert!(snapshot.meeting_applications.is_empty());
+        snapshot.live_meeting_status.as_mut().unwrap().applications =
+            vec!["Zoom".into(), "Microsoft Teams".into()];
+        assert_eq!(
+            meeting_label(&summary, &snapshot),
+            "Звонок: Zoom, Microsoft Teams"
+        );
+        snapshot.live_meeting_status.as_mut().unwrap().applications = vec![" ".into()];
+        assert_eq!(
+            meeting_label(&summary, &snapshot),
+            "Звонок: Неизвестное приложение"
+        );
+        snapshot.live_meeting_status.as_mut().unwrap().applications = vec!["unknown".into()];
+        assert_eq!(
+            meeting_label(&summary, &snapshot),
+            "Звонок: Неизвестное приложение"
+        );
+        snapshot.live_meeting_status.as_mut().unwrap().applications =
+            vec!["Zoom".into(), "unknown".into()];
+        assert_eq!(
+            meeting_label(&summary, &snapshot),
+            "Звонок: Zoom, Неизвестное приложение"
+        );
+        snapshot.live_meeting_status = Some(crate::platform::MeetingStatus::inactive(true));
+        assert!(!call_active(&snapshot));
+        assert_eq!(meeting_label(&summary, &snapshot), "Нет активного звонка");
+        snapshot.live_meeting_status = Some(crate::platform::MeetingStatus {
+            in_meeting: true,
+            supported: false,
+            applications: vec!["Zoom".into()],
+        });
+        assert!(!call_active(&snapshot));
+        assert_eq!(
+            meeting_label(&summary, &snapshot),
+            "Статус звонка неизвестен"
+        );
+        snapshot.live_meeting_status = None;
+        assert!(!call_active(&snapshot));
+        assert_eq!(
+            meeting_label(&summary, &snapshot),
+            "Статус звонка неизвестен"
+        );
+    }
+
+    #[test]
+    fn missing_meeting_labels_remain_backward_compatible_and_new_text_is_validated() {
+        let mut value = serde_json::to_value(summary()).unwrap();
+        for key in [
+            "meetingLabel",
+            "meetingInactiveLabel",
+            "meetingUnknownLabel",
+            "meetingDisabledLabel",
+            "unknownMeetingAppLabel",
+        ] {
+            value.as_object_mut().unwrap().remove(key);
+        }
+        let legacy: Summary = serde_json::from_value(value).unwrap();
+        assert_eq!(legacy.meeting_label, "Call");
+        assert_eq!(legacy.meeting_inactive_label, "No active call");
+        assert_eq!(legacy.meeting_unknown_label, "Call status unavailable");
+        assert_eq!(legacy.meeting_disabled_label, "Call detection disabled");
+        assert_eq!(legacy.unknown_meeting_app_label, "Unknown app");
+        assert!(legacy.validate().is_ok());
+        let mut invalid = summary();
+        invalid.meeting_label = "a".repeat(513);
+        assert!(invalid.validate().is_err());
+        invalid.meeting_label = "Call\0status".into();
+        assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn icon_changes_only_on_applied_transitions_and_restores_exact_original() {
+        let mut indicator = CallIndicator::default();
+        assert!(!indicator.needs_update(false));
+        assert!(indicator.needs_update(true));
+        let active = indicator.image(true).unwrap();
+        // Obtaining an image never marks a failed native apply as successful.
+        assert!(indicator.needs_update(true));
+        assert_eq!(indicator.updates, 0);
+        indicator.applying = true;
+        assert!(!indicator.needs_update(true));
+        indicator.applying = false;
+        assert!(indicator.needs_update(true));
+        indicator.applied(true);
+        assert!(!indicator.needs_update(true));
+        assert_eq!(indicator.updates, 1);
+        let original = indicator.image(false).unwrap();
+        let expected = tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
+            include_bytes!("../../assets/trayTemplate.png")
+        } else {
+            include_bytes!("../../assets/icon.png")
+        })
+        .unwrap();
+        assert_ne!(active.rgba(), original.rgba());
+        assert_eq!(original.rgba(), expected.rgba());
+        assert!(indicator.needs_update(false));
+        indicator.applied(false);
+        assert!(!indicator.needs_update(false));
+        assert_eq!(indicator.updates, 2);
+    }
+    #[test]
+    fn native_icon_failure_backs_off_without_claiming_success_and_recovers() {
+        let now = Instant::now();
+        let mut indicator = CallIndicator::default();
+        indicator.applying = true;
+        indicator.attempts = 1;
+        indicator.failed(true, now, "backend unavailable".into());
+        assert!(!indicator.active);
+        assert_eq!(indicator.updates, 0);
+        assert_eq!(indicator.last_error.as_deref(), Some("backend unavailable"));
+        assert!(!indicator.needs_update_at(true, now + Duration::from_millis(250)));
+        assert!(!indicator.needs_update_at(true, now + Duration::from_millis(2999)));
+        assert!(indicator.needs_update_at(true, now + Duration::from_secs(3)));
+        indicator.clear_obsolete_error(false);
+        assert!(indicator.last_error.is_none());
+        assert!(indicator.needs_update_at(true, now));
+        indicator.applied(true);
+        assert!(indicator.last_error.is_none());
+        assert_eq!(indicator.updates, 1);
+        indicator.failed(false, now, "temporary restore failure".into());
+        assert!(
+            indicator.active,
+            "A failed restore cannot be reported as successful"
+        );
+        assert!(!indicator.needs_update_at(false, now + Duration::from_secs(1)));
+        indicator.applied(false);
+        assert!(!indicator.active);
+        assert!(indicator.last_error.is_none());
+        assert_eq!(indicator.updates, 2);
+    }
+
     #[test]
     fn popup_stays_in_work_area_at_edges_and_scaled_negative_monitors() {
         assert_eq!(
@@ -549,7 +940,7 @@ mod tests {
         );
         assert_eq!(
             popup_position((1800., 1060., 24., 24.), (0., 0., 1920., 1060.), 1.),
-            (1604., 854.)
+            (1604., 820.)
         );
         assert_eq!(
             popup_position((-2400., -40., 48., 48.), (-2560., 8., 2560., 1392.), 2.),

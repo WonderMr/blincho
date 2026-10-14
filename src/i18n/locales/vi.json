@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Đã xóa lịch sử cuộc gọi.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Không thể xóa lịch sử cuộc gọi. Hãy thử lại.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Cuộc gọi chỉ được ghi lại khi tính năng lưu lịch sử được bật và Blincho đang chạy.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Chỉ ứng dụng Blincho trên máy tính hỗ trợ ghi lại cuộc gọi."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Chỉ ứng dụng Blincho trên máy tính hỗ trợ ghi lại cuộc gọi.",
+  "Звонок": "Cuộc gọi",
+  "Нет активного звонка": "Không có cuộc gọi đang diễn ra",
+  "Статус звонка неизвестен": "Chưa rõ trạng thái cuộc gọi",
+  "Определение звонков отключено": "Đã tắt phát hiện cuộc gọi"
 }

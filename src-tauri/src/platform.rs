@@ -135,6 +135,8 @@ pub struct MeetingMonitor {
     test_status: Mutex<Option<MeetingStatus>>,
 }
 impl MeetingMonitor {
+    const BACKGROUND_CACHE_TTL: Duration = Duration::from_secs(3);
+
     pub fn new() -> Self {
         Self {
             cache: Mutex::new(MeetingCache::default()),
@@ -203,7 +205,7 @@ impl MeetingMonitor {
         }
         let mut cache = self.cache.lock().unwrap();
         if let Some((at, generation, value)) = &cache.status {
-            if !fresh && *generation == epoch && at.elapsed() < Duration::from_secs(10) {
+            if !fresh && *generation == epoch && at.elapsed() < Self::BACKGROUND_CACHE_TTL {
                 return value.clone();
             }
         }
@@ -459,6 +461,46 @@ mod tests {
         assert!(!monitor.check_with(0, true, inactive).in_meeting);
         assert!(!monitor.check_with(0, false, zoom).in_meeting);
         assert!(monitor.check_with(0, true, zoom).in_meeting);
+    }
+    #[test]
+    fn background_calls_share_a_three_second_cache_and_refresh_after_expiry() {
+        let monitor = MeetingMonitor::new();
+        assert!(
+            monitor
+                .check_with(7, false, || MeetingStatus::detected(
+                    vec!["Zoom".into()],
+                    true
+                ))
+                .in_meeting
+        );
+        let mut cache = monitor.cache.lock().unwrap();
+        let (at, _, _) = cache.status.as_mut().unwrap();
+        *at = Instant::now() - Duration::from_millis(2500);
+        drop(cache);
+        assert!(
+            monitor
+                .check_with(7, false, || panic!(
+                    "Background heartbeat should reuse its cache"
+                ))
+                .in_meeting
+        );
+        let mut cache = monitor.cache.lock().unwrap();
+        let (at, _, _) = cache.status.as_mut().unwrap();
+        *at = Instant::now() - Duration::from_millis(3100);
+        drop(cache);
+        assert!(
+            !monitor
+                .check_with(7, false, || MeetingStatus::inactive(true))
+                .in_meeting
+        );
+        assert!(
+            monitor
+                .check_with(8, false, || MeetingStatus::detected(
+                    vec!["Discord".into()],
+                    true
+                ))
+                .in_meeting
+        );
     }
     #[test]
     fn absence_returns_inactive_without_probing_and_invalidates_old_cache() {

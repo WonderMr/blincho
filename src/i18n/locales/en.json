@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Call history deleted.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Could not delete call history. Try again.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Calls are recorded only when saving history is enabled and Blincho is running.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Call recording is available only in the Blincho desktop app."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Call recording is available only in the Blincho desktop app.",
+  "Звонок": "Call",
+  "Нет активного звонка": "No active call",
+  "Статус звонка неизвестен": "Call status unknown",
+  "Определение звонков отключено": "Call detection off"
 }

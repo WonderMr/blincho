@@ -10,7 +10,7 @@ html:has(.tray-preview-shell), body:has(.tray-preview-shell), #root:has(.tray-pr
 .tray-preview-shell {
   box-sizing: border-box;
   width: 100%;
-  height: 198px;
+  height: 232px;
   padding: 16px 18px;
   color: var(--text-primary);
   background: var(--bg-card);
@@ -28,6 +28,10 @@ html:has(.tray-preview-shell), body:has(.tray-preview-shell), #root:has(.tray-pr
 .tray-preview-countdown { font-size: 29px; line-height: 1.1; font-weight: 650; letter-spacing: -.7px; font-variant-numeric: tabular-nums; direction: ltr; }
 .tray-preview-progress { height: 3px; margin: 10px 0 14px; border-radius: 2px; background: var(--border-subtle); overflow: hidden; }
 .tray-preview-progress > span { display: block; height: 100%; background: var(--accent-emerald); }
+.tray-preview-meeting { display: flex; align-items: center; gap: 7px; min-width: 0; min-height: 18px; margin-bottom: 14px; color: var(--text-secondary); }
+.tray-preview-meeting-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+.tray-preview-meeting[data-meeting-state="active"] .tray-preview-meeting-dot { background: var(--accent-emerald); }
+.tray-preview-meeting-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tray-preview-totals { margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .tray-preview-totals > div { display: flex; justify-content: space-between; gap: 10px; }
 .tray-preview-totals dt { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

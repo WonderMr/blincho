@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Görüşme geçmişi silindi.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Görüşme geçmişi silinemedi. Tekrar deneyin.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Görüşmeler yalnızca geçmişi kaydetme açıkken ve Blincho çalışırken kaydedilir.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Görüşme kaydı yalnızca Blincho masaüstü uygulamasında kullanılabilir."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Görüşme kaydı yalnızca Blincho masaüstü uygulamasında kullanılabilir.",
+  "Звонок": "Arama",
+  "Нет активного звонка": "Etkin arama yok",
+  "Статус звонка неизвестен": "Arama durumu bilinmiyor",
+  "Определение звонков отключено": "Arama algılama kapalı"
 }
