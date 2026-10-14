@@ -4,6 +4,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Mutex,
 };
+use std::time::{Duration, Instant};
 use tauri::{tray::TrayIconEvent, Emitter, Manager};
 
 mod call_icon;
@@ -125,19 +126,46 @@ pub struct Preview {
 struct CallIndicator {
     active: bool,
     updates: u64,
+    attempts: u64,
     applying: bool,
+    retry: Option<(bool, Instant)>,
+    last_error: Option<String>,
     images: Option<(tauri::image::Image<'static>, tauri::image::Image<'static>)>,
 }
 
 impl CallIndicator {
     fn needs_update(&self, active: bool) -> bool {
-        self.active != active && !self.applying
+        self.needs_update_at(active, Instant::now())
+    }
+
+    fn needs_update_at(&self, active: bool, now: Instant) -> bool {
+        self.active != active
+            && !self.applying
+            && self
+                .retry
+                .as_ref()
+                .is_none_or(|(wanted, deadline)| *wanted != active || now >= *deadline)
+    }
+
+    fn failed(&mut self, active: bool, now: Instant, error: String) {
+        self.applying = false;
+        self.retry = Some((active, now + Duration::from_secs(3)));
+        self.last_error = Some(error);
+    }
+
+    fn clear_obsolete_error(&mut self, active: bool) {
+        if self.active == active {
+            self.retry = None;
+            self.last_error = None;
+        }
     }
 
     fn applied(&mut self, active: bool) {
         self.active = active;
         self.updates += 1;
         self.applying = false;
+        self.retry = None;
+        self.last_error = None;
     }
 
     fn image(&mut self, active: bool) -> tauri::Result<tauri::image::Image<'static>> {
@@ -286,10 +314,17 @@ pub fn hide(app: &tauri::AppHandle) {
 
 pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
     let state = app.state::<Preview>();
-    let (indicator_active, indicator_updates) = state
+    let (indicator_active, indicator_updates, indicator_attempts, indicator_error) = state
         .call_indicator
         .lock()
-        .map(|indicator| (Some(indicator.active), Some(indicator.updates)))
+        .map(|indicator| {
+            (
+                Some(indicator.active),
+                Some(indicator.updates),
+                Some(indicator.attempts),
+                indicator.last_error.clone(),
+            )
+        })
         .unwrap_or_default();
     let call_status = state
         .summary
@@ -338,6 +373,8 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
         "fallbackRows": fallback_rows,
         "callIndicatorActive": indicator_active,
         "callIndicatorUpdates": indicator_updates,
+        "callIndicatorAttempts": indicator_attempts,
+        "callIndicatorError": indicator_error,
         "tooltip": state.tooltip.lock().ok().map(|tooltip| tooltip.clone()),
         "callStatus": call_status,
     })
@@ -582,15 +619,18 @@ fn update_call_indicator(app: &tauri::AppHandle, snapshot: &Snapshot, state: &Pr
         let Ok(mut indicator) = state.call_indicator.lock() else {
             return;
         };
+        indicator.clear_obsolete_error(active);
         if !indicator.needs_update(active) {
             return;
         }
+        indicator.attempts += 1;
         match indicator.image(active) {
             Ok(image) => {
                 indicator.applying = true;
                 image
             }
             Err(error) => {
+                indicator.failed(active, Instant::now(), error.to_string());
                 eprintln!("Tray call indicator: {error}");
                 return;
             }
@@ -603,7 +643,7 @@ fn update_call_indicator(app: &tauri::AppHandle, snapshot: &Snapshot, state: &Pr
         match result {
             Ok(()) => indicator.applied(active),
             Err(error) => {
-                indicator.applying = false;
+                indicator.failed(active, Instant::now(), error.to_string());
                 eprintln!("Tray call indicator: {error}");
             }
         }
@@ -861,6 +901,37 @@ mod tests {
         assert!(!indicator.needs_update(false));
         assert_eq!(indicator.updates, 2);
     }
+    #[test]
+    fn native_icon_failure_backs_off_without_claiming_success_and_recovers() {
+        let now = Instant::now();
+        let mut indicator = CallIndicator::default();
+        indicator.applying = true;
+        indicator.attempts = 1;
+        indicator.failed(true, now, "backend unavailable".into());
+        assert!(!indicator.active);
+        assert_eq!(indicator.updates, 0);
+        assert_eq!(indicator.last_error.as_deref(), Some("backend unavailable"));
+        assert!(!indicator.needs_update_at(true, now + Duration::from_millis(250)));
+        assert!(!indicator.needs_update_at(true, now + Duration::from_millis(2999)));
+        assert!(indicator.needs_update_at(true, now + Duration::from_secs(3)));
+        indicator.clear_obsolete_error(false);
+        assert!(indicator.last_error.is_none());
+        assert!(indicator.needs_update_at(true, now));
+        indicator.applied(true);
+        assert!(indicator.last_error.is_none());
+        assert_eq!(indicator.updates, 1);
+        indicator.failed(false, now, "temporary restore failure".into());
+        assert!(
+            indicator.active,
+            "A failed restore cannot be reported as successful"
+        );
+        assert!(!indicator.needs_update_at(false, now + Duration::from_secs(1)));
+        indicator.applied(false);
+        assert!(!indicator.active);
+        assert!(indicator.last_error.is_none());
+        assert_eq!(indicator.updates, 2);
+    }
+
     #[test]
     fn popup_stays_in_work_area_at_edges_and_scaled_negative_monitors() {
         assert_eq!(
