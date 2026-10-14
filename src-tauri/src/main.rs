@@ -563,8 +563,8 @@ fn test_control_on_main(app: &tauri::AppHandle) {
             "minimize" => desktop_command("minimize".into(), None, app.clone())?,
             "show" => show_manual(app)?,
             "release-and-hide" => {
-                let input: TimerInput = serde_json::from_value(command["input"].clone())
-                    .map_err(|e| e.to_string())?;
+                let input: TimerInput =
+                    serde_json::from_value(command["input"].clone()).map_err(|e| e.to_string())?;
                 configure_timer(input, app.clone())?;
                 // Execute the accepted hide before queued native strict teardown
                 // in one UI turn, reproducing the stale-policy restoration race.
@@ -911,10 +911,16 @@ fn main() {
                     if !runtime.quitting.load(Ordering::SeqCst) {
                         api.prevent_close();
                         if !strict {
-                            let _ = window.hide();
-                            let _ = ui::set_dock_visible(window.app_handle(), false);
-                            if let Some(main) = window.app_handle().get_webview_window("main") {
-                                let _ = window_session::background_action(&main, true, false);
+                            if let Some(main) = window
+                                .app_handle()
+                                .get_webview_window(window.label())
+                            {
+                                match ui::hide_window(&main) {
+                                    Ok(()) => {
+                                        let _ = window_session::background_action(&main, true, false);
+                                    }
+                                    Err(error) => eprintln!("Close window: {error}"),
+                                }
                                 let _ = window_session::remember(&main);
                             }
                         }
@@ -940,12 +946,21 @@ fn main() {
     #[cfg(target_os = "macos")]
     app.set_activation_policy(ui::activation_policy(!hidden));
     app.run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                if let Some(runtime)=app.try_state::<Runtime>() {runtime.quitting.store(true,Ordering::SeqCst);runtime.updates.dispose();}
+        if let tauri::RunEvent::Exit = event {
+            if let Some(runtime) = app.try_state::<Runtime>() {
+                runtime.quitting.store(true, Ordering::SeqCst);
+                runtime.updates.dispose();
             }
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { has_visible_windows: false, .. } = event {
-                if let Err(error) = show_manual(app) { eprintln!("Reopen: {error}"); }
+        }
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen {
+            has_visible_windows: false,
+            ..
+        } = event
+        {
+            if let Err(error) = show_manual(app) {
+                eprintln!("Reopen: {error}");
             }
-        });
+        }
+    });
 }
