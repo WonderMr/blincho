@@ -944,8 +944,20 @@ fn main() {
     #[cfg(target_os = "macos")]
     let mut app = app;
     #[cfg(target_os = "macos")]
-    app.set_activation_policy(ui::activation_policy(!hidden));
+    // Tao activates the application while finishing launch, even with no window.
+    // Keep autostart non-activating until that phase has completed.
+    app.set_activation_policy(if hidden {
+        tauri::ActivationPolicy::Prohibited
+    } else {
+        tauri::ActivationPolicy::Regular
+    });
     app.run(|app, event| {
+        #[cfg(target_os = "macos")]
+        if matches!(event, tauri::RunEvent::Ready) {
+            if let Err(error) = ui::reconcile_dock(app) {
+                eprintln!("Startup Dock: {error}");
+            }
+        }
         if let tauri::RunEvent::Exit = event {
             if let Some(runtime) = app.try_state::<Runtime>() {
                 runtime.quitting.store(true, Ordering::SeqCst);
