@@ -173,7 +173,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       autoTakeoverModal: true, soundEnabled: false, notificationsEnabled: false }),
     'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
   } }));
-  if (startupHidden) await activate(previous);
+  const startupFocus = startupHidden ? await activate(previous) : null;
   const handle = launch(executable, startupHidden ? ['--autostart'] : [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory,
     BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1' } });
   const app = { handle, directory, read: () => readJSON(path.join(directory, 'runtime-diagnostics.json')) };
@@ -184,7 +184,10 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   await dockPolicy(previous, app, startupHidden ? 1 : 0, 'startup Dock policy must match window visibility');
   if (startupHidden) {
     assert.equal(initial.visible, false, 'Autostart must keep the main window hidden');
-    assert.equal(fixtureState(previous).frontmostPID, previous.pid, 'Hidden startup must preserve work focus');
+    const startupState = fixtureState(previous);
+    assert.equal(startupState.frontmostPID, previous.pid, `Hidden startup must preserve work focus (Blincho PID ${initial.pid})`);
+    assert(!startupState.focusChanges.some(change => change.atMs >= startupFocus.reportedAtMs && change.pid === initial.pid),
+      'Hidden startup must not activate Blincho during launch');
     await control(app, 'show');
     await dockPolicy(previous, app, 0, 'opening an autostart app must restore Dock');
     await control(app, 'minimize');
