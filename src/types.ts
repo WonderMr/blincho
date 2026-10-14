@@ -46,6 +46,7 @@ export interface AppSettings {
   idleThresholdMinutes: number;
   strictModeIgnoreIdle: boolean;
   meetingDetectionEnabled: boolean;
+  meetingHistoryEnabled: boolean;
   strictMode: boolean;
 }
 
@@ -57,6 +58,12 @@ export interface ActivitySpan {
   state: ActivityState;
 }
 
+export interface MeetingSpan {
+  start: number;
+  end: number;
+  app: string;
+}
+
 export interface DayStats {
   date: string; // YYYY-MM-DD
   breaksCompleted: number;
@@ -66,6 +73,8 @@ export interface DayStats {
   completedEventIds?: string[];
   // Older aggregate-only history has no timeline and remains readable.
   activity?: ActivitySpan[];
+  // Missing in history recorded before meeting observations were introduced.
+  meetings?: MeetingSpan[];
 }
 
 export interface CVSSurveyQuestion {

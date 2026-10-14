@@ -51,8 +51,8 @@ const props = { todayStats: today, allStats: [recorded, legacy], cvsResult: null
 const host = doc.createElement('div'); doc.body.appendChild(host);
 const root = ReactDOMClient.createRoot(host);
 const render = value => ReactDOM.flushSync(() => root.render(value));
-const all = predicate => {
-  const found = []; const visit = node => { if (predicate(node)) found.push(node); node.childNodes.forEach(visit); }; visit(host); return found;
+const all = (predicate, parent = host) => {
+  const found = []; const visit = node => { if (predicate(node)) found.push(node); node.childNodes.forEach(visit); }; visit(parent); return found;
 };
 const find = predicate => all(predicate)[0];
 const reactProps = node => node[Object.keys(node).find(key => key.startsWith('__reactProps'))];
@@ -75,9 +75,10 @@ try {
 
   invoke(selector(), 'onChange', { target: { value: recorded.date } });
   assert.equal(dayButtons().filter(node => node.getAttribute('aria-pressed') === 'true').length, 1);
-  const durationValues = all(node => node.tagName === 'DD').map(node => node.textContent);
-  assert.deepEqual(durationValues.slice(0, 4), ['1 ч 30 мин', '35 мин', '15 мин', '10 мин']);
-  assert.deepEqual(durationValues.slice(4), ['2', '45 мин', '1 ч 0 мин', 'С 09:00 до 12:00']);
+  const dailyMetrics = find(node => reactProps(node)?.className === 'statistics-daily-metrics');
+  const sessions = find(node => reactProps(node)?.className === 'statistics-session-summary');
+  assert.deepEqual(all(node => node.tagName === 'DD', dailyMetrics).map(node => node.textContent), ['1 ч 30 мин', '35 мин', '15 мин', '10 мин']);
+  assert.deepEqual(all(node => node.tagName === 'DD', sessions).map(node => node.textContent), ['2', '45 мин', '1 ч 0 мин', 'С 09:00 до 12:00']);
   assert(host.textContent.includes('Записано: 3 ч 0 мин'));
   assert(host.textContent.includes('Нет записи: 21 ч 0 мин'));
   for (const state of ['work', 'idle', 'locked', 'suspended', 'hidden', 'unconfirmed', 'manual', 'break', 'exercise', 'unknown']) {
@@ -105,10 +106,30 @@ try {
   const hiddenDay = { ...zero('2026-10-13'), activity: [span('2026-10-13', '10:00', '11:00', 'hidden')] };
   render(React.createElement(StatisticsView, { todayStats: hiddenDay, allStats: [], cvsResult: null }));
   assert(find(node => node.tagName === 'DETAILS'), 'uncertain-only observation still exposes detail');
-  assert.deepEqual(all(node => node.tagName === 'DD').map(node => node.textContent), ['Нет данных', 'Нет данных', 'Нет данных', 'Нет данных']);
+  assert.deepEqual(all(node => node.tagName === 'DD', find(node => reactProps(node)?.className === 'statistics-daily-metrics')).map(node => node.textContent), ['Нет данных', 'Нет данных', 'Нет данных', 'Нет данных']);
   assert(host.textContent.includes('Вкладка скрыта'));
   assert(!host.textContent.includes('За этот день пока нет записи активности'));
   results.push('hidden-only browser records preserve timeline but do not assert work or absence totals');
+
+  render(null);
+  const call = (start, end, app) => ({ ...span(date, start, end, 'work'), app });
+  const meetingDay = { ...recorded, meetings: [call('09:00', '10:00', 'Zoom'), call('09:30', '10:30', 'Google Chrome'), call('11:00', '11:20', 'Zoom')] };
+  render(React.createElement(StatisticsView, { todayStats: meetingDay, allStats: [], cvsResult: null, meetingApplications: ['Google Chrome'] }));
+  const calls = find(node => reactProps(node)?.className === 'statistics-meetings');
+  assert(calls.textContent.includes('Созвонов: 3'));
+  const callMetrics = find(node => reactProps(node)?.className === 'statistics-session-summary statistics-meeting-metrics');
+  assert.deepEqual(all(node => node.tagName === 'DD', callMetrics).map(node => node.textContent), ['1 ч 50 мин', '46 мин', '1 ч 0 мин']);
+  const callTable = find(node => reactProps(node)?.className === 'statistics-interval-scroll statistics-meeting-list');
+  assert.equal(all(node => node.tagName === 'TR', callTable).length, 4, 'three attributed calls plus table header');
+  assert(callTable.textContent.includes('С 09:30 до 10:30') && callTable.textContent.includes('Google Chrome'));
+  assert.equal(all(node => reactProps(node)?.className === 'statistics-meeting-live-badge').length, 1);
+  assert(calls.textContent.includes('Созвон продолжается'));
+  assert.equal(all(node => reactProps(node)?.className === 'statistics-meeting-lane').length, 2);
+  assert(calls.textContent.includes('Пересекающиеся созвоны учитываются в общем времени один раз.'));
+  assert(host.textContent.includes('Всего за неделю: 1 ч 50 мин в созвонах, 3 созвонов.'));
+  render(React.createElement(StatisticsView, { todayStats: meetingDay, allStats: [], cvsResult: null, meetingApplications: [] }));
+  assert.equal(all(node => reactProps(node)?.className === 'statistics-meeting-live-badge').length, 0, 'ended call badge clears without changing saved calls');
+  results.push('call lanes and rows retain app attribution and time, overlap totals, averages, weekly metrics and live state');
 
   const markup = renderToStaticMarkup(React.createElement(StatisticsView, { todayStats: recorded, allStats: [], cvsResult: null }));
   assert(markup.includes('aria-labelledby="daily-activity-title"'));

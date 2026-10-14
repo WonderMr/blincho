@@ -482,7 +482,7 @@ pub fn open_external(url: &str) -> Result<(), String> {
         Err(format!("Could not open external link: {}", result as isize))
     }
 }
-fn capture_meeting() -> Result<bool, String> {
+fn capture_meeting() -> Result<Vec<String>, String> {
     struct Com;
     impl Drop for Com {
         fn drop(&mut self) {
@@ -496,60 +496,72 @@ fn capture_meeting() -> Result<bool, String> {
             .ok()
             .map_err(|error| error.to_string())?;
         let _com = Com;
+        let mut applications = Vec::new();
         let enumerator: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)
                 .map_err(|error| error.to_string())?;
         let devices = enumerator
             .EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE)
             .map_err(|error| error.to_string())?;
+        let mut complete = true;
         for device_index in 0..devices.GetCount().map_err(|error| error.to_string())? {
-            let device = devices
-                .Item(device_index)
-                .map_err(|error| error.to_string())?;
-            let manager: IAudioSessionManager2 = device
-                .Activate(CLSCTX_ALL, None)
-                .map_err(|error| error.to_string())?;
-            let sessions = manager
-                .GetSessionEnumerator()
-                .map_err(|error| error.to_string())?;
-            for session_index in 0..sessions.GetCount().map_err(|error| error.to_string())? {
-                let session = sessions
-                    .GetSession(session_index)
+            let scan = (|| -> Result<(), String> {
+                let device = devices
+                    .Item(device_index)
                     .map_err(|error| error.to_string())?;
-                if session.GetState().map_err(|error| error.to_string())? != AudioSessionStateActive
-                {
-                    continue;
+                let manager: IAudioSessionManager2 = device
+                    .Activate(CLSCTX_ALL, None)
+                    .map_err(|error| error.to_string())?;
+                let sessions = manager
+                    .GetSessionEnumerator()
+                    .map_err(|error| error.to_string())?;
+                for session_index in 0..sessions.GetCount().map_err(|error| error.to_string())? {
+                    let session = sessions
+                        .GetSession(session_index)
+                        .map_err(|error| error.to_string())?;
+                    if session.GetState().map_err(|error| error.to_string())?
+                        != AudioSessionStateActive
+                    {
+                        continue;
+                    }
+                    let details: IAudioSessionControl2 =
+                        session.cast().map_err(|error| error.to_string())?;
+                    let pid = details.GetProcessId().map_err(|error| error.to_string())?;
+                    let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+                    if process.is_null() {
+                        complete = false;
+                        continue;
+                    }
+                    let mut image = vec![0u16; 32768];
+                    let mut length = image.len() as u32;
+                    let success =
+                        QueryFullProcessImageNameW(process, 0, image.as_mut_ptr(), &mut length)
+                            != 0;
+                    CloseHandle(process);
+                    if !success {
+                        complete = false;
+                        continue;
+                    }
+                    if let Some(application) = parsing::meeting_application(
+                        &String::from_utf16_lossy(&image[..length as usize]),
+                    ) {
+                        applications.push(application.to_string());
+                    }
                 }
-                let details: IAudioSessionControl2 =
-                    session.cast().map_err(|error| error.to_string())?;
-                let pid = details.GetProcessId().map_err(|error| error.to_string())?;
-                let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-                if process.is_null() {
-                    return Err("Microphone process information unavailable".into());
-                }
-                let mut image = vec![0u16; 32768];
-                let mut length = image.len() as u32;
-                let success =
-                    QueryFullProcessImageNameW(process, 0, image.as_mut_ptr(), &mut length) != 0;
-                CloseHandle(process);
-                if !success {
-                    return Err("Microphone process information unavailable".into());
-                }
-                if parsing::meeting_capture_app(&String::from_utf16_lossy(
-                    &image[..length as usize],
-                )) {
-                    return Ok(true);
-                }
+                Ok(())
+            })();
+            if scan.is_err() {
+                complete = false;
             }
         }
-        Ok(false)
+        parsing::capture_applications_result(applications, complete)
+            .ok_or_else(|| "Microphone process information unavailable".into())
     }
 }
 pub fn meeting_status() -> MeetingStatus {
-    let value = capture_meeting();
-    MeetingStatus {
-        in_meeting: value.as_ref().copied().unwrap_or(false),
-        supported: value.is_ok(),
+    match capture_meeting() {
+        Ok(applications) => MeetingStatus::detected(applications, true),
+        Err(_) => MeetingStatus::inactive(false),
     }
 }
 pub fn meeting_supported() -> bool {
