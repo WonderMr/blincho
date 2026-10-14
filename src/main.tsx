@@ -1,6 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HistoryRecovery } from './components/HistoryRecovery';
 import './index.css';
@@ -10,6 +9,7 @@ import './styles/compact-sidebar.css';
 import './styles/compact-layout.css';
 import './styles/compact-timer.css';
 import './styles/notice.css';
+import './styles/statistics-detail.css';
 import { initializeLanguage } from './i18n/runtime';
 import { loadSettings } from './utils/storage';
 import { applyAppearance } from './utils/appearance';
@@ -30,6 +30,7 @@ const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   async function mountApp() {
+    const { default: App } = await import('./App');
     const appearance = loadSettings();
     applyAppearance(appearance.theme, appearance.colorPalette);
     await initializeLanguage();
@@ -74,5 +75,13 @@ if (rootElement) {
     }
     await attemptImport();
   }
-  void initialize();
+  if (window.__TAURI__ && new URLSearchParams(location.search).get('tray-preview') === '1') {
+    // This route must never import App, import legacy history or install the
+    // main compatibility bridge, which publishes locale and timer settings.
+    void import('./components/TrayPreview').then(({ default: TrayPreview }) => {
+      root.render(<TrayPreview />);
+    });
+  } else {
+    void initialize();
+  }
 }

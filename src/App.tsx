@@ -1,13 +1,13 @@
 import { useI18n } from './i18n/useI18n';
 import { watchAppearance } from './utils/appearance';
-import { t } from './i18n/runtime';
+import { t, getLocale, formatNumber } from './i18n/runtime';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  AppSettings, DayStats, ExerciseTechnique, CVSSurveyResult, TimerPreset
+  AppSettings, DayStats, ExerciseTechnique, CVSSurveyResult, TimerPreset, ActivitySpan
 } from './types';
 import {
   loadSettings, saveSettings, loadTodayStats, loadAllStats,
-  loadCVSResult, recordBreakCompleted, recordExerciseCompleted, recordFocusSeconds, getTodayDateString
+  loadCVSResult, recordBreakCompleted, recordExerciseCompleted, recordTimerProgress, recordActivitySpans, getTodayDateString
 } from './utils/storage';
 import { soundSynth } from './audio/soundSynth';
 import { showEyeBreakNotification } from './utils/notifications';
@@ -65,6 +65,9 @@ export const App: React.FC = () => {
   if (!sessionRef.current) sessionRef.current = hasNativeTimer() ? new NativeTimerSession(settings.workMinutes * 60, Date.now()) : new TimerSession(settings.workMinutes * 60, Date.now());
   const session = sessionRef.current;
   const nativeFocusRef = useRef(new Map<string, number>());
+  const nativeActivityEndRef = useRef(0);
+  const pendingActivityRef = useRef<ActivitySpan[]>([]);
+  const lastActivityFlushRef = useRef(Date.now());
   const nativeAbsenceEpochRef = useRef(0);
   const nativeTickRef = useRef(0);
   const nativeMeetingEpochRef = useRef(0);
@@ -102,9 +105,11 @@ export const App: React.FC = () => {
   };
   const flushFocus = () => {
     const focus = session.drainFocus();
-    // Paused, absent and resting heartbeats have no statistics to persist.
-    if (focus.length === 0) return;
-    for (const [date, seconds] of focus) recordFocusSeconds(seconds, date);
+    pendingActivityRef.current.push(...session.drainActivity());
+    if (focus.length === 0 && (pendingActivityRef.current.length === 0 || Date.now() - lastActivityFlushRef.current < 5000)) return;
+    const activity = pendingActivityRef.current.splice(0);
+    lastActivityFlushRef.current = Date.now();
+    recordTimerProgress(focus, activity);
     refreshStats();
   };
   const sync = () => {
@@ -132,6 +137,8 @@ export const App: React.FC = () => {
   };
   const endBreak = (preservePending = false) => {
     if (!session.breakActive) return;
+    session.advance(Date.now());
+    flushFocus();
     session.breakActive = false;
     breakIdRef.current = null;
     if (!preservePending) pendingBreakRef.current = null;
@@ -349,6 +356,8 @@ export const App: React.FC = () => {
   const handlePostponeBreak = async (minutes: number, eventId: string | null) => {
     if (settingsRef.current.strictMode || !eventId || breakIdRef.current !== eventId || !session.breakActive) return;
     if (!mountedRef.current || breakIdRef.current !== eventId || !session.breakActive) return;
+    session.advance(Date.now());
+    flushFocus();
     session.breakActive = false;
     breakIdRef.current = null;
     pendingBreakRef.current = null;
@@ -441,6 +450,8 @@ export const App: React.FC = () => {
     const completions = [...exerciseCompletionsRef.current.values()].filter(completion => completion.eventId === eventId);
     if (completions.length) await Promise.all(completions.map(completion => completion.promise));
     if (!mountedRef.current || exerciseIdRef.current !== eventId) return;
+    session.advance(Date.now());
+    flushFocus();
     session.exercising = false;
     exerciseIdRef.current = null;
     session.lastUpdated = Date.now();
@@ -476,6 +487,21 @@ export const App: React.FC = () => {
   }, [settings.soundEnabled, settings.soundVolume]);
   useEffect(() => watchAppearance(settings.theme, settings.colorPalette), [settings.theme, settings.colorPalette]);
   useEffect(() => {
+    if (!hasNativeTimer()) return;
+    const summary = {
+      date: todayStats.date, focusMinutes: todayStats.focusMinutes, breaksCompleted: todayStats.breaksCompleted,
+      locale: getLocale(), title: t("Сегодня"), nextBreakLabel: t("До перерыва"),
+      focusLabel: t("Рабочее время"), breaksLabel: t("Перерывы сегодня"), pausedLabel: t("Таймер на ручной паузе"),
+      absentLabel: t("Пауза: нет активности"), breakLabel: t("Перерыв для глаз"),
+      exerciseLabel: t("Выполняется упражнение"), readyLabel: t("Пора отдохнуть"),
+      focusValue: t("{value0} мин", { value0: Math.floor(todayStats.focusMinutes) }),
+      breaksValue: formatNumber(todayStats.breaksCompleted), todayLabel: t("Сегодня"),
+      theme: settings.theme, colorPalette: settings.colorPalette,
+    };
+    void window.__TAURI__!.core.invoke('tray_preview_summary', { summary })
+      .catch(error => console.warn('Blincho: Tray summary failed:', error));
+  }, [todayStats.date, Math.floor(todayStats.focusMinutes), todayStats.breaksCompleted, statusLabel, getLocale(), settings.theme, settings.colorPalette]);
+  useEffect(() => {
     mountedRef.current = true;
     markPageActivity();
     session.lastUpdated = Date.now();
@@ -509,12 +535,20 @@ export const App: React.FC = () => {
         const previous = nativeFocus.get(date) ?? 0;
         if (seconds > previous) { session.ingestNativeFocus(date, seconds - previous); nativeFocus.set(date, seconds); }
       }
+      const activity = (snapshot.activitySpans ?? []).filter(span => span.end > nativeActivityEndRef.current)
+        .map(span => ({ ...span, start: Math.max(span.start, nativeActivityEndRef.current) }));
+      if (activity.length) {
+        pendingActivityRef.current.push(...activity);
+        nativeActivityEndRef.current = Math.max(...activity.map(span => span.end));
+      }
       session.lastUpdated = Date.now();
       // Add the new pause causes before removing old ones, avoiding a false return between causes.
       for (const active of [true, false]) for (const reason of ['suspended', 'locked', 'unconfirmed', 'idle'] as PresenceReason[]) {
         if (snapshot.reasons.includes(reason) === active) handlersRef.current.setPresenceReason(reason, active, snapshot.absentSince ?? Date.now());
       }
       flushFocus();
+      const today = getTodayDateString();
+      if (today !== dateRef.current) { dateRef.current = today; refreshStats(); }
       publish(value => value + 1);
       if (snapshot.breakElapsed && session.breakActive) {
         const deadline = performance.now() - Math.max(0, Date.now() - (snapshot.breakEndAt ?? Date.now()));
@@ -584,6 +618,9 @@ export const App: React.FC = () => {
     window.addEventListener('focus', focus);
     document.addEventListener('visibilitychange', visibility);
     return () => {
+      session.advance(Date.now());
+      const finalActivity = [...pendingActivityRef.current.splice(0), ...session.drainActivity()];
+      if (finalActivity.length) recordActivitySpans(finalActivity);
       mountedRef.current = false;
       pendingBreakRef.current = null;
       clearInterval(timer);

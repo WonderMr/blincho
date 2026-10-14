@@ -1,0 +1,34 @@
+html:has(.tray-preview-shell), body:has(.tray-preview-shell), #root:has(.tray-preview-shell) {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.tray-preview-shell {
+  box-sizing: border-box;
+  width: 100%;
+  height: 198px;
+  padding: 16px 18px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+  user-select: none;
+}
+.tray-preview-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.tray-preview-heading > span:last-child { margin-inline-start: auto; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 11px; }
+.tray-preview-brand { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 8px; color: var(--bg-primary); background: var(--accent-emerald); font-weight: 800; font-size: 13px; }
+.tray-preview-clock-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tray-preview-clock-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.tray-preview-countdown { font-size: 29px; line-height: 1.1; font-weight: 650; letter-spacing: -.7px; font-variant-numeric: tabular-nums; direction: ltr; }
+.tray-preview-progress { height: 3px; margin: 10px 0 14px; border-radius: 2px; background: var(--border-subtle); overflow: hidden; }
+.tray-preview-progress > span { display: block; height: 100%; background: var(--accent-emerald); }
+.tray-preview-totals { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.tray-preview-totals > div { display: flex; justify-content: space-between; gap: 10px; }
+.tray-preview-totals dt { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-preview-totals dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }

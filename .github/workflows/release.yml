@@ -191,6 +191,11 @@ jobs:
         run: |
           cargo check --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
           cargo test --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
+      - name: Check timer credit across a skipped local midnight
+        if: matrix.platform != 'windows' && steps.runtime.outputs.tauri == 'true'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }} timer::tests::native_focus_preserves_fractional_credit_and_skipped_midnight
+        env:
+          TZ: Africa/Cairo
       - name: Build native smoke executable
         if: steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         run: cargo build --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
@@ -206,6 +211,16 @@ jobs:
       - name: Smoke test Linux renderer, history and timer
         if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-openbox.log 2>&1 & node tests/tauri-cross-platform-smoke.cjs'
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test tray preview without stealing focus
+        if: matrix.platform != 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-tray-preview-smoke.cjs') != ''
+        run: node tests/tauri-tray-preview-smoke.cjs
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test Linux live tray summary
+        if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-tray-preview-smoke.cjs') != ''
+        run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/tmp/blincho-preview-openbox.log 2>&1 & node tests/tauri-tray-preview-smoke.cjs'
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
       - name: Smoke test window restoration after lock and sleep

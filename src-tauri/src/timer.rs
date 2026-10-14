@@ -26,6 +26,13 @@ fn default_takeover() -> bool {
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ActivitySpan {
+    pub start: i64,
+    pub end: i64,
+    pub state: String,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub total_ms: f64,
     pub remaining_ms: f64,
@@ -43,6 +50,7 @@ pub struct Snapshot {
     pub break_elapsed: bool,
     pub break_end_at: Option<i64>,
     pub focus_by_date: BTreeMap<String, f64>,
+    pub activity_spans: Vec<ActivitySpan>,
     pub tick_count: u64,
     pub meeting_postponed_epoch: u64,
 }
@@ -79,6 +87,7 @@ impl Timer {
                 break_elapsed: false,
                 break_end_at: None,
                 focus_by_date: BTreeMap::new(),
+                activity_spans: vec![],
                 tick_count: 0,
                 meeting_postponed_epoch: 0,
             },
@@ -99,6 +108,7 @@ impl Timer {
         if self.input.is_some() && input.version < self.snapshot.version {
             return Err("Stale timer command".into());
         }
+        self.observe_activity(self.last_at, now, self.activity_state());
         let changed = self.input.is_none() || input.version != self.snapshot.version;
         if changed {
             self.snapshot.remaining_ms = input.remaining_ms;
@@ -161,6 +171,7 @@ impl Timer {
         self.snapshot.break_elapsed = false;
     }
     pub fn power(&mut self, code: i32, now: i64) {
+        self.observe_activity(self.last_at, now, self.activity_state());
         if code == 1 || code == 3 {
             self.cancel_for_absence(now, self.snapshot.reasons.is_empty());
             let reason = if code == 1 { "suspended" } else { "locked" };
@@ -188,6 +199,8 @@ impl Timer {
         self.last_at = now;
     }
     pub fn tick(&mut self, now: i64, idle: Option<f64>, locked: Option<bool>) -> bool {
+        let start = self.last_at;
+        let previous_state = self.activity_state();
         let elapsed = (now - self.last_at).max(0) as f64;
         let was_present = self.snapshot.reasons.is_empty();
         self.last_at = now;
@@ -220,6 +233,13 @@ impl Timer {
             }
         }
         self.snapshot.reasons = reasons;
+        let current_state = self.activity_state();
+        let state = if !self.snapshot.reasons.is_empty() {
+            current_state
+        } else {
+            previous_state
+        };
+        self.observe_activity(start, now, state);
         if !self.snapshot.reasons.is_empty() {
             self.cancel_for_absence(now, was_present);
             return false;
@@ -236,13 +256,7 @@ impl Timer {
         if self.input.is_some() && counting {
             let active = elapsed.min(self.snapshot.remaining_ms);
             self.snapshot.remaining_ms = (self.snapshot.remaining_ms - elapsed).max(0.);
-            if let Some(date) = Local.timestamp_millis_opt(now - active as i64).single() {
-                *self
-                    .snapshot
-                    .focus_by_date
-                    .entry(date.format("%Y-%m-%d").to_string())
-                    .or_default() += active / 1000.;
-            }
+            self.add_focus(now - elapsed as i64, active);
             if self.snapshot.remaining_ms == 0. {
                 self.snapshot.expiry_pending = true;
                 return true;
@@ -259,11 +273,187 @@ impl Timer {
             && !self.unconfirmed
             && self.input.as_ref().is_some_and(|input| input.strict_mode)
     }
+
+    fn activity_state(&self) -> String {
+        for reason in ["suspended", "locked", "unconfirmed", "idle"] {
+            if self.snapshot.reasons.iter().any(|value| value == reason) {
+                return reason.into();
+            }
+        }
+        if self.snapshot.break_active {
+            "break"
+        } else if self.snapshot.exercising {
+            "exercise"
+        } else if self.snapshot.manual_paused {
+            "manual"
+        } else {
+            "work"
+        }
+        .into()
+    }
+
+    fn observe_activity(&mut self, start: i64, end: i64, mut state: String) {
+        if self.input.is_none() || end <= start {
+            return;
+        }
+        // Lock and sleep are explicit observations. Other long heartbeat gaps
+        // cannot establish whether the computer was being used.
+        if end - start > 5000 && state != "suspended" && state != "locked" {
+            state = "unconfirmed".into();
+        }
+        let spans = &mut self.snapshot.activity_spans;
+        if let Some(previous) = spans
+            .last_mut()
+            .filter(|span| span.state == state && span.end == start)
+        {
+            previous.end = end;
+        } else {
+            spans.push(ActivitySpan { start, end, state });
+        }
+        let cutoff = end.saturating_sub(7 * 86_400_000);
+        spans.retain(|span| span.end > cutoff);
+        if spans.len() > 4096 {
+            spans.drain(..spans.len() - 4096);
+        }
+    }
+
+    fn add_focus(&mut self, start: i64, duration_ms: f64) {
+        let mut cursor = start;
+        let mut remaining = duration_ms;
+        while remaining > 0. {
+            let Some(date) = Local.timestamp_millis_opt(cursor).single() else {
+                break;
+            };
+            let end = cursor.saturating_add(remaining.ceil() as i64);
+            if end <= cursor {
+                break;
+            }
+            let Some(end_date) = Local.timestamp_millis_opt(end - 1).single() else {
+                break;
+            };
+            let mut boundary = end;
+            if date.date_naive() != end_date.date_naive() {
+                // Some timezones skip local midnight. Find the observed date
+                // transition within the short heartbeat instead of inventing one.
+                let mut low = cursor + 1;
+                let mut high = end;
+                while low < high {
+                    let middle = low + (high - low) / 2;
+                    let same_day = Local
+                        .timestamp_millis_opt(middle)
+                        .single()
+                        .is_some_and(|value| value.date_naive() == date.date_naive());
+                    if same_day {
+                        low = middle + 1;
+                    } else {
+                        high = middle;
+                    }
+                }
+                boundary = low;
+            }
+            let active = remaining.min((boundary - cursor) as f64);
+            *self
+                .snapshot
+                .focus_by_date
+                .entry(date.format("%Y-%m-%d").to_string())
+                .or_default() += active / 1000.;
+            remaining -= active;
+            cursor = boundary;
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn activity_survives_hidden_renderer_and_records_pause_and_absence() {
+        let mut timer = Timer::new(0);
+        timer.configure(input(), 0).unwrap();
+        timer.tick(1000, Some(0.), Some(false));
+        let mut paused = input();
+        paused.manual_paused = true;
+        paused.version = 1;
+        timer.configure(paused, 1000).unwrap();
+        timer.tick(2000, Some(0.), Some(false));
+        timer.power(3, 2000);
+        timer.tick(3000, Some(0.), Some(true));
+        timer.power(1, 3000);
+        timer.power(2, 63000);
+        let states: Vec<_> = timer
+            .snapshot
+            .activity_spans
+            .iter()
+            .map(|span| span.state.as_str())
+            .collect();
+        assert_eq!(states, vec!["work", "manual", "locked", "suspended"]);
+        assert_eq!(timer.snapshot.activity_spans.last().unwrap().end, 63000);
+        assert_eq!(timer.snapshot.focus_by_date.values().sum::<f64>(), 1.);
+    }
+    #[test]
+    fn unknown_gap_is_never_shown_as_work_and_adjacent_samples_merge() {
+        let mut timer = Timer::new(0);
+        timer.configure(input(), 0).unwrap();
+        timer.tick(250, Some(0.), Some(false));
+        timer.tick(500, Some(0.), Some(false));
+        timer.tick(60000, Some(20.), Some(false));
+        assert_eq!(timer.snapshot.activity_spans.len(), 2);
+        assert_eq!(timer.snapshot.activity_spans[0].end, 500);
+        assert_eq!(timer.snapshot.activity_spans[1].state, "unconfirmed");
+        assert_eq!(timer.snapshot.focus_by_date.values().sum::<f64>(), 0.5);
+    }
+    #[test]
+    fn native_focus_is_split_at_local_midnight() {
+        let midnight = Local
+            .with_ymd_and_hms(2026, 10, 14, 0, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp_millis();
+        let mut timer = Timer::new(midnight - 1000);
+        timer.configure(input(), midnight - 1000).unwrap();
+        timer.tick(midnight + 1000, Some(0.), Some(false));
+        assert_eq!(timer.snapshot.focus_by_date.get("2026-10-13"), Some(&1.));
+        assert_eq!(timer.snapshot.focus_by_date.get("2026-10-14"), Some(&1.));
+    }
+    #[test]
+    fn native_focus_preserves_fractional_credit_and_skipped_midnight() {
+        // With TZ=Africa/Cairo, the following day begins at 01:00.
+        let noon = Local
+            .with_ymd_and_hms(2026, 4, 23, 12, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp_millis();
+        let mut timer = Timer::new(noon);
+        timer.add_focus(noon, 1000.5);
+        assert_eq!(
+            timer.snapshot.focus_by_date.get("2026-04-23"),
+            Some(&1.0005)
+        );
+        let next_day = Local
+            .with_ymd_and_hms(2026, 4, 24, 1, 0, 0)
+            .single()
+            .unwrap();
+        let boundary = if Local
+            .with_ymd_and_hms(2026, 4, 24, 0, 0, 0)
+            .single()
+            .is_none()
+        {
+            next_day.timestamp_millis()
+        } else {
+            Local
+                .with_ymd_and_hms(2026, 4, 24, 0, 0, 0)
+                .single()
+                .unwrap()
+                .timestamp_millis()
+        };
+        let mut crossing = Timer::new(boundary - 1000);
+        crossing.add_focus(boundary - 1000, 1000.5);
+        assert_eq!(crossing.snapshot.focus_by_date.get("2026-04-23"), Some(&1.));
+        assert_eq!(
+            crossing.snapshot.focus_by_date.get("2026-04-24"),
+            Some(&0.0005)
+        );
+    }
     fn input() -> TimerInput {
         TimerInput {
             total_ms: 2000.,
