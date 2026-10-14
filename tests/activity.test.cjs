@@ -11,7 +11,7 @@ const config = path.join(build, 'tsconfig.json');
 fs.writeFileSync(config, JSON.stringify({ files: [path.join(repo, 'src/utils/activity.ts'), path.join(repo, 'src/utils/storage.ts')],
   compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', skipLibCheck: true,
     rootDir: path.join(repo, 'src'), outDir: build } }));
-execFileSync(path.join(repo, 'node_modules/.bin/tsc'), ['-p', config], { stdio: 'inherit' });
+execFileSync(process.execPath, [path.join(path.dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), '-p', config], { stdio: 'inherit' });
 const { dayBounds, normalizeActivity, analyzeDayActivity, summarizeWeek } = require(path.join(build, 'utils/activity.js'));
 const { TimerSession } = require(path.join(build, 'utils/timerSession.js'));
 const storage = require(path.join(build, 'utils/storage.js'));

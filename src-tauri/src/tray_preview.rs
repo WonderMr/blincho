@@ -457,7 +457,7 @@ pub fn update(app: &tauri::AppHandle, snapshot: &Snapshot, strict: bool) {
         for (item, text) in items.iter().zip(&rows) {
             let _ = item.set_text(text);
         }
-    }
+    };
     #[cfg(not(target_os = "linux"))]
     if let Some(tray) = app.tray_by_id("blincho") {
         let _ = tray.set_tooltip(Some(tooltip));
