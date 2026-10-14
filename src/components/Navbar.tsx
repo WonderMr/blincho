@@ -53,16 +53,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       ))}
     </div>
     <div className="nav-utilities">
-      {activeTab !== 'timer' && (
-        <button type="button" className="btn btn-secondary nav-break-button" onClick={onTriggerInstantBreak}
-          disabled={instantBreakDisabled} title={t("Начать перерыв сейчас")}>
-          <Coffee size={17} aria-hidden="true" /><span>{t("Перерыв сейчас")}</span>
-        </button>
-      )}
+      <button type="button" className="nav-settings-button" onClick={onOpenSettings} aria-label={t("Открыть настройки приложения")}>
+        <Settings size={18} aria-hidden="true" /><span>{t("Настройки")}</span>
+      </button>
       <div className="nav-actions">
-        <button type="button" className="nav-settings-button" onClick={onOpenSettings} aria-label={t("Открыть настройки приложения")}>
-          <Settings size={18} aria-hidden="true" /><span>{t("Настройки")}</span>
-        </button>
+        {activeTab !== 'timer' && (
+          <button type="button" className="btn btn-secondary nav-break-button" onClick={onTriggerInstantBreak}
+            disabled={instantBreakDisabled} title={t("Начать перерыв сейчас")}>
+            <Coffee size={17} aria-hidden="true" /><span>{t("Перерыв сейчас")}</span>
+          </button>
+        )}
         <button type="button" className="btn-icon" onClick={onToggleSound} aria-pressed={soundEnabled}
           title={soundEnabled ? t("Отключить звук") : t("Включить звук")} aria-label={soundEnabled ? t("Отключить звук") : t("Включить звук")}>
           {soundEnabled ? <Volume2 size={18} aria-hidden="true" /> : <VolumeX size={18} aria-hidden="true" />}

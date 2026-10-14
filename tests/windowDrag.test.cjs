@@ -10,7 +10,7 @@ const config = path.join(output, 'tsconfig.json');
 fs.writeFileSync(config, JSON.stringify({ files: [path.join(repo, 'src/utils/windowDrag.ts')], compilerOptions: {
   target: 'ES2022', module: 'commonjs', rootDir: path.join(repo, 'src/utils'), outDir: output, skipLibCheck: true, strict: true
 } }));
-execFileSync(path.join(repo, 'node_modules/.bin/tsc'), ['-p', config], { stdio: 'inherit' });
+execFileSync(process.execPath, [path.join(path.dirname(require.resolve('typescript/package.json')), 'bin', 'tsc'), '-p', config], { stdio: 'inherit' });
 const { shouldStartWindowDrag, installWindowDrag } = require(path.join(output, 'windowDrag.js'));
 after(() => fs.rmSync(output, { recursive: true, force: true }));
 
