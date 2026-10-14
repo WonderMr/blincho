@@ -241,7 +241,9 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   assert(started.timer.breakEndAt > observedStart, 'The automatic break must have a real native deadline');
   assert(started.timer.breakEndAt - observedStart >= breakSeconds * 1000 - 1500,
     'The smoke must observe the configured countdown, without shortening it');
-  if (!releaseAndHide) await until(() => fixtureState(previous), value => value.frontmostPID === initial.pid,
+  if (!releaseAndHide) await until(() => ({ focus: fixtureState(previous), runtime: app.read(),
+    expectedPID: initial.pid, breakEndAt: started.timer.breakEndAt }),
+    value => value.focus?.frontmostPID === initial.pid && value.runtime?.timer.breakActive,
     [handle, previous.handle], 5_000, 'Blincho frontmost during break');
   assert.equal((await inspectRenderer(app)).renderer.dialog, true, 'The real renderer must show the break');
   if (releaseAndHide) {
