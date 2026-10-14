@@ -1,1 +1,6 @@
-{ "identifier": "main", "windows": ["main"], "permissions": ["core:default", "core:window:allow-start-dragging"] }
+{
+  "capabilities": [
+    { "identifier": "main", "windows": ["main"], "permissions": ["core:default", "core:window:allow-start-dragging"] },
+    { "identifier": "tray-preview", "windows": ["tray-preview"], "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"] }
+  ]
+}

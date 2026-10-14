@@ -35,9 +35,9 @@ function createStore(initial = []) {
   };
 }
 
-function harness({ store = createStore(), source = () => Promise.resolve(snapshot), runtime = 'tauri', platform = 'darwin', listenFailure, timers } = {}) {
+function harness({ store = createStore(), source = () => Promise.resolve(snapshot), runtime = 'tauri', platform = 'darwin', listenFailure, timers, search = '' } = {}) {
   const cache = new Map(), calls = [], native = new Map(), listenCounts = new Map(), windowEvents = new Map();
-  let readSource = source, appMounts = 0, rootCount = 0, root;
+  let readSource = source, appMounts = 0, appLoads = 0, rootCount = 0, root;
   const host = doc.createElement('div'); doc.body.appendChild(host);
   doc.documentElement.dataset = {};
   doc._listeners = new Map();
@@ -55,6 +55,7 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
       if (command === 'legacy_history') return readSource();
       if (command === 'preferred_languages') return ['en-US'];
       if (command === 'desktop_info') return { platform, meetingDetectionSupported: platform !== 'linux' };
+      if (command === 'tray_preview_state') return { timer: { remainingMs: 60_000, totalMs: 1_200_000, reasons: [] }, summary: null };
     } },
     event: { async listen(name, callback) {
       listenCounts.set(name, (listenCounts.get(name) || 0) + 1);
@@ -80,12 +81,16 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
     const module = { exports: {} }; cache.set(file, module);
     const code = fs.readFileSync(file, 'utf8').replaceAll('import.meta.env.PROD', 'false').replaceAll('import.meta.env.BASE_URL', "'/'");
     let source = transformSync(file, code, { jsx: { runtime: 'classic' } }).code;
+    const defaultName = source.match(/export default function (\w+)/)?.[1];
     const names = [...source.matchAll(/export (?:async )?(?:const|function|class)\s+(\w+)/g)].map(match => match[1]);
     source = source.replace(/import\s+["'][^"']+\.css["'];/g, '').replace(/import\s+([\s\S]*?)\s+from\s+["']([^"']+)["'];/g, (_all, binding, name) => {
       const named = binding.match(/\{([\s\S]*?)\}/)?.[1], defaultName = binding.split(',')[0].trim();
       return (!defaultName.startsWith('{') ? `const ${defaultName}=require(${JSON.stringify(name)}).default ?? require(${JSON.stringify(name)});` : '') +
         (named ? `const {${named.replace(/\s+as\s+/g, ':')}}=require(${JSON.stringify(name)});` : '');
-    }).replace(/import\s+["'][^"']+\.css["'];/g, '').replace(/export (async )?(const|function|class) /g, '$1$2 ') + `\nObject.assign(module.exports,{${names.join(',')}});`;
+    }).replace(/import\s+["'][^"']+\.css["'];/g, '').replace(/export default function /g, 'function ')
+      .replace(/export (async )?(const|function|class) /g, '$1$2 ')
+      .replace(/import\((["'])([^"']+)\1\)/g, (_all, _quote, name) => `Promise.resolve().then(() => { const value=require(${JSON.stringify(name)}); return value?.default ? value : {default:value}; })`) +
+      `\nObject.assign(module.exports,{${names.join(',')}});${defaultName ? `module.exports.default=${defaultName};` : ''}`;
     const requireLocal = name => {
       if (name === 'react') return React;
       if (name === 'react-dom/client') return { createRoot(element) {
@@ -93,7 +98,7 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
         return { render: value => ReactDOM.flushSync(() => root.render(value)) };
       } };
       if (name === 'lucide-react') return new Proxy({}, { get: () => () => null });
-      if (name === './App') return SyntheticApp;
+      if (name === './App') { appLoads++; return SyntheticApp; }
       const base = path.resolve(path.dirname(file), name);
       return load(path.extname(base) ? base : fs.existsSync(base + '.ts') ? base + '.ts' : base + '.tsx');
     };
@@ -102,6 +107,7 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
       navigator: { languages: ['en-US'], language: 'en-US' }, StorageEvent: class { constructor(type, values) { this.type = type; Object.assign(this, values); } },
       console: { error() {}, warn() {}, log() {} }, setTimeout: timers?.setTimeout || setTimeout,
       clearTimeout: timers?.clearTimeout || clearTimeout, TextEncoder, Error,
+      URLSearchParams, location: { protocol: runtime === 'tauri' ? 'tauri:' : 'https:', search },
     }, { filename: file });
     return module.exports;
   }
@@ -112,7 +118,7 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
   }
   return {
     store, host, calls, native, listenCounts, windowEvents, load,
-    get appMounts() { return appMounts; }, get rootCount() { return rootCount; },
+    get appMounts() { return appMounts; }, get appLoads() { return appLoads; }, get rootCount() { return rootCount; },
     setSource(value) { readSource = value; }, settle,
     async start() { load(path.join(repo, 'src/main.tsx')); await settle(); },
     async click(label, twice = false) {
@@ -125,6 +131,20 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
     destroy() { if (root) ReactDOM.flushSync(() => root.unmount()); doc.body.removeChild(host); window.__TAURI__ = undefined; window.electronAPI = undefined; },
   };
 }
+
+test('native preview route mounts only its read-only renderer and never imports App or legacy history', async () => {
+  const h = harness({ search: '?tray-preview=1', source: async () => { throw Error('Preview must not import history'); } });
+  try {
+    await h.start();
+    await h.settle();
+    assert.equal(h.appLoads, 0);
+    assert.equal(h.appMounts, 0);
+    assert.deepEqual(h.calls.map(([command]) => command), ['tray_preview_state']);
+    assert.deepEqual(h.store.changes, []);
+    assert.equal(h.native.get('native-timer').size, 1);
+    assert.equal(h.native.get('tray-preview-summary').size, 1);
+  } finally { h.destroy(); }
+});
 
 test('source failure reaches localized recovery before App writes, and repaired retry imports once without extra subscriptions', async () => {
   const oldSource = structuredClone(snapshot), original = JSON.stringify(oldSource);

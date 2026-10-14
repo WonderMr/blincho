@@ -346,7 +346,7 @@ test('CI and release use locked Rust builds on all six native targets with OS de
   assert.ok(native.steps.some(step => step.if === "runner.os == 'Linux'" && /libwebkit2gtk-4.1-dev/.test(step.run)));
   for (const command of ['cargo fmt --manifest-path src-tauri/Cargo.toml --check', 'cargo check --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}', 'cargo test --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}']) assert.ok(native.steps.some(step => step.run === command));
   const release = load(await readFile(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8'));
-  for (const step of release.jobs.package.steps.filter(step => /cargo|rustup|cmake==/.test(step.run || ''))) assert.ok(["steps.runtime.outputs.tauri == 'true'", "steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''"].includes(step.if));
+  for (const step of release.jobs.package.steps.filter(step => /cargo|rustup|cmake==/.test(step.run || ''))) assert.ok(["steps.runtime.outputs.tauri == 'true'", "steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''", "matrix.platform != 'windows' && steps.runtime.outputs.tauri == 'true'"].includes(step.if));
   assert.deepEqual(release.jobs.package.strategy.matrix.include.map(target => target['rust-target']), targets);
   assert.ok(release.jobs.package.steps.some(step => step.if?.includes("matrix.platform == 'linux'") && /libfuse2/.test(step.run || '')));
   assert.ok(release.jobs.package.steps.some(step => step.if?.includes("matrix.platform == 'windows'") && /Get-Command 7z/.test(step.run || '')));

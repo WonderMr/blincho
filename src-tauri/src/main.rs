@@ -6,6 +6,7 @@ mod history;
 mod platform;
 mod startup;
 mod timer;
+mod tray_preview;
 mod ui;
 mod updates;
 mod window_session;
@@ -494,7 +495,7 @@ fn diagnostics(app: &tauri::AppHandle) {
     #[cfg(not(target_os = "macos"))]
     let strict_shield_count = 0;
     let value = json!({"timer":snapshot,"strict":strict,"visible":window(app).ok().and_then(|w|w.is_visible().ok()),
-        "strictShieldCount":strict_shield_count,
+        "strictShieldCount":strict_shield_count,"trayPreview":tray_preview::diagnostics(app),
         "focused":window(app).ok().and_then(|w|w.is_focused().ok()),"events":runtime.events.lock().ok().map(|v|v.clone()),
         "fullscreen":window(app).ok().and_then(|w|w.is_fullscreen().ok()),
         "minimized":window(app).ok().and_then(|w|w.is_minimized().ok()),
@@ -549,6 +550,25 @@ fn test_control_on_main(app: &tauri::AppHandle) {
         let command: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         request_id = command["id"].clone();
         match command["operation"].as_str().unwrap_or("") {
+            "tray-preview" => {
+                let kind = command["kind"].as_str().ok_or("Missing preview event")?;
+                let x = command["x"].as_i64().unwrap_or(100);
+                let y = command["y"].as_i64().unwrap_or(0);
+                let rect = tauri::Rect {
+                    position: tauri::PhysicalPosition::new(
+                        i32::try_from(x).map_err(|_| "Invalid preview x")?,
+                        i32::try_from(y).map_err(|_| "Invalid preview y")?,
+                    )
+                    .into(),
+                    size: tauri::PhysicalSize::new(24_u32, 24_u32).into(),
+                };
+                tray_preview::test_event(app, kind, rect)?;
+            }
+            "preview-eval" => app
+                .get_webview_window(tray_preview::LABEL)
+                .ok_or("Preview window unavailable")?
+                .eval(command["script"].as_str().ok_or("Missing script")?)
+                .map_err(|e| e.to_string())?,
             "meeting" => {
                 runtime
                     .meeting
@@ -710,15 +730,25 @@ fn main() {
             });
         }))
         .plugin(autostart_builder.build())
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(|invoke: tauri::ipc::Invoke<tauri::Wry>| {
+            if invoke.message.webview_ref().label() == tray_preview::LABEL
+                && !tray_preview::allowed_command(invoke.message.command())
+            {
+                invoke.resolver.reject("Tray preview is read-only");
+                return true;
+            }
+            let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             configure_timer,
             timer_snapshot,
             desktop_command,
             legacy_history,
             renderer_report,
             get_runtime_metadata, desktop_info, preferred_languages, notification_permission, notification_send, attention, open_external,
-            set_locale, update_get_state, update_set_policy, update_check, update_skip, update_download, update_open_download, check_meeting_active
-        ])
+            set_locale, update_get_state, update_set_policy, update_check, update_skip, update_download, update_open_download, check_meeting_active,
+            tray_preview::tray_preview_state, tray_preview::tray_preview_summary
+            ];
+            handler(invoke)
+        })
         .setup(move |app| {
             ui::initialize_dock(app.handle(), !hidden);
             #[cfg(target_os = "macos")]
@@ -799,6 +829,7 @@ fn main() {
                 meeting: platform::MeetingMonitor::new(),
             });
             app.manage(window_session::WindowSession::default());
+            app.manage(tray_preview::Preview::default());
             HANDLE
                 .set(app.handle().clone())
                 .map_err(|_| "Duplicate runtime")?;
@@ -811,6 +842,7 @@ fn main() {
                 autostart["managed"].as_bool().unwrap_or(false),
                 autostart["registered"].as_bool().unwrap_or(false), None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &rest, &launch_at_login, &quit])?;
+            tray_preview::append_menu_summary(app.handle(), &menu)?;
             app.manage(ui::NativeUi{show:show.clone(),rest:rest.clone(),quit:quit.clone(),autostart:launch_at_login.clone(),guards:Mutex::new(vec![])});
             let startup_languages = preferred_languages();
             let startup_locale = startup_languages.first().map(String::as_str).unwrap_or("en");
@@ -821,6 +853,7 @@ fn main() {
                 .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip(ui::tray_title(startup_locale))
                 .menu(&menu)
+                .on_tray_icon_event(|tray, event| tray_preview::on_tray_event(tray.app_handle(), event))
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "autostart" => {
                         let result = startup::is_enabled(app).map_err(|e| e.to_string()).and_then(|registered| {
@@ -860,6 +893,9 @@ fn main() {
             });
             ui::set_locale(app.handle(), startup_locale)?;
             let _main_window = builder.build()?;
+            if let Err(error) = tray_preview::initialize(app.handle()) {
+                eprintln!("Tray preview initialization: {error}");
+            }
             #[cfg(target_os = "windows")]
             if hidden {
                 let config = &app.config().app.windows[0];
@@ -923,6 +959,7 @@ fn main() {
                             eprintln!("Window session: {error}");
                         }
                     });
+                    tray_preview::update(&handle, &snapshot, strict);
                     let _ = handle.emit("native-timer", snapshot);
                     test_control(&handle);
                     diagnostics(&handle);
@@ -931,6 +968,7 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() != "main" { return; }
             let runtime = window.state::<Runtime>();
             let strict = runtime.timer.lock().map(|t| t.strict()).unwrap_or(false);
             match event {
@@ -986,13 +1024,17 @@ fn main() {
             }
         }
         #[cfg(target_os = "macos")]
-        if let tauri::RunEvent::Reopen {
-            has_visible_windows: false,
-            ..
-        } = event
-        {
-            if let Err(error) = show_manual(app) {
-                eprintln!("Reopen: {error}");
+        if let tauri::RunEvent::Reopen { .. } = event {
+            // A visible hover preview must not make the hidden main window
+            // count as already open when the user clicks the Dock icon.
+            if !window(app)
+                .ok()
+                .and_then(|main| main.is_visible().ok())
+                .unwrap_or(false)
+            {
+                if let Err(error) = show_manual(app) {
+                    eprintln!("Reopen: {error}");
+                }
             }
         }
     });

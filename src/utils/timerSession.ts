@@ -1,4 +1,4 @@
-import { AppSettings, TimerPreset } from '../types';
+import { AppSettings, TimerPreset, ActivitySpan, ActivityState } from '../types';
 import { normalizeAppearance } from './appearance';
 
 export type PresenceReason = 'idle' | 'suspended' | 'locked' | 'hidden' | 'unconfirmed';
@@ -46,6 +46,7 @@ export class TimerSession {
   absentSince: number | null = null;
   lastUpdated: number;
   private focusByDate = new Map<string, number>();
+  private activity: ActivitySpan[] = [];
 
   constructor(seconds: number, now: number) {
     this.totalMs = this.remainingMs = seconds * 1000;
@@ -54,10 +55,26 @@ export class TimerSession {
 
   get present() { return this.reasons.size === 0; }
   get counting() { return this.present && !this.manualPaused && !this.breakActive && !this.exercising; }
+  get activityState(): ActivityState {
+    for (const reason of ['suspended', 'locked', 'unconfirmed', 'hidden', 'idle'] as PresenceReason[]) {
+      if (this.reasons.has(reason)) return reason;
+    }
+    return this.breakActive ? 'break' : this.exercising ? 'exercise' : this.manualPaused ? 'manual' : 'work';
+  }
+
+  private observeActivity(now: number) {
+    if (now <= this.lastUpdated) return;
+    const state = now - this.lastUpdated > 5000 && !['suspended', 'locked'].includes(this.activityState)
+      ? 'unconfirmed' : this.activityState;
+    const previous = this.activity[this.activity.length - 1];
+    if (previous?.state === state && previous.end === this.lastUpdated) previous.end = now;
+    else this.activity.push({ start: this.lastUpdated, end: now, state });
+  }
 
   advance(now: number): boolean {
     const start = this.lastUpdated;
     const elapsed = Math.max(0, now - start);
+    this.observeActivity(now);
     this.lastUpdated = now;
     // A delayed heartbeat cannot prove presence during sleep or a suspended tab.
     if (elapsed > 5000) return false;
@@ -81,13 +98,16 @@ export class TimerSession {
       this.expiryPending = false;
       this.version += 1;
       this.absentSince = this.absentSince === null ? startedAt : Math.min(this.absentSince, startedAt);
+      this.observeActivity(now);
     } else {
+      this.observeActivity(now);
       this.reasons.delete(reason);
     }
     this.lastUpdated = now;
   }
 
   restart(seconds: number, now: number) {
+    this.observeActivity(now);
     this.totalMs = this.remainingMs = seconds * 1000;
     this.lastUpdated = now;
     this.expiryPending = false;
@@ -95,6 +115,7 @@ export class TimerSession {
   }
 
   postpone(seconds: number, now: number) {
+    this.observeActivity(now);
     this.remainingMs = seconds * 1000;
     this.lastUpdated = now;
     this.expiryPending = false;
@@ -105,6 +126,12 @@ export class TimerSession {
     const result = [...this.focusByDate].map(([date, ms]): [string, number] => [date, ms / 1000]);
     this.focusByDate.clear();
     return result;
+  }
+
+  drainActivity(): ActivitySpan[] {
+    const spans = this.activity;
+    this.activity = [];
+    return spans;
   }
 
   ingestNativeFocus(date: string, seconds: number): void {
