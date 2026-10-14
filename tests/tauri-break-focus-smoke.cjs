@@ -247,13 +247,19 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     [handle, previous.handle], 5_000, 'Blincho frontmost during break');
   assert.equal((await inspectRenderer(app)).renderer.dialog, true, 'The real renderer must show the break');
   if (releaseAndHide) {
-    await control(app, 'release-and-hide', { input: { ...input, breakActive: true, strictMode: false,
+    const release = await control(app, 'release-and-hide', { input: { ...input, breakActive: true, strictMode: false,
       remainingMs: app.read().timer.remainingMs, version: app.read().timer.version + 1 } });
+    assert(release.guardPrecondition.shieldCount > 0, 'The hide must interrupt an existing native guard');
+    assert(release.guardPrecondition.deadline > release.guardPrecondition.observedAt,
+      'The hide must be accepted before the original native break deadline');
     await dockPolicy(previous, app, 1, 'accepted hide must survive native strict teardown');
     await until(app.read, value => !value.visible && !value.strict && value.strictShieldCount === 0,
       [handle], 5_000, 'strict teardown preserves explicit tray state');
     await control(app, 'fullscreen', { active: false });
     await dockPolicy(previous, app, 1, 'repeated native teardown must not restore a hidden Dock icon');
+    await control(app, 'release-and-hide', { input: { ...input, breakActive: true, strictMode: false,
+      remainingMs: app.read().timer.remainingMs, version: app.read().timer.version + 1 } }, 'No active strict guard');
+    await dockPolicy(previous, app, 1, 'rejected inactive-guard control must preserve tray state');
     await stopApp(app);
     const result = { name, status: 'passed', mode, profile: directory, blinchoPID: initial.pid,
       scope: 'Accepted hide before strict teardown, then repeated teardown; countdown/focus covered by other scenarios' };
