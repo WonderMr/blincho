@@ -700,6 +700,12 @@ fn main() {
         ])
         .setup(move |app| {
             ui::initialize_dock(app.handle(), !hidden);
+            #[cfg(target_os = "macos")]
+            if hidden {
+                // Native launch activation has finished. Allow hidden windows
+                // and tray reopening before constructing the webview.
+                ui::reconcile_dock(app.handle())?;
+            }
             let test_dir = std::env::var_os("BLINCHO_PROTOTYPE_TEST_DIR").map(PathBuf::from);
             let profile = match &test_dir {
                 Some(path) => path.join("profile"),
@@ -952,12 +958,6 @@ fn main() {
         tauri::ActivationPolicy::Regular
     });
     app.run(|app, event| {
-        #[cfg(target_os = "macos")]
-        if matches!(event, tauri::RunEvent::Ready) {
-            if let Err(error) = ui::reconcile_dock(app) {
-                eprintln!("Startup Dock: {error}");
-            }
-        }
         if let tauri::RunEvent::Exit = event {
             if let Some(runtime) = app.try_state::<Runtime>() {
                 runtime.quitting.store(true, Ordering::SeqCst);
