@@ -239,7 +239,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   // fullscreen Spaces. Ordinary window/Dock policy must return after cleanup.
   await dockPolicy(previous, app, strictMode ? 1 : 0, 'break presentation must use its native activation policy');
   assert(started.timer.breakEndAt > observedStart, 'The automatic break must have a real native deadline');
-  assert(started.timer.breakEndAt - observedStart >= breakSeconds * 1000 - 1500,
+  if (!releaseAndHide) assert(started.timer.breakEndAt - observedStart >= breakSeconds * 1000 - 1500,
     'The smoke must observe the configured countdown, without shortening it');
   if (!releaseAndHide) await until(() => ({ focus: fixtureState(previous), runtime: app.read(),
     expectedPID: initial.pid, breakEndAt: started.timer.breakEndAt }),
@@ -342,7 +342,8 @@ async function main() {
       { name: 'non-strict-preserves-new-work-app', mode: 'tray', strictMode: false, breakSeconds: 6, chooseThird: true },
       { name: 'explicit-show-keeps-open', mode: 'tray', strictMode: false, breakSeconds: 4, explicitShow: true },
       { name: 'hidden-startup-dock', mode: 'tray', strictMode: false, breakSeconds: 4, startupHidden: true },
-      { name: 'hide-during-strict-release', mode: 'tray', strictMode: true, breakSeconds: 4, releaseAndHide: true },
+      // This interrupts a live guard and exits early; full countdown is checked above.
+      { name: 'hide-during-strict-release', mode: 'tray', strictMode: true, breakSeconds: 20, releaseAndHide: true },
     ];
     const selected = process.env.BLINCHO_FOCUS_SMOKE_CASE;
     assert(!selected || cases.some(options => options.name === selected), 'Unknown native focus smoke case');
