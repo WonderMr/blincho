@@ -82,6 +82,20 @@ test('spring and autumn DST days use real local day lengths', () => {
   } finally { if (original === undefined) delete process.env.TZ; else process.env.TZ = original; }
 });
 
+test('a skipped local midnight starts the day at 01:00 and still ends at the next midnight', () => {
+  const original = process.env.TZ; process.env.TZ = 'Africa/Cairo';
+  try {
+    const bounds = dayBounds('2026-04-24');
+    assert.equal(new Date(bounds.start).getHours(), 1);
+    assert.equal(new Date(bounds.end).getHours(), 0);
+    assert.equal((bounds.end - bounds.start) / 3600000, 23);
+    values.clear();
+    storage.recordActivitySpans([{ start: at('2026-04-24', 23, 59), end: at('2026-04-25', 0, 1), state: 'work' }]);
+    assert.equal(storage.loadAllStats().length, 2);
+    for (const saved of storage.loadAllStats()) assert.equal(analyzeDayActivity(saved, at('2026-04-25', 12)).workMinutes, 1);
+  } finally { if (original === undefined) delete process.env.TZ; else process.env.TZ = original; }
+});
+
 test('browser timer logs work, manual pause, absence and uncertain gaps separately', () => {
   const session = new TimerSession(1200, 0);
   session.advance(1000); session.manualPaused = true;

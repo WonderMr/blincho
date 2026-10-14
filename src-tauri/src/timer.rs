@@ -319,30 +319,46 @@ impl Timer {
 
     fn add_focus(&mut self, start: i64, duration_ms: f64) {
         let mut cursor = start;
-        let end = start + duration_ms as i64;
-        while cursor < end {
+        let mut remaining = duration_ms;
+        while remaining > 0. {
             let Some(date) = Local.timestamp_millis_opt(cursor).single() else {
                 break;
             };
-            let Some(next_date) = date.date_naive().succ_opt() else {
-                break;
-            };
-            let Some(midnight) = Local
-                .from_local_datetime(&next_date.and_hms_opt(0, 0, 0).unwrap())
-                .earliest()
-            else {
-                break;
-            };
-            let segment_end = end.min(midnight.timestamp_millis());
-            if segment_end <= cursor {
+            let end = cursor.saturating_add(remaining.ceil() as i64);
+            if end <= cursor {
                 break;
             }
+            let Some(end_date) = Local.timestamp_millis_opt(end - 1).single() else {
+                break;
+            };
+            let mut boundary = end;
+            if date.date_naive() != end_date.date_naive() {
+                // Some timezones skip local midnight. Find the observed date
+                // transition within the short heartbeat instead of inventing one.
+                let mut low = cursor + 1;
+                let mut high = end;
+                while low < high {
+                    let middle = low + (high - low) / 2;
+                    let same_day = Local
+                        .timestamp_millis_opt(middle)
+                        .single()
+                        .is_some_and(|value| value.date_naive() == date.date_naive());
+                    if same_day {
+                        low = middle + 1;
+                    } else {
+                        high = middle;
+                    }
+                }
+                boundary = low;
+            }
+            let active = remaining.min((boundary - cursor) as f64);
             *self
                 .snapshot
                 .focus_by_date
                 .entry(date.format("%Y-%m-%d").to_string())
-                .or_default() += (segment_end - cursor) as f64 / 1000.;
-            cursor = segment_end;
+                .or_default() += active / 1000.;
+            remaining -= active;
+            cursor = boundary;
         }
     }
 }
@@ -398,6 +414,45 @@ mod tests {
         timer.tick(midnight + 1000, Some(0.), Some(false));
         assert_eq!(timer.snapshot.focus_by_date.get("2026-10-13"), Some(&1.));
         assert_eq!(timer.snapshot.focus_by_date.get("2026-10-14"), Some(&1.));
+    }
+    #[test]
+    fn native_focus_preserves_fractional_credit_and_skipped_midnight() {
+        // With TZ=Africa/Cairo, the following day begins at 01:00.
+        let noon = Local
+            .with_ymd_and_hms(2026, 4, 23, 12, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp_millis();
+        let mut timer = Timer::new(noon);
+        timer.add_focus(noon, 1000.5);
+        assert_eq!(
+            timer.snapshot.focus_by_date.get("2026-04-23"),
+            Some(&1.0005)
+        );
+        let next_day = Local
+            .with_ymd_and_hms(2026, 4, 24, 1, 0, 0)
+            .single()
+            .unwrap();
+        let boundary = if Local
+            .with_ymd_and_hms(2026, 4, 24, 0, 0, 0)
+            .single()
+            .is_none()
+        {
+            next_day.timestamp_millis()
+        } else {
+            Local
+                .with_ymd_and_hms(2026, 4, 24, 0, 0, 0)
+                .single()
+                .unwrap()
+                .timestamp_millis()
+        };
+        let mut crossing = Timer::new(boundary - 1000);
+        crossing.add_focus(boundary - 1000, 1000.5);
+        assert_eq!(crossing.snapshot.focus_by_date.get("2026-04-23"), Some(&1.));
+        assert_eq!(
+            crossing.snapshot.focus_by_date.get("2026-04-24"),
+            Some(&0.0005)
+        );
     }
     fn input() -> TimerInput {
         TimerInput {

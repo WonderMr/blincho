@@ -126,6 +126,11 @@ jobs:
         run: cargo check --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
+      - name: Check timer credit across a skipped local midnight
+        if: runner.os != 'Windows'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }} timer::tests::native_focus_preserves_fractional_credit_and_skipped_midnight
+        env:
+          TZ: Africa/Cairo
       - name: Build native smoke executable
         run: cargo build --manifest-path src-tauri/Cargo.toml --locked --target ${{ matrix.rust-target }}
       - name: Prepare Windows desktop and verify notification area

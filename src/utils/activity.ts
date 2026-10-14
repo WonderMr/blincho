@@ -10,7 +10,7 @@ export function localDayKey(date: Date): string {
 export function dayBounds(date: string) {
   const start = new Date(`${date}T00:00:00`);
   const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  end.setHours(24, 0, 0, 0);
   return { start: start.getTime(), end: end.getTime() };
 }
 
