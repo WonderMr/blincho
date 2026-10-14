@@ -2,6 +2,14 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.0]
+
+### Added
+
+- Check for a person with the camera at the end of a work interval and lock the desktop session after three distinct healthy frames without a detected person. The new setting is disabled by default. Manually enabling it immediately checks camera access and requests permission when needed; denied or unavailable access leaves it off.
+- Process camera frames locally with a bundled person-detection model. Frames are not saved or uploaded; camera access ends after each check. Missing cameras, denied permission, unusable frames and failed checks skip locking and preserve the ordinary reminder.
+- Expose session locking on macOS, Windows and Linux, verify the lock state, and translate the new controls into all 30 languages. Browser-only use does not lock the operating system.
+
 ## [1.7.3]
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "blincho",
-  "version": "1.7.3",
+  "version": "1.8.0",
   "description": "Screen break reminders and habits for comfortable computer use",
   "main": "electron/main.cjs",
   "scripts": {
@@ -80,6 +80,10 @@
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
+    "@tensorflow/tfjs-backend-cpu": "4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "4.22.0",
+    "@tensorflow/tfjs-converter": "4.22.0",
+    "@tensorflow/tfjs-core": "4.22.0",
     "canvas-confetti": "^1.9.4",
     "electron-updater": "6.8.9",
     "lucide-react": "^1.55.0",

@@ -532,5 +532,16 @@
   "Звонок": "Panggilan",
   "Нет активного звонка": "Tidak ada panggilan aktif",
   "Статус звонка неизвестен": "Status panggilan tidak diketahui",
-  "Определение звонков отключено": "Deteksi panggilan nonaktif"
+  "Определение звонков отключено": "Deteksi panggilan nonaktif",
+  "Блокировать компьютер, если никого нет": "Kunci komputer jika tidak ada orang",
+  "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Di akhir interval kerja, kamera memeriksa apakah ada orang. Jika tidak ada orang yang terdeteksi, komputer dikunci. Pemeriksaan dilakukan di perangkat; gambar tidak disimpan atau dikirim. Izin kamera diperlukan. Jika kamera atau pemeriksaan tidak tersedia, penguncian dilewati.",
+  "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Tersedia di aplikasi desktop yang mendukung kamera. Browser tidak mengunci komputer.",
+  "Камера не обнаружила человека. Компьютер заблокирован.": "Kamera tidak mendeteksi orang. Komputer dikunci.",
+  "Не удалось заблокировать компьютер.": "Tidak dapat mengunci komputer.",
+  "При включении проверяется доступ к камере. Если нужно, система запросит разрешение.": "Saat opsi ini diaktifkan, akses kamera diperiksa. Jika diperlukan, sistem akan meminta izin.",
+  "Запрашиваем доступ к камере…": "Meminta akses kamera…",
+  "Доступ к камере разрешён.": "Akses kamera diizinkan.",
+  "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Akses kamera tidak diizinkan. Izinkan di pengaturan sistem, lalu aktifkan kembali opsi ini.",
+  "Камера недоступна. Проверьте подключение и попробуйте снова.": "Kamera tidak tersedia. Periksa koneksinya dan coba lagi.",
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Di macOS: Pengaturan Sistem → Privasi & Keamanan → Kamera."
 }

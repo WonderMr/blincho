@@ -532,5 +532,16 @@
   "Звонок": "Arama",
   "Нет активного звонка": "Etkin arama yok",
   "Статус звонка неизвестен": "Arama durumu bilinmiyor",
-  "Определение звонков отключено": "Arama algılama kapalı"
+  "Определение звонков отключено": "Arama algılama kapalı",
+  "Блокировать компьютер, если никого нет": "Kimse yoksa bilgisayarı kilitle",
+  "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Çalışma aralığının sonunda kamera bir kişinin bulunup bulunmadığını kontrol eder. Kimse algılanmazsa bilgisayar kilitlenir. Kontrol cihazınızda yapılır; görüntüler kaydedilmez veya gönderilmez. Kamera izni gerekir. Kamera veya kontrol kullanılamıyorsa kilitleme atlanır.",
+  "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Kamera desteği olan masaüstü uygulamasında kullanılabilir. Tarayıcı bilgisayarı kilitlemez.",
+  "Камера не обнаружила человека. Компьютер заблокирован.": "Kamera bir kişi algılamadı. Bilgisayar kilitlendi.",
+  "Не удалось заблокировать компьютер.": "Bilgisayar kilitlenemedi.",
+  "При включении проверяется доступ к камере. Если нужно, система запросит разрешение.": "Bu seçenek açıldığında kamera erişimi kontrol edilir. Gerekirse sistem izin ister.",
+  "Запрашиваем доступ к камере…": "Kamera erişimi isteniyor…",
+  "Доступ к камере разрешён.": "Kamera erişimine izin verildi.",
+  "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Kamera erişimine izin verilmedi. Sistem ayarlarından izin verin, ardından bu seçeneği tekrar açın.",
+  "Камера недоступна. Проверьте подключение и попробуйте снова.": "Kamera kullanılamıyor. Bağlantıyı kontrol edip tekrar deneyin.",
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "macOS’te: Sistem Ayarları → Gizlilik ve Güvenlik → Kamera."
 }

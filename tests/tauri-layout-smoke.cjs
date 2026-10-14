@@ -9,7 +9,7 @@ assert.equal(process.platform, 'darwin', 'This check requires macOS');
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-layout-smoke-'));
 const source = path.join(directory, 'history.json');
 fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
-  myeyes_settings_v1: JSON.stringify({ idleDetectionEnabled: true, meetingDetectionEnabled: true, strictMode: true,
+  myeyes_settings_v1: JSON.stringify({ idleDetectionEnabled: true, meetingDetectionEnabled: true, cameraLockEnabled: false, strictMode: true,
     workMinutes: 20, breakSeconds: 20, soundEnabled: false, notificationsEnabled: false }),
   'blincho-language-v1': '{"preference":"en","acknowledged":true}',
 } }));

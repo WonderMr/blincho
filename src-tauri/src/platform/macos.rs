@@ -11,6 +11,8 @@ extern "C" {
     fn blincho_observe_power(callback: extern "C" fn(i32));
     fn blincho_idle_seconds() -> f64;
     fn blincho_session_locked() -> i32;
+    fn blincho_request_lock() -> i32;
+    fn blincho_lock_confirmed() -> i32;
     fn blincho_notifications_initialize(clicked: extern "C" fn());
     fn blincho_notification_permission(
         context: *mut c_void,
@@ -66,6 +68,19 @@ pub fn presence() -> Presence {
             1 => Some(true),
             _ => None,
         },
+    }
+}
+pub fn request_lock() -> Result<(), String> {
+    match unsafe { blincho_request_lock() } {
+        1 => Ok(()),
+        _ => Err("The macOS session lock API is unavailable".into()),
+    }
+}
+pub fn lock_confirmed() -> Option<bool> {
+    match unsafe { blincho_lock_confirmed() } {
+        0 => Some(false),
+        1 => Some(true),
+        _ => None,
     }
 }
 pub fn observe_power(callback: extern "C" fn(i32)) -> Result<(), String> {

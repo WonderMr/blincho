@@ -1,6 +1,6 @@
 [package]
 name = "blincho"
-version = "1.7.3"
+version = "1.8.0"
 edition = "2021"
 
 [build-dependencies]
@@ -36,3 +36,4 @@ windows = { version = "=0.61.3", features = ["Data_Xml_Dom", "Foundation", "UI_N
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "=5.19.0"
 x11-dl = "=2.21.0"
+webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
