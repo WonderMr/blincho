@@ -268,7 +268,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Unable to resolve portable package filename' }
           $env:BLINCHO_PROTOTYPE_EXECUTABLE = Join-Path "$PWD/release-upload" $artifact
           node tests/tauri-cross-platform-smoke.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows runtime smoke failed' }
           node tests/tauri-camera-smoke.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged Windows camera model smoke failed' }
       - name: Launch the verified Linux AppImage
         if: matrix.platform == 'linux' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-cross-platform-smoke.cjs') != ''
         shell: bash
