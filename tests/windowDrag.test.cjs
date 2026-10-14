@@ -119,7 +119,12 @@ test('text remains selectable while empty padding and gaps remain draggable', ()
   paragraph.style.userSelect = 'none';
   assert(shouldStartWindowDrag(f.event(paragraph, { clientX: 30, clientY: 30 })));
   f.doc.getSelection = () => ({ isCollapsed: false });
-  assert.equal(shouldStartWindowDrag(f.event(f.main)), false);
+  assert(shouldStartWindowDrag(f.event(f.main)), 'selected text must not block dragging empty space');
+  paragraph.style.userSelect = 'text';
+  assert.equal(shouldStartWindowDrag(f.event(paragraph, { clientX: 30, clientY: 30 })), false, 'selected text keeps its normal interaction');
+  const titlebar = f.element('div', { class: 'mac-titlebar-drag' }, f.app);
+  f.text(titlebar, 'Blincho');
+  assert(shouldStartWindowDrag(f.event(titlebar, { clientX: 30, clientY: 30 })), 'selected text must not block the titlebar');
 });
 
 test('classic, horizontal, overlay, ancestor and RTL scrollbar gutters cannot drag', () => {

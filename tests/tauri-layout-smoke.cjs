@@ -74,6 +74,7 @@ async function measure(expectedPage, expectedLanguage) {
         main:describe(main),nav:describe(nav),lastBottom:main.lastElementChild.getBoundingClientRect().bottom,
         navControls:[...nav.querySelectorAll('button')].filter(element=>element.getBoundingClientRect().width>0).map(describe),
         statistics:[...document.querySelectorAll('.statistics-metric,.statistics-date-picker select,.statistics-daily-metric')].map(describe),
+        dateControl:document.querySelector('.statistics-date-picker select')?describe(document.querySelector('.statistics-date-picker select')):null,
         dialog:!!document.querySelector('[role=dialog]')}}});
       main.scrollTop=0;
     })()` });
@@ -98,7 +99,7 @@ function checkShell(layout) {
     assert(button.scrollWidth <= button.clientWidth, 'Complete translated button labels fit inside their controls');
   }
   for (const item of layout.statistics) assert(item.scrollWidth <= item.clientWidth, 'Statistics values and dates fit their columns');
-  if (layout.page === 'stats') assert(layout.statistics[4].height >= 44, 'The date control retains a 44px hit target');
+  if (layout.page === 'stats') assert(layout.dateControl?.height >= 44, 'The date control retains a 44px hit target');
 }
 (async () => {
   const results = [];
@@ -133,12 +134,14 @@ function checkShell(layout) {
     const dragMarker = ++sequence;
     await control('eval', { script: `(() => {
       const api = window.__TAURI__.window, original = api.Window.prototype.startDragging;
-      let starts = 0;
+      let starts = 0, scrollbarSpacer;
       api.Window.prototype.startDragging = async () => { starts++; };
       const press = (element,x,y,button=0) => element.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,button,clientX:x,clientY:y}));
       const middle = element => {const r=element.getBoundingClientRect();return [(r.left+r.right)/2,(r.top+r.bottom)/2];};
       try {
         const nav=document.querySelector('.nav-bar'), main=document.querySelector('.main-content'), titlebar=document.querySelector('.mac-titlebar-drag');
+        scrollbarSpacer=document.createElement('div');scrollbarSpacer.style.height=(main.clientHeight+1)+'px';scrollbarSpacer.setAttribute('aria-hidden','true');main.append(scrollbarSpacer);
+        if(main.scrollHeight<=main.clientHeight) throw new Error('Scrollbar fixture needs vertical overflow');
         const nr=nav.getBoundingClientRect(), mr=main.getBoundingClientRect();
         press(nav,nr.left+5,nr.top+100); press(main,mr.left+12,mr.top+2); press(titlebar,200,15);
         const freeStarts=starts;
@@ -146,12 +149,23 @@ function checkShell(layout) {
         const heading=document.querySelector('.view-header h2'), range=document.createRange(); range.selectNodeContents(heading);
         const text=range.getClientRects()[0];press(heading,text.left+3,text.top+3);
         press(main,mr.right-1,mr.top+100); press(nav,nr.left+5,nr.top+100,2);
-        window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${dragMarker},drag:{freeStarts,afterProtected:starts}}});
-      } finally { api.Window.prototype.startDragging=original; }
+        const afterProtected=starts, selection=document.getSelection();
+        selection.removeAllRanges(); selection.addRange(range);
+        if(selection.isCollapsed) throw new Error('Native selection fixture did not select text');
+        const selectedText=selection.toString();
+        press(main,mr.left+12,mr.top+2); press(nav,nr.left+5,nr.top+100); press(titlebar,200,15);
+        const selectedFreeStarts=starts, selectionPreserved=selection.toString()===selectedText;
+        press(heading,text.left+3,text.top+3);
+        window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${dragMarker},drag:{freeStarts,afterProtected,selectedFreeStarts,selectedAfterText:starts,selectionPreserved}}});
+        selection.removeAllRanges();
+      } finally { api.Window.prototype.startDragging=original;scrollbarSpacer?.remove();document.getSelection()?.removeAllRanges(); }
     })()` });
     const drag = (await until(value => value.renderer?.marker === dragMarker)).renderer.drag;
     assert.equal(drag.freeStarts,3,'Sidebar, page margin and titlebar route to native drag');
     assert.equal(drag.afterProtected,3,'Controls, text, scrollbar and secondary clicks retain their behavior');
+    assert.equal(drag.selectedFreeStarts,6,'An existing text selection does not block free space or titlebar dragging');
+    assert.equal(drag.selectedAfterText,6,'Pressing selected text preserves text interaction');
+    assert.equal(drag.selectionPreserved,true,'Dragging free space retains the selected text');
     results.push({scope:'real-dom-drag-routing',...drag});
     const hidden = await control('hide'); assert(hidden.ok);
     const reopened = await control('show', {}, true);
