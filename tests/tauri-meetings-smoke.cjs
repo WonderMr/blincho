@@ -60,7 +60,7 @@ async function launch() {
 }
 async function inspect() {
   const marker = ++sequence;
-  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,meetingProbe:${marker},stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')||'[]'),callsText:document.querySelector('.statistics-meetings')?.innerText||'',callRows:document.querySelectorAll('.statistics-meeting-list tbody tr').length,horizontalOverflow:document.querySelector('.statistics-meetings')?document.querySelector('.statistics-meetings').scrollWidth-document.querySelector('.statistics-meetings').clientWidth:0}})` });
+  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,meetingProbe:${marker},stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')||'[]'),callsText:document.querySelector('.statistics-meetings')?.textContent||'',callRows:document.querySelectorAll('.statistics-meeting-list tbody tr').length,horizontalOverflow:document.querySelector('.statistics-meetings')?document.querySelector('.statistics-meetings').scrollWidth-document.querySelector('.statistics-meetings').clientWidth:0}})` });
   return until(value => value.renderer?.meetingProbe === marker);
 }
 async function stop() {
@@ -105,6 +105,8 @@ const canonicalCalls = spans => spans.map(({ start, end, app }) => ({ start, end
   assert.deepEqual(canonicalCalls(savedCalls(persisted)), expectedCalls, 'Persisted calls include the final native start and end timestamps');
   assert.equal(persisted.renderer.stats.find(day => day.date === '2026-10-11').focusMinutes, 42, 'Legacy totals survive');
   console.log('PASS: hidden calls retain app transitions, end timestamps and local history during manual pause and strict mode.');
+  await control('show');
+  await until(value => value.visible);
   await control('eval', { script: `document.querySelectorAll('.nav-tabs button')[4].click()` });
   let rendered;
   for (let i = 0; i < 20; i++) {
