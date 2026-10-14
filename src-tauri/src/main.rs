@@ -565,7 +565,10 @@ fn test_control_on_main(app: &tauri::AppHandle) {
             "release-and-hide" => {
                 let input: TimerInput =
                     serde_json::from_value(command["input"].clone()).map_err(|e| e.to_string())?;
+                #[cfg(target_os = "macos")]
                 let shield_count = platform::strict_shield_count();
+                #[cfg(not(target_os = "macos"))]
+                let shield_count = 0;
                 let (observed_at, deadline) = {
                     let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
                     sample(&mut timer);
