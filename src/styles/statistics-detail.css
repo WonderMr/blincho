@@ -1,10 +1,11 @@
 .statistics-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .statistics-detail-header > div { min-width: 0; }
 .statistics-detail-note { color: var(--text-secondary); font-size: .75rem; line-height: 1.6; margin-top: 7px; }
-.statistics-date-picker { display: grid; gap: 5px; flex-shrink: 0; font-size: .7rem; color: var(--text-secondary); max-width: 100%; }
-.statistics-date-picker select { color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-control); border-radius: 9px; min-height: 40px; padding: 7px 10px; font: inherit; font-size: .78rem; max-width: 100%; }
-.statistics-day-selector { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-block: 20px; padding: 5px; border-radius: 12px; background: var(--surface-muted); }
-.statistics-day-button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 65px; padding: 7px 4px; border: 1px solid transparent; border-radius: 9px; color: var(--text-secondary); }
+.statistics-date-picker { position: relative; display: grid; gap: 5px; flex: 0 1 230px; min-width: 0; font-size: .7rem; color: var(--text-secondary); max-width: 100%; }
+.statistics-date-picker select { appearance: none; -webkit-appearance: none; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-control); border-radius: 9px; height: 44px; min-height: 44px; min-width: 0; width: 100%; padding: 7px 10px; padding-inline-end: 32px; font: inherit; font-size: .78rem; max-width: 100%; }
+.statistics-date-picker::after { content: ''; position: absolute; inset-inline-end: 14px; bottom: 19px; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
+.statistics-day-selector { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-block: 14px; padding: 4px; border-radius: 10px; background: var(--surface-muted); }
+.statistics-day-button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; min-height: 56px; padding: 5px 4px; border: 1px solid transparent; border-radius: 8px; color: var(--text-secondary); }
 .statistics-day-button > span:first-child { font-size: .7rem; overflow-wrap: anywhere; }
 .statistics-day-button strong { font-size: .96rem; font-variant-numeric: tabular-nums; font-weight: 600; }
 .statistics-day-button:hover { background: var(--surface-hover); }
@@ -85,12 +86,17 @@
 .statistics-week-meetings strong { display: block; margin-top: 10px; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .statistics-week-meetings p, .statistics-week-meetings > span { display: block; margin-top: 6px; color: var(--text-secondary); font-size: .73rem; line-height: 1.6; }
 
+@container content-column (max-width: 680px) {
+  .statistics-detail-header { flex-direction: column; }
+  .statistics-date-picker { flex-basis: auto; width: 100%; }
+  .statistics-daily-metrics, .statistics-session-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 680px) {
   .statistics-detail-header { flex-direction: column; }
-  .statistics-date-picker { width: 100%; }
+  .statistics-date-picker { flex-basis: auto; width: 100%; }
   .statistics-daily-metrics, .statistics-session-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .statistics-day-selector { gap: 2px; padding: 3px; }
-  .statistics-day-button { min-height: 62px; padding: 6px 2px; }
+  .statistics-day-button { min-height: 56px; padding: 5px 2px; }
   .statistics-day-button > span:first-child { font-size: .65rem; }
   .statistics-average-grid { gap: 14px; }
   .statistics-average-card + .statistics-average-card { padding-inline-start: 14px; }

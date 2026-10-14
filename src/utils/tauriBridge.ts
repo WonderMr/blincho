@@ -5,6 +5,7 @@ import { TimerSession, PresenceReason } from './timerSession';
 import type { AppSettings, ActivitySpan, MeetingSpan } from '../types';
 import type {} from './notifications';
 import type { UpdateState } from './updates';
+import { installWindowDrag } from './windowDrag';
 
 export interface NativeTimerSnapshot {
   totalMs: number; remainingMs: number; manualPaused: boolean; breakActive: boolean;
@@ -156,9 +157,5 @@ async function installTauriBridge(): Promise<void> {
     event.preventDefault();
     void api.core.invoke('open_external', {url:anchor.href}).catch(error => console.warn('Blincho: External link failed:', error));
   });
-  document.addEventListener('mousedown' , event => {
-    if ((event.target as HTMLElement)?.closest('.mac-titlebar-drag') && !(event.target as HTMLElement)?.closest('button,input,a')) {
-      void api.window.getCurrentWindow().startDragging().catch(error => console.warn('Blincho: Drag failed:', error));
-    }
-  });
+  installWindowDrag(document, () => api.window.getCurrentWindow().startDragging());
 }

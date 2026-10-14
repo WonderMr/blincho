@@ -8,10 +8,13 @@ const { spawn } = require('node:child_process');
 assert.equal(process.platform, 'darwin', 'This check requires macOS');
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-layout-smoke-'));
 const source = path.join(directory, 'history.json');
+const today = new Date();
+const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
-  myeyes_settings_v1: JSON.stringify({ idleDetectionEnabled: true, meetingDetectionEnabled: true, cameraLockEnabled: false, strictMode: true,
+  myeyes_settings_v1: JSON.stringify({ cameraLockEnabled: false, idleDetectionEnabled: true, meetingDetectionEnabled: true, strictMode: true,
     workMinutes: 20, breakSeconds: 20, soundEnabled: false, notificationsEnabled: false }),
   'blincho-language-v1': '{"preference":"en","acknowledged":true}',
+  myeyes_stats_v1: JSON.stringify([{ date, breaksCompleted: 11, exercisesCompleted: 4, focusMinutes: 656 }]),
 } }));
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.resolve(__dirname, '../src-tauri/target/debug/blincho');
 assert(fs.existsSync(executable), 'Build the native app before running layout checks');
@@ -52,7 +55,7 @@ async function control(operation, args = {}, allowFailure = false) {
   }
   throw Error('Test control timed out: ' + operation);
 }
-async function measure(expectedPage) {
+async function measure(expectedPage, expectedLanguage) {
   const started = Date.now();
   while (Date.now() - started < 10000) {
     const marker = ++sequence;
@@ -61,18 +64,22 @@ async function measure(expectedPage) {
       const pages = {timer:'.hero-dashboard-grid',library:'.library-view',survey:'.survey-view',ergonomics:'.ergonomics-view',stats:'.statistics-view'};
       const page = Object.keys(pages).find(name => main.querySelector(':scope > ' + pages[name]));
       const describe = element => { const rect = element.getBoundingClientRect(); return {
-        top:rect.top,bottom:rect.bottom,clientHeight:element.clientHeight,scrollHeight:element.scrollHeight,scrollTop:element.scrollTop }; };
+        left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height,
+        clientWidth:element.clientWidth,scrollWidth:element.scrollWidth,clientHeight:element.clientHeight,scrollHeight:element.scrollHeight,scrollTop:element.scrollTop }; };
       window.scrollTo(0,99999);
       main.scrollTop = main.scrollHeight;
       window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${marker},layout:{
-        page,width:innerWidth,height:innerHeight,availableHeight:screen.availHeight,rootRange:document.scrollingElement.scrollHeight-document.scrollingElement.clientHeight,
+        page,language:document.documentElement.lang,direction:document.documentElement.dir,width:innerWidth,height:innerHeight,availableHeight:screen.availHeight,rootRange:document.scrollingElement.scrollHeight-document.scrollingElement.clientHeight,
         rootScrollTop:scrollY,titlebarBottom:document.querySelector('.mac-titlebar-drag').getBoundingClientRect().bottom,
         main:describe(main),nav:describe(nav),lastBottom:main.lastElementChild.getBoundingClientRect().bottom,
+        navControls:[...nav.querySelectorAll('button')].filter(element=>element.getBoundingClientRect().width>0).map(describe),
+        statistics:[...document.querySelectorAll('.statistics-metric,.statistics-date-picker select,.statistics-daily-metric')].map(describe),
+        dateControl:document.querySelector('.statistics-date-picker select')?describe(document.querySelector('.statistics-date-picker select')):null,
         dialog:!!document.querySelector('[role=dialog]')}}});
       main.scrollTop=0;
     })()` });
     const layout = (await until(value => value.renderer?.marker === marker)).renderer.layout;
-    if (layout.page === expectedPage) return layout;
+    if (layout.page === expectedPage && (!expectedLanguage || layout.language.split('-')[0] === expectedLanguage)) return layout;
     await sleep(50);
   }
   throw Error('Selected page did not commit: ' + expectedPage);
@@ -84,13 +91,22 @@ function checkShell(layout) {
   assert(Math.abs(layout.nav.bottom - layout.height) <= 1, 'Sidebar follows the resized viewport');
   assert(Math.abs(layout.main.bottom - layout.height) <= 1, 'Main pane follows the resized viewport');
   assert(layout.lastBottom <= layout.main.bottom + 1, 'The last content item remains reachable');
+  assert(layout.nav.scrollWidth <= layout.nav.clientWidth, 'Sidebar must not scroll horizontally');
+  assert(layout.main.scrollWidth <= layout.main.clientWidth, 'Main content must not scroll horizontally');
+  for (const button of layout.navControls) {
+    assert(button.left >= layout.nav.left && button.right <= layout.nav.right, 'Every sidebar control stays inside the sidebar');
+    assert(button.width >= 44 && button.height >= 44, 'Sidebar controls retain usable hit targets');
+    assert(button.scrollWidth <= button.clientWidth, 'Complete translated button labels fit inside their controls');
+  }
+  for (const item of layout.statistics) assert(item.scrollWidth <= item.clientWidth, 'Statistics values and dates fit their columns');
+  if (layout.page === 'stats') assert(layout.dateControl?.height >= 44, 'The date control retains a 44px hit target');
 }
 (async () => {
   const results = [];
   let failure, reopenStatus;
   try {
     await until(value => value.renderer?.ready && value.timer.totalMs > 0);
-    for (const [width, height] of [[1040, 760], [1280, 900], [1440, 1000], [1040, 760], [780, 620], [1040, 760]]) {
+    for (const [width, height] of [[1040, 760], [1280, 900], [1440, 1000], [1040, 760], [780, 620], [875, 620], [1040, 760]]) {
       await control('resize', { width, height });
       const layout = await measure('timer'); checkShell(layout);
       assert.equal(layout.width, width);
@@ -106,6 +122,51 @@ function checkShell(layout) {
       if (tab === 1) assert(committed.main.scrollTop > 0, 'The long exercise library must scroll');
       results.push({ scope: 'tab-' + tab, ...committed });
     }
+    const languages = fs.readdirSync(path.resolve(__dirname, '../src/i18n/locales')).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5));
+    for (const width of [780, 1040, 1440]) {
+      await control('resize', { width, height: 760 });
+      for (const language of languages) {
+        await control('eval', { script: `localStorage.setItem('blincho-language-v1',JSON.stringify({preference:${JSON.stringify(language)},acknowledged:true}));window.dispatchEvent(new StorageEvent('storage',{key:'blincho-language-v1'}));` });
+        const layout = await measure('stats', language); checkShell(layout);
+        results.push({ scope: 'translated-statistics', ...layout });
+      }
+    }
+    const dragMarker = ++sequence;
+    await control('eval', { script: `(() => {
+      const api = window.__TAURI__.window, original = api.Window.prototype.startDragging;
+      let starts = 0, scrollbarSpacer;
+      api.Window.prototype.startDragging = async () => { starts++; };
+      const press = (element,x,y,button=0) => element.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true,button,clientX:x,clientY:y}));
+      const middle = element => {const r=element.getBoundingClientRect();return [(r.left+r.right)/2,(r.top+r.bottom)/2];};
+      try {
+        const nav=document.querySelector('.nav-bar'), main=document.querySelector('.main-content'), titlebar=document.querySelector('.mac-titlebar-drag');
+        scrollbarSpacer=document.createElement('div');scrollbarSpacer.style.height=(main.clientHeight+1)+'px';scrollbarSpacer.setAttribute('aria-hidden','true');main.append(scrollbarSpacer);
+        if(main.scrollHeight<=main.clientHeight) throw new Error('Scrollbar fixture needs vertical overflow');
+        const nr=nav.getBoundingClientRect(), mr=main.getBoundingClientRect();
+        press(nav,nr.left+5,nr.top+100); press(main,mr.left+12,mr.top+2); press(titlebar,200,15);
+        const freeStarts=starts;
+        for (const element of [document.querySelector('.nav-tabs button'),document.querySelector('.statistics-date-picker select')]) press(element,...middle(element));
+        const heading=document.querySelector('.view-header h2'), range=document.createRange(); range.selectNodeContents(heading);
+        const text=range.getClientRects()[0];press(heading,text.left+3,text.top+3);
+        press(main,mr.right-1,mr.top+100); press(nav,nr.left+5,nr.top+100,2);
+        const afterProtected=starts, selection=document.getSelection();
+        selection.removeAllRanges(); selection.addRange(range);
+        if(selection.isCollapsed) throw new Error('Native selection fixture did not select text');
+        const selectedText=selection.toString();
+        press(main,mr.left+12,mr.top+2); press(nav,nr.left+5,nr.top+100); press(titlebar,200,15);
+        const selectedFreeStarts=starts, selectionPreserved=selection.toString()===selectedText;
+        press(heading,text.left+3,text.top+3);
+        window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${dragMarker},drag:{freeStarts,afterProtected,selectedFreeStarts,selectedAfterText:starts,selectionPreserved}}});
+        selection.removeAllRanges();
+      } finally { api.Window.prototype.startDragging=original;scrollbarSpacer?.remove();document.getSelection()?.removeAllRanges(); }
+    })()` });
+    const drag = (await until(value => value.renderer?.marker === dragMarker)).renderer.drag;
+    assert.equal(drag.freeStarts,3,'Sidebar, page margin and titlebar route to native drag');
+    assert.equal(drag.afterProtected,3,'Controls, text, scrollbar and secondary clicks retain their behavior');
+    assert.equal(drag.selectedFreeStarts,6,'An existing text selection does not block free space or titlebar dragging');
+    assert.equal(drag.selectedAfterText,6,'Pressing selected text preserves text interaction');
+    assert.equal(drag.selectionPreserved,true,'Dragging free space retains the selected text');
+    results.push({scope:'real-dom-drag-routing',...drag});
     const hidden = await control('hide'); assert(hidden.ok);
     const reopened = await control('show', {}, true);
     reopenStatus = 'passed';
@@ -132,6 +193,6 @@ function checkShell(layout) {
   }
   if (failure) throw failure;
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify({ status: 'passed', results, reopenStatus }, null, 2));
-  console.log('PASS: native viewport sizing, Timer, resize/restore and scrolling on all five pages.');
+  console.log('PASS: native viewport sizing, all five pages, unclipped sidebar controls and statistics in 30 languages at three widths.');
   console.log('Reopen: ' + reopenStatus + '. Evidence: ' + path.join(directory, 'result.json'));
 })().catch(error => { console.error(error); process.exitCode = 1; });
