@@ -5,6 +5,11 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 
+// Include fixture startup under the full suite's CPU load, then the smoke's
+// unchanged 5-second quit and 1-second termination windows. A hung smoke still fails.
+const FIXTURE_TIMEOUT_MS = 20_000;
+const TEST_TIMEOUT_MS = 25_000;
+
 function runFixture(mode) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-camera-lifecycle-'));
   const events = path.join(directory, 'events.jsonl');
@@ -76,7 +81,7 @@ function runFixture(mode) {
         fs.rmSync(file);
         if (command.operation === 'eval') {
           record('native-eval');
-          write({ passed: true, detections: 0, webglRequests: 0, cameraAPI: true, lockAPI: true, lockRejected: true, defaultEnabled: mode !== 'assertion-error', toggleReady: true });
+          write({ passed: true, detections: 0, webglRequests: 0, cameraAPI: true, lockAPI: true, lockRejected: true, defaultDisabled: mode !== 'assertion-error', toggleReady: true });
         } else if (command.operation === 'quit') {
           record('native-quit');
           if (mode === 'retained-pipe') {
@@ -89,7 +94,7 @@ function runFixture(mode) {
     `);
     fs.writeFileSync(path.join(directory, 'retained-pipe.cjs'), 'setInterval(() => {}, 1000);');
     const result = spawnSync(process.execPath, ['--require', path.join(directory, 'preload.cjs'), path.join(directory, 'tests/tauri-camera-smoke.cjs')], {
-      cwd: directory, encoding: 'utf8', timeout: 12_000,
+      cwd: directory, encoding: 'utf8', timeout: FIXTURE_TIMEOUT_MS,
       env: { ...process.env, BLINCHO_PROTOTYPE_EXECUTABLE: 'fixture-native', BLINCHO_LIFECYCLE_FIXTURE: directory, BLINCHO_LIFECYCLE_MODE: mode },
     });
     return { ...result, events: fs.existsSync(events) ? fs.readFileSync(events, 'utf8').trim().split('\n').map(line => JSON.parse(line).event) : [] };
@@ -105,7 +110,7 @@ function runFixture(mode) {
   }
 }
 
-test('camera smoke quits the native child before terminating its pipe-owning wrapper', { timeout: 15_000 }, () => {
+test('camera smoke quits the native child before terminating its pipe-owning wrapper', { timeout: TEST_TIMEOUT_MS }, () => {
   const result = runFixture('graceful');
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 0, result.stderr);
@@ -114,7 +119,7 @@ test('camera smoke quits the native child before terminating its pipe-owning wra
   assert.match(result.stdout, /"webglRequests": 0/);
 });
 
-test('camera smoke preserves assertion failures and gracefully cleans the native child', { timeout: 15_000 }, () => {
+test('camera smoke preserves assertion failures and gracefully cleans the native child', { timeout: TEST_TIMEOUT_MS }, () => {
   const result = runFixture('assertion-error');
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 1);
@@ -122,7 +127,7 @@ test('camera smoke preserves assertion failures and gracefully cleans the native
   assert.deepEqual(result.events, ['wrapper-start', 'native-start', 'native-eval', 'native-quit', 'wrapper-native-exit']);
 });
 
-test('camera smoke bounds an ignored quit and cleans a native child retaining wrapper pipes', { timeout: 15_000 }, () => {
+test('camera smoke bounds an ignored quit and cleans a native child retaining wrapper pipes', { timeout: TEST_TIMEOUT_MS }, () => {
   const result = runFixture('ignore-quit');
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 1);
@@ -134,7 +139,7 @@ test('camera smoke bounds an ignored quit and cleans a native child retaining wr
   }
 });
 
-test('camera smoke reports failed native launch without leaving subprocess pipes open', { timeout: 15_000 }, () => {
+test('camera smoke reports failed native launch without leaving subprocess pipes open', { timeout: TEST_TIMEOUT_MS }, () => {
   const result = runFixture('launch-error');
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 1);
@@ -142,7 +147,7 @@ test('camera smoke reports failed native launch without leaving subprocess pipes
   assert.deepEqual(result.events, []);
 });
 
-test('camera smoke closes its pipes when a descendant escapes wrapper process-tree cleanup', { timeout: 15_000 }, () => {
+test('camera smoke closes its pipes when a descendant escapes wrapper process-tree cleanup', { timeout: TEST_TIMEOUT_MS }, () => {
   const result = runFixture('retained-pipe');
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 1);
@@ -150,7 +155,7 @@ test('camera smoke closes its pipes when a descendant escapes wrapper process-tr
   assert.deepEqual(result.events, ['wrapper-start', 'native-start', 'native-eval', 'native-quit', 'retained-pipe-start', 'wrapper-native-exit']);
 });
 
-test('camera smoke Windows fallback requests quit before a bounded taskkill tree command', { timeout: 15_000 }, () => {
+test('camera smoke Windows fallback requests quit before a bounded taskkill tree command', { timeout: TEST_TIMEOUT_MS }, () => {
   const result = runFixture('windows-fallback');
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 1);

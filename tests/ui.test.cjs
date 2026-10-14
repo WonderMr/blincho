@@ -24,7 +24,7 @@ function load(relative) {
     name.endsWith('/soundSynth') ? { soundSynth: { enabled: false, playZenBowl() {} } } :
       name.endsWith('/notifications') ? { requestNotificationPermission: async () => false, showEyeBreakNotification() {} } :
         name.startsWith('.') ? load(path.relative(repo, path.resolve(path.dirname(file), name) + (path.extname(name) ? '' : fs.existsSync(path.resolve(path.dirname(file), name)+'.ts')?'.ts':'.tsx'))) : require(name);
-  vm.runInNewContext(source, { module, require: requireLocal, console, window, navigator: navigatorStub, document: doc, HTMLElement: DOMNode, localStorage }, { filename: file });
+  vm.runInNewContext(source, { module, require: requireLocal, console, window, navigator: navigatorStub, document: doc, HTMLElement: DOMNode, localStorage, AbortController }, { filename: file });
   return module.exports;
 }
 const { SettingsModal } = load('src/components/SettingsModal.tsx'), { DEFAULT_SETTINGS } = load('src/utils/storage.ts');
@@ -65,7 +65,7 @@ const cameraToggle = () => find(node => node.getAttribute('id') === 'camera-lock
 render(settingsElement());
 assert.equal(reactProps(cameraToggle()).disabled, true, 'browser camera locking is unavailable');
 assert.equal(reactProps(cameraToggle()).checked, false, 'an unavailable feature is shown inactive');
-assert.equal(settings.cameraLockEnabled, true, 'capability checks preserve the enabled preference');
+assert.equal(settings.cameraLockEnabled, false, 'capability checks preserve the disabled default');
 assert(host.textContent.includes('В браузере компьютер не блокируется.'));
 window.electronAPI = { lockComputer() { throw new Error('Settings must not lock the computer'); } };
 render(settingsElement());
@@ -77,11 +77,13 @@ assert.equal(reactProps(cameraToggle()).disabled, true, 'camera support alone ca
 window.electronAPI = { lockComputer() { throw new Error('Settings must not lock the computer'); } };
 render(settingsElement());
 assert.equal(reactProps(cameraToggle()).disabled, false);
-assert.equal(reactProps(cameraToggle()).checked, true);
+assert.equal(reactProps(cameraToggle()).checked, false);
 assert.equal(cameraToggle().getAttribute('aria-describedby'), 'camera-lock-enabled-description');
 assert(host.textContent.includes('кадры не сохраняются и не отправляются'));
 assert(host.textContent.includes('Нужно разрешение камеры'));
 assert(host.textContent.includes('Если камера или проверка недоступны, блокировка пропускается.'));
+settings = { ...settings, cameraLockEnabled: true }; render(settingsElement());
+assert.equal(reactProps(cameraToggle()).checked, true, 'an explicit saved opt-in is preserved');
 const workMinutesBeforeCameraChange = settings.workMinutes;
 invoke(cameraToggle(), 'onChange', { target: { checked: false } });
 assert.equal(settings.cameraLockEnabled, false);

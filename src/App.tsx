@@ -99,6 +99,15 @@ export const App: React.FC = () => {
   const expiryInFlightRef = useRef(false);
   const cameraCheckedVersionRef = useRef<number | null>(null);
   const cameraAbortRef = useRef<AbortController | null>(null);
+  const cameraAccessPendingRef = useRef(false);
+  const handleCameraAccessPendingChange = (pending: boolean) => {
+    cameraAccessPendingRef.current = pending;
+    if (pending) cameraAbortRef.current?.abort();
+    // A crash during a system prompt must not turn a temporary grant into opt-in.
+    saveSettings(pending ? { ...settingsRef.current, cameraLockEnabled: false } : settingsRef.current);
+    // Modal cleanup can run after App's own unmount guard has closed sync().
+    if (!pending && hasNativeTimer()) synchronizeTimer();
+  };
   const dateRef = useRef(getTodayDateString());
   const eventCounterRef = useRef(0);
   const sessionIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -374,19 +383,19 @@ export const App: React.FC = () => {
           return;
         }
       }
-      if (settingsRef.current.cameraLockEnabled && window.electronAPI?.lockComputer && cameraCheckedVersionRef.current !== version) {
+      if (!cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled && window.electronAPI?.lockComputer && cameraCheckedVersionRef.current !== version) {
         cameraCheckedVersionRef.current = version;
         const controller = new AbortController();
         cameraAbortRef.current = controller;
         const camera = await checkCameraPresence(controller.signal);
         if (!mountedRef.current || version !== session.version || !session.counting || !session.expiryPending) return;
-        if (camera === 'absent' && !controller.signal.aborted && settingsRef.current.cameraLockEnabled) {
+        if (camera === 'absent' && !controller.signal.aborted && !cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled) {
           if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting || !session.expiryPending) return;
           if (hasNativeTimer()) {
             const snapshot = await readNativeTimer();
             if (!snapshot || snapshot.version !== version || !snapshot.expiryPending || snapshot.manualPaused || snapshot.reasons.length) return;
           }
-          if (!mountedRef.current || version !== session.version || !session.counting || controller.signal.aborted || !settingsRef.current.cameraLockEnabled) return;
+          if (!mountedRef.current || version !== session.version || !session.counting || controller.signal.aborted || cameraAccessPendingRef.current || !settingsRef.current.cameraLockEnabled) return;
           try {
             if (await window.electronAPI.lockComputer()) {
               if (mountedRef.current) {
@@ -489,7 +498,7 @@ export const App: React.FC = () => {
     if (!updated.cameraLockEnabled) cameraAbortRef.current?.abort();
     setSettings(updated);
     if (!updated.meetingHistoryEnabled) setCurrentMeetingApplications([]);
-    saveSettings(updated);
+    saveSettings(cameraAccessPendingRef.current ? { ...updated, cameraLockEnabled: false } : updated);
     if (updated.workMinutes !== previous.workMinutes || updated.timerPreset !== previous.timerPreset) {
       setNoticeMessage(null);
       pendingBreakRef.current = null;
@@ -960,6 +969,7 @@ export const App: React.FC = () => {
           updates={updates}
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
+          onCameraAccessPendingChange={handleCameraAccessPendingChange}
           onClose={() => setIsSettingsOpen(false)}
           meetingHistoryControls={meetingHistoryControls}
         />

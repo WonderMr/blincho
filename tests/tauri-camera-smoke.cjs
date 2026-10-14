@@ -85,10 +85,10 @@ async function stop() {
       document.querySelector('.nav-settings-button').click();
       await new Promise(resolve=>setTimeout(resolve,100));
       const toggle=document.getElementById('camera-lock-enabled');
-      await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:true,detections:result.detections.length,webglRequests,cameraAPI:typeof navigator.mediaDevices?.getUserMedia==='function',lockAPI:typeof window.electronAPI.lockComputer==='function',lockRejected,defaultEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==false,toggleReady:!!toggle&&toggle.checked&&!toggle.disabled}}});
+      await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:true,detections:result.detections.length,webglRequests,cameraAPI:typeof navigator.mediaDevices?.getUserMedia==='function',lockAPI:typeof window.electronAPI.lockComputer==='function',lockRejected,defaultDisabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==true,toggleReady:!!toggle&&!toggle.checked&&!toggle.disabled}}});
     }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:false,error:String(error),stack:error?.stack,webglRequests,errors}}})}finally{prototypes.forEach((prototype,index)=>{prototype.getContext=originals[index]});console.error=originalError;detector?.close()}})()`);
     const probe = (await until(value => value.renderer?.cameraSmoke)).renderer.cameraSmoke;
-    assert.equal(probe.passed, true, JSON.stringify(probe)); assert.equal(probe.webglRequests, 0); assert.equal(probe.cameraAPI, true); assert.equal(probe.lockAPI, true); assert.equal(probe.lockRejected, true); assert.equal(probe.defaultEnabled, true); assert.equal(probe.toggleReady, true);
+    assert.equal(probe.passed, true, JSON.stringify(probe)); assert.equal(probe.webglRequests, 0); assert.equal(probe.cameraAPI, true); assert.equal(probe.lockAPI, true); assert.equal(probe.lockRejected, true); assert.equal(probe.defaultDisabled, true); assert.equal(probe.toggleReady, true);
     console.log(JSON.stringify({ ...probe, executable, profile: directory, limitation: 'Actual camera hardware and physical locking were not invoked.' }, null, 2));
   } finally {
     try { await stop(); } catch (error) { console.error(error); process.exitCode = 1; }

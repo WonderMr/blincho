@@ -537,5 +537,11 @@
   "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Aan het einde van een werkinterval controleert de camera of er iemand is. Als niemand wordt gedetecteerd, wordt de computer vergrendeld. De controle gebeurt op het apparaat; beelden worden niet opgeslagen of verstuurd. Cameratoestemming is vereist. Als de camera of controle niet beschikbaar is, wordt vergrendelen overgeslagen.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Beschikbaar in de desktop-app met cameraondersteuning. De browser vergrendelt de computer niet.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "De camera heeft niemand gedetecteerd. De computer is vergrendeld.",
-  "Не удалось заблокировать компьютер.": "De computer kon niet worden vergrendeld."
+  "Не удалось заблокировать компьютер.": "De computer kon niet worden vergrendeld.",
+  "При включении проверяется доступ к камере. Если нужно, система запросит разрешение.": "Bij het inschakelen van deze optie wordt de toegang tot de camera gecontroleerd. Zo nodig vraagt het systeem om toestemming.",
+  "Запрашиваем доступ к камере…": "Toegang tot de camera wordt aangevraagd…",
+  "Доступ к камере разрешён.": "Toegang tot de camera is toegestaan.",
+  "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Toegang tot de camera is niet toegestaan. Sta dit toe in de systeeminstellingen en schakel deze optie daarna opnieuw in.",
+  "Камера недоступна. Проверьте подключение и попробуйте снова.": "De camera is niet beschikbaar. Controleer de verbinding en probeer het opnieuw.",
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Op macOS: Systeeminstellingen → Privacy en beveiliging → Camera."
 }
