@@ -61,6 +61,29 @@
 .statistics-average-card p { color: var(--text-secondary); font-size: .73rem; line-height: 1.6; }
 .statistics-average-breaks { display: block; color: var(--text-primary); font-size: .76rem; margin-top: 10px; }
 .statistics-week-total { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle); font-size: .76rem; line-height: 1.6; }
+.statistics-meetings { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--border-subtle); }
+.statistics-meetings-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.statistics-meetings-heading h4, .statistics-week-meetings h4 { display: flex; align-items: center; gap: 7px; font-size: .88rem; font-weight: 600; }
+.statistics-meetings-heading > span { font-size: .72rem; color: var(--text-secondary); }
+.statistics-meeting-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 14px; padding-top: 0; border-top: 0; }
+.statistics-meeting-lane, .statistics-meeting-axis-row { display: grid; grid-template-columns: minmax(90px, 125px) minmax(0, 1fr); align-items: center; gap: 12px; }
+.statistics-meeting-lane + .statistics-meeting-lane { margin-top: 7px; }
+.statistics-meeting-lane-label { font-size: .7rem; line-height: 1.5; overflow-wrap: anywhere; color: var(--text-secondary); }
+.statistics-meeting-lane .statistics-timeline-track { height: 20px; }
+.activity-meeting { background: #5a99ad; min-width: 2px; }
+.statistics-meeting-list { margin-top: 18px; }
+.statistics-meeting-app { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.statistics-meeting-live-badge { display: inline-flex; align-items: center; gap: 5px; font-size: .65rem; color: var(--text-secondary); }
+.statistics-meeting-live { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--accent-primary); }
+.statistics-meeting-app-totals { margin-top: 16px; }
+.statistics-meeting-app-totals h5 { font-size: .74rem; font-weight: 500; color: var(--text-secondary); }
+.statistics-meeting-app-totals dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 10px 0 0; }
+.statistics-meeting-app-totals dt { font-size: .74rem; overflow-wrap: anywhere; }
+.statistics-meeting-app-totals dd { margin: 5px 0 0; font-size: .83rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.statistics-meeting-app-totals dd span { display: block; margin-top: 3px; font-size: .69rem; font-weight: 400; color: var(--text-secondary); }
+.statistics-week-meetings { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--border-subtle); }
+.statistics-week-meetings strong { display: block; margin-top: 10px; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.statistics-week-meetings p, .statistics-week-meetings > span { display: block; margin-top: 6px; color: var(--text-secondary); font-size: .73rem; line-height: 1.6; }
 
 @media (max-width: 680px) {
   .statistics-detail-header { flex-direction: column; }
@@ -71,6 +94,8 @@
   .statistics-day-button > span:first-child { font-size: .65rem; }
   .statistics-average-grid { gap: 14px; }
   .statistics-average-card + .statistics-average-card { padding-inline-start: 14px; }
+  .statistics-meeting-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .statistics-meeting-lane, .statistics-meeting-axis-row { grid-template-columns: minmax(70px, 90px) minmax(0, 1fr); gap: 8px; }
 }
 @media (max-width: 390px) {
   .statistics-average-grid { grid-template-columns: minmax(0, 1fr); }

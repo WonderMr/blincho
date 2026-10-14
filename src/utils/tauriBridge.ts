@@ -2,7 +2,7 @@ import { gatherLegacyHistory } from './historyTransfer';
 import { createHistoryRecovery } from './historyRecovery';
 import type { HistoryStartupResult } from './historyRecovery';
 import { TimerSession, PresenceReason } from './timerSession';
-import type { AppSettings, ActivitySpan } from '../types';
+import type { AppSettings, ActivitySpan, MeetingSpan } from '../types';
 import type {} from './notifications';
 import type { UpdateState } from './updates';
 
@@ -12,6 +12,8 @@ export interface NativeTimerSnapshot {
   absentSince: number | null; absenceEpoch: number; idleSeconds: number; locked: boolean; suspended: boolean;
   meetingPostponedEpoch?: number; breakElapsed: boolean; breakEndAt?: number | null; focusByDate: Record<string, number>; tickCount: number;
   activitySpans?: ActivitySpan[];
+  meetingSpans?: MeetingSpan[];
+  meetingApplications?: string[];
 }
 interface TauriGlobal {
   core: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };

@@ -15,6 +15,7 @@ Website: https://blincho.app
 - Includes exercises, a personal comfort journal and local statistics.
 - Shows a small tray preview with the next break countdown, recorded work time and completed breaks on macOS and Windows. Linux exposes the live summary in its tray menu.
 - Records daily work, absence, lock, sleep, manual pauses and rest intervals locally. Browse previous days, average and longest work intervals, and weekly averages per calendar day or day of use. Older totals stay available; missing time records remain unknown.
+- Records detected calls with their application, observed start/end and duration. Browse daily call lanes and per-app totals, average call lengths and weekly call time. Browser calls identify the browser; detection is approximate and requires meeting detection to be enabled.
 - Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
 - Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.
 

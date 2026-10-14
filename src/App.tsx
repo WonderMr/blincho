@@ -3,17 +3,18 @@ import { watchAppearance } from './utils/appearance';
 import { t, getLocale, formatNumber } from './i18n/runtime';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  AppSettings, DayStats, ExerciseTechnique, CVSSurveyResult, TimerPreset, ActivitySpan
+  AppSettings, DayStats, ExerciseTechnique, CVSSurveyResult, TimerPreset, ActivitySpan, MeetingSpan
 } from './types';
 import {
   loadSettings, saveSettings, loadTodayStats, loadAllStats,
-  loadCVSResult, recordBreakCompleted, recordExerciseCompleted, recordTimerProgress, recordActivitySpans, getTodayDateString
+  loadCVSResult, recordBreakCompleted, recordExerciseCompleted, recordTimerProgress, getTodayDateString
 } from './utils/storage';
 import { soundSynth } from './audio/soundSynth';
 import { showEyeBreakNotification } from './utils/notifications';
 import { MEDICAL_TECHNIQUES } from './data/medicalTechniques';
 import { getSystemIdleSeconds, detectActiveMeeting, hasSystemIdleDetection, hasMeetingDetection, markPageActivity } from './utils/detector';
 import { TimerSession, PresenceReason, normalizeTimerSettings } from './utils/timerSession';
+import { normalizeMeetingApplications, splitMeetingsByDay } from './utils/meetings';
 
 import { Navbar, ActiveTab } from './components/Navbar';
 import { TimerWidget } from './components/TimerWidget';
@@ -58,6 +59,7 @@ export const App: React.FC = () => {
     setNotice(next);
   };
   const [inMeetingActive, setInMeetingActive] = useState(false);
+  const [currentMeetingApplications, setCurrentMeetingApplications] = useState<string[]>([]);
   const [savedRemainingBeforeReset, setSavedRemainingBeforeReset] = useState<number | null>(null);
   const undoRef = useRef<{ remainingMs: number; totalMs: number } | null>(null);
   const resetOnReturnRef = useRef(false);
@@ -66,7 +68,9 @@ export const App: React.FC = () => {
   const session = sessionRef.current;
   const nativeFocusRef = useRef(new Map<string, number>());
   const nativeActivityEndRef = useRef(0);
+  const nativeMeetingEndsRef = useRef(new Map<string, number>());
   const pendingActivityRef = useRef<ActivitySpan[]>([]);
+  const pendingMeetingsRef = useRef<MeetingSpan[]>([]);
   const lastActivityFlushRef = useRef(Date.now());
   const nativeAbsenceEpochRef = useRef(0);
   const nativeTickRef = useRef(0);
@@ -106,10 +110,11 @@ export const App: React.FC = () => {
   const flushFocus = () => {
     const focus = session.drainFocus();
     pendingActivityRef.current.push(...session.drainActivity());
-    if (focus.length === 0 && (pendingActivityRef.current.length === 0 || Date.now() - lastActivityFlushRef.current < 5000)) return;
+    if (focus.length === 0 && ((pendingActivityRef.current.length === 0 && pendingMeetingsRef.current.length === 0) || Date.now() - lastActivityFlushRef.current < 5000)) return;
     const activity = pendingActivityRef.current.splice(0);
+    const meetings = pendingMeetingsRef.current.splice(0);
     lastActivityFlushRef.current = Date.now();
-    recordTimerProgress(focus, activity);
+    recordTimerProgress(focus, activity, meetings);
     refreshStats();
   };
   const sync = () => {
@@ -405,6 +410,7 @@ export const App: React.FC = () => {
     flushFocus();
     settingsRef.current = updated;
     setSettings(updated);
+    if (!updated.meetingDetectionEnabled) setCurrentMeetingApplications([]);
     saveSettings(updated);
     if (updated.workMinutes !== previous.workMinutes || updated.timerPreset !== previous.timerPreset) {
       setNoticeMessage(null);
@@ -541,6 +547,18 @@ export const App: React.FC = () => {
         pendingActivityRef.current.push(...activity);
         nativeActivityEndRef.current = Math.max(...activity.map(span => span.end));
       }
+      const meetingSpans = [...splitMeetingsByDay(snapshot.meetingSpans ?? []).values()].flat()
+        .sort((a, b) => a.start - b.start || a.end - b.end);
+      for (const span of meetingSpans) {
+        // One application's watermark cannot discard an overlapping call in another.
+        const previous = nativeMeetingEndsRef.current.get(span.app) ?? 0;
+        if (span.end <= previous) continue;
+        pendingMeetingsRef.current.push({ ...span, start: Math.max(span.start, previous) });
+        nativeMeetingEndsRef.current.set(span.app, span.end);
+      }
+      const meetingApplications = settingsRef.current.meetingDetectionEnabled ? normalizeMeetingApplications(snapshot.meetingApplications) : [];
+      setCurrentMeetingApplications(previous => previous.length === meetingApplications.length &&
+        previous.every((app, index) => app === meetingApplications[index]) ? previous : meetingApplications);
       session.lastUpdated = Date.now();
       // Add the new pause causes before removing old ones, avoiding a false return between causes.
       for (const active of [true, false]) for (const reason of ['suspended', 'locked', 'unconfirmed', 'idle'] as PresenceReason[]) {
@@ -620,7 +638,8 @@ export const App: React.FC = () => {
     return () => {
       session.advance(Date.now());
       const finalActivity = [...pendingActivityRef.current.splice(0), ...session.drainActivity()];
-      if (finalActivity.length) recordActivitySpans(finalActivity);
+      const finalMeetings = pendingMeetingsRef.current.splice(0);
+      if (finalActivity.length || finalMeetings.length) recordTimerProgress([], finalActivity, finalMeetings);
       mountedRef.current = false;
       pendingBreakRef.current = null;
       clearInterval(timer);
@@ -763,6 +782,7 @@ export const App: React.FC = () => {
               todayStats={todayStats}
               allStats={allStats}
               cvsResult={cvsResult}
+              meetingApplications={currentMeetingApplications}
             />
           )}
         </main>
