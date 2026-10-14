@@ -3,12 +3,17 @@ import { t, formatNumber, formatDate } from '../i18n/runtime';
 import React, { useState } from 'react';
 import { DayStats, CVSSurveyResult, ActivityState } from '../types';
 import { analyzeDayActivity, summarizeWeek } from '../utils/activity';
-import { Trophy, Flame, CheckCircle2, Clock, Calendar, Zap, LockKeyhole, Activity, Monitor, Coffee, Pause, ChevronDown } from 'lucide-react';
+import { analyzeDayMeetings, summarizeWeekMeetings } from '../utils/meetings';
+import { MeetingHistoryControls } from './MeetingHistoryControls';
+import type { MeetingHistoryControlsProps } from './MeetingHistoryControls';
+import { Trophy, Flame, CheckCircle2, Clock, Calendar, Zap, LockKeyhole, Activity, Monitor, Coffee, Pause, ChevronDown, Phone } from 'lucide-react';
 
 interface StatisticsViewProps {
   todayStats: DayStats;
   allStats: DayStats[];
   cvsResult: CVSSurveyResult | null;
+  meetingApplications?: string[];
+  meetingHistoryControls?: Omit<MeetingHistoryControlsProps, 'id'>;
 }
 
 const localDayKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -45,7 +50,7 @@ const stateCategory = (state: TimelineState) => {
   return state;
 };
 
-export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allStats, cvsResult }) => {
+export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allStats, cvsResult, meetingApplications = [], meetingHistoryControls }) => {
   useI18n();
   const [selectedDate, setSelectedDate] = useState(todayStats.date);
   const history = new Map(allStats.map(day => [day.date, day]));
@@ -71,6 +76,11 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allS
   const displayedDate = availableDates.includes(selectedDate) ? selectedDate : todayStats.date;
   const selectedDay = history.get(displayedDate) ?? emptyDay(displayedDate);
   const activity = analyzeDayActivity(selectedDay);
+  const meetings = analyzeDayMeetings(selectedDay);
+  const meetingWeek = summarizeWeekMeetings(days, todayStats.date);
+  const appLabel = (app: string) => app === 'unknown' ? t("Неизвестное приложение") : app;
+  const lastMeetingEndByApp = new Map<string, number>();
+  for (const span of meetings.spans) lastMeetingEndByApp.set(span.app, span.end);
   const hasConfirmedActivity = activity.recordedMinutes > 0;
   const week = summarizeWeek(days, todayStats.date);
   const dayLength = activity.end - activity.start;
@@ -140,7 +150,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allS
           {last7Days.map(day => <button key={day.dateStr} type="button" className={`statistics-day-button ${day.dateStr === displayedDate ? 'is-selected' : ''}`}
             aria-pressed={day.dateStr === displayedDate} aria-label={`${day.dateLabel}${day.isToday ? t(" (сегодня)") : ''}`} aria-controls="daily-activity-detail"
             onClick={() => setSelectedDate(day.dateStr)}>
-            <span>{day.dayName}</span><strong>{day.dayNumber}</strong><span className="statistics-day-dot" data-recorded={(history.get(day.dateStr)?.activity?.length ?? 0) > 0} aria-hidden="true" />
+            <span>{day.dayName}</span><strong>{day.dayNumber}</strong><span className="statistics-day-dot" data-recorded={(history.get(day.dateStr)?.activity?.length ?? 0) > 0 || (history.get(day.dateStr)?.meetings?.length ?? 0) > 0} aria-hidden="true" />
           </button>)}
         </div>
         <div id="daily-activity-detail" className="statistics-daily-detail">
@@ -186,6 +196,51 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allS
               </tr>)}</tbody>
             </table></div>
           </details>}
+          <section className="statistics-meetings" aria-labelledby="daily-meetings-title">
+            {meetingHistoryControls && <MeetingHistoryControls id="statistics-meeting-history" {...meetingHistoryControls} />}
+            <div className="statistics-meetings-heading">
+              <h4 id="daily-meetings-title"><Phone size={17} aria-hidden="true" />{t("Созвоны")}</h4>
+              <span>{t("Созвонов: {value0}", { value0: meetings.callCount })}</span>
+            </div>
+            <dl className="statistics-session-summary statistics-meeting-metrics">
+              <div><dt>{t("Время в созвонах")}</dt><dd>{formatDuration(meetings.totalMinutes)}</dd></div>
+              <div><dt>{t("Средняя длительность созвона")}</dt><dd>{meetings.callCount ? formatDuration(meetings.averageCallMinutes) : t("Нет данных")}</dd></div>
+              <div><dt>{t("Самый длинный созвон")}</dt><dd>{meetings.callCount ? formatDuration(meetings.longestCallMinutes) : t("Нет данных")}</dd></div>
+            </dl>
+            {meetings.callCount > 0 ? <>
+              <figure className="statistics-timeline statistics-meeting-timeline" aria-labelledby="daily-meetings-caption">
+                {meetings.applications.map(application => <div className="statistics-meeting-lane" key={application.app}>
+                  <span className="statistics-meeting-lane-label"><bdi>{appLabel(application.app)}</bdi></span>
+                  <div className="statistics-timeline-track" aria-hidden="true" dir="ltr">
+                    {meetings.spans.filter(span => span.app === application.app).map(span => <span key={span.start}
+                      className="statistics-timeline-segment activity-meeting"
+                      style={{ left: `${(span.start - activity.start) / dayLength * 100}%`, width: `${(span.end - span.start) / dayLength * 100}%` }}
+                      title={t("{value0}, с {value1} до {value2}: {value3}", { value0: appLabel(span.app), value1: segmentTime(span.start), value2: segmentTime(span.end), value3: formatDuration((span.end - span.start) / 60000) })} />)}
+                  </div>
+                </div>)}
+                <div className="statistics-meeting-axis-row"><span aria-hidden="true" />
+                  <div className="statistics-timeline-axis" aria-hidden="true" dir="ltr">{timeTicks.map(tick => <span key={tick.hour} style={{ left: `${tick.position}%` }}>{`${String(tick.hour).padStart(2, '0')}:00`}</span>)}</div>
+                </div>
+                <figcaption id="daily-meetings-caption" className="sr-only">{t("Созвоны за {value0}", { value0: selectedDayLabel })}</figcaption>
+              </figure>
+              <div className="statistics-interval-scroll statistics-meeting-list"><table className="statistics-interval-table">
+                <caption className="sr-only">{t("Созвоны за {value0}", { value0: selectedDayLabel })}</caption>
+                <thead><tr><th scope="col">{t("Время")}</th><th scope="col">{t("Приложение")}</th><th scope="col">{t("Длительность")}</th></tr></thead>
+                <tbody>{meetings.spans.map(span => <tr key={`${span.app}-${span.start}`}>
+                  <td><bdi>{t("С {value0} до {value1}", { value0: segmentTime(span.start), value1: segmentTime(span.end) })}</bdi></td>
+                  <td><span className="statistics-meeting-app"><bdi>{appLabel(span.app)}</bdi>{displayedDate === todayStats.date && meetingApplications.includes(span.app) && span.end === lastMeetingEndByApp.get(span.app) && <span className="statistics-meeting-live-badge"><i className="statistics-meeting-live" aria-hidden="true" />{t("Созвон продолжается")}</span>}</span></td>
+                  <td>{formatDuration((span.end - span.start) / 60000)}</td>
+                </tr>)}</tbody>
+              </table></div>
+              <div className="statistics-meeting-app-totals"><h5>{t("По приложениям")}</h5>
+                <dl>{meetings.applications.map(application => <div key={application.app}><dt><bdi>{appLabel(application.app)}</bdi></dt>
+                  <dd>{formatDuration(application.totalMinutes)}<span>{t("Созвонов: {value0}", { value0: application.callCount })}</span></dd></div>)}</dl>
+              </div>
+            </> : <p className="statistics-history-note">{t("В этот день созвоны не записаны.")}</p>}
+            <p className="statistics-detail-note">{t("Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.")}</p>
+            <p className="statistics-detail-note">{t("Для звонков в браузере показывается название браузера.")} {t("Время определяется по системным признакам и может быть приблизительным.")}</p>
+            {meetings.callCount > 0 && <p className="statistics-detail-note">{t("Пересекающиеся созвоны учитываются в общем времени один раз.")}</p>}
+          </section>
         </div>
         <p className="statistics-detail-note statistics-recording-note">{t("Активность записывается, пока Blincho запущен. В браузере скрытая вкладка отмечается отдельно.")}</p>
         <p className="statistics-detail-note">{t("Скрытая вкладка и неподтверждённая активность не включаются в работу или отсутствие.")}</p>
@@ -201,6 +256,11 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allS
         </div>
         <p className="statistics-week-total">{t("Всего за неделю: {value0} работы, {value1} перерывов, {value2} упражнений.", { value0: formatDuration(week.totalFocusMinutes), value1: week.totalBreaks, value2: week.totalExercises })}</p>
         <p className="statistics-detail-note">{t("Рабочее время взято из записи таймера. Старые итоги сохраняются в средних значениях.")}</p>
+        <div className="statistics-week-meetings"><h4><Phone size={16} aria-hidden="true" />{t("Созвоны за неделю")}</h4>
+          <strong>{formatDuration(meetingWeek.totalMinutes)}</strong>
+          <p>{t("Всего за неделю: {value0} в созвонах, {value1} созвонов.", { value0: formatDuration(meetingWeek.totalMinutes), value1: meetingWeek.callCount })}</p>
+          <span>{t("В среднем в день: {value0}", { value0: formatDuration(meetingWeek.averageMinutesPerDay) })}</span>
+        </div>
       </section>
 
       <div className="glass-card">

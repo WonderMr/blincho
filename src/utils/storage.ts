@@ -1,5 +1,6 @@
-import { AppSettings, DayStats, CVSSurveyResult, ActivitySpan } from '../types';
+import { AppSettings, DayStats, CVSSurveyResult, ActivitySpan, MeetingSpan } from '../types';
 import { normalizeActivity, splitActivityByDay } from './activity';
+import { normalizeMeetings, splitMeetingsByDay } from './meetings';
 import { normalizeTimerSettings } from './timerSession';
 import { CVS_SURVEY_QUESTIONS } from '../data/cvsQuestions';
 
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   idleThresholdMinutes: 1,
   strictModeIgnoreIdle: false,
   meetingDetectionEnabled: true,
+  meetingHistoryEnabled: false,
   strictMode: false,
 };
 
@@ -65,7 +67,10 @@ export function loadAllStats(): DayStats[] {
       /^\d{4}-\d{2}-\d{2}$/.test(stat.date) &&
       [stat.breaksCompleted, stat.exercisesCompleted, stat.focusMinutes].every(value =>
         typeof value === 'number' && Number.isFinite(value) && value >= 0))
-      .map(stat => ({ ...stat, ...(stat.activity !== undefined ? { activity: normalizeActivity(stat.activity, stat.date) } : {}) }))
+      .map(stat => ({ ...stat,
+        ...(stat.activity !== undefined ? { activity: normalizeActivity(stat.activity, stat.date) } : {}),
+        ...(stat.meetings !== undefined ? { meetings: normalizeMeetings(stat.meetings, stat.date) } : {}),
+      }))
       .sort((a, b) => a.date.localeCompare(b.date));
   } catch {
     return [];
@@ -75,6 +80,27 @@ export function loadAllStats(): DayStats[] {
 export function loadTodayStats(stats: DayStats[] = loadAllStats()): DayStats {
   const today = getTodayDateString();
   return stats.find(stat => stat.date === today) || emptyDay(today);
+}
+
+// Remove call records only. Keep activity, totals, completion IDs and other data.
+// Return the write outcome so the UI never announces a deletion that failed.
+export function clearMeetingHistory(): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.STATS);
+    if (!raw) return true;
+    const stats: unknown = JSON.parse(raw);
+    if (!Array.isArray(stats)) return false;
+    const cleared = stats.map(day => {
+      if (!day || typeof day !== 'object' || Array.isArray(day)) return day;
+      const { meetings: _meetings, ...rest } = day;
+      return rest;
+    });
+    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(cleared));
+    return true;
+  } catch (error) {
+    console.warn('Blincho: Failed to clear call history:', error);
+    return false;
+  }
 }
 
 function updateDay(date: string, update: (stat: DayStats, stats: DayStats[]) => void): DayStats {
@@ -116,10 +142,11 @@ export function recordActivitySpans(spans: ActivitySpan[]): void {
 
 // Focus totals and timeline observations share one snapshot and one write,
 // including heartbeats that cross local midnight.
-export function recordTimerProgress(focus: [string, number][], spans: ActivitySpan[]): void {
+export function recordTimerProgress(focus: [string, number][], spans: ActivitySpan[], meetingSpans: MeetingSpan[] = []): void {
   const activity = splitActivityByDay(spans);
+  const meetings = splitMeetingsByDay(meetingSpans);
   const validFocus = focus.filter(([date, seconds]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(seconds) && seconds > 0);
-  if (!validFocus.length && !activity.size) return;
+  if (!validFocus.length && !activity.size && !meetings.size) return;
   const stats = loadAllStats();
   const history = new Map(stats.map(day => [day.date, day]));
   const getDay = (date: string) => {
@@ -131,6 +158,10 @@ export function recordTimerProgress(focus: [string, number][], spans: ActivitySp
   for (const [date, entries] of activity) {
     const day = getDay(date);
     day.activity = normalizeActivity([...(day.activity ?? []), ...entries], date);
+  }
+  for (const [date, entries] of meetings) {
+    const day = getDay(date);
+    day.meetings = normalizeMeetings([...(day.meetings ?? []), ...entries], date);
   }
   try {
     localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify([...history.values()].sort((a, b) => a.date.localeCompare(b.date))));

@@ -1,4 +1,6 @@
-use super::{active_meeting_assertion, bounded_probe, MeetingStatus, Presence};
+use super::{
+    active_meeting_applications, bounded_probe, needs_zoom_capture_probe, MeetingStatus, Presence,
+};
 use std::{
     ffi::{c_void, CString},
     sync::{mpsc, Arc},
@@ -193,17 +195,15 @@ pub fn meeting_supported() -> bool {
 }
 pub fn meeting_status() -> MeetingStatus {
     let assertion = bounded_probe("/usr/bin/pmset", &["-g", "assertions"]);
-    let (in_meeting, supported) = match assertion {
-        Some(output) if active_meeting_assertion(&output) => (true, true),
-        Some(_) => (
-            bounded_probe("/usr/bin/pgrep", &["-i", "-x", "CptHost"])
-                .is_some_and(|text| text.lines().any(|line| line.parse::<u32>().is_ok())),
-            true,
-        ),
-        None => (false, false),
+    let Some(output) = assertion else {
+        return MeetingStatus::inactive(false);
     };
-    MeetingStatus {
-        in_meeting,
-        supported,
+    let mut applications = active_meeting_applications(&output);
+    if needs_zoom_capture_probe(&applications)
+        && bounded_probe("/usr/bin/pgrep", &["-i", "-x", "CptHost"])
+            .is_some_and(|text| text.lines().any(|line| line.parse::<u32>().is_ok()))
+    {
+        applications.push("Zoom".into());
     }
+    MeetingStatus::detected(applications, true)
 }

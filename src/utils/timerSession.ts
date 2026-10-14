@@ -24,6 +24,7 @@ export function normalizeTimerSettings(settings: AppSettings): AppSettings {
     soundEnabled: boolean(settings.soundEnabled, true), notificationsEnabled: boolean(settings.notificationsEnabled, true),
     autoTakeoverModal: boolean(settings.autoTakeoverModal, true), idleDetectionEnabled: boolean(settings.idleDetectionEnabled, true),
     meetingDetectionEnabled: boolean(settings.meetingDetectionEnabled, true), strictMode: boolean(settings.strictMode, false),
+    meetingHistoryEnabled: boolean(settings.meetingHistoryEnabled, false),
     strictModeIgnoreIdle: false,
   };
 }

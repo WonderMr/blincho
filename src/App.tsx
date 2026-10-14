@@ -3,17 +3,18 @@ import { watchAppearance } from './utils/appearance';
 import { t, getLocale, formatNumber } from './i18n/runtime';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  AppSettings, DayStats, ExerciseTechnique, CVSSurveyResult, TimerPreset, ActivitySpan
+  AppSettings, DayStats, ExerciseTechnique, CVSSurveyResult, TimerPreset, ActivitySpan, MeetingSpan
 } from './types';
 import {
   loadSettings, saveSettings, loadTodayStats, loadAllStats,
-  loadCVSResult, recordBreakCompleted, recordExerciseCompleted, recordTimerProgress, recordActivitySpans, getTodayDateString
+  loadCVSResult, recordBreakCompleted, recordExerciseCompleted, recordTimerProgress, getTodayDateString, clearMeetingHistory
 } from './utils/storage';
 import { soundSynth } from './audio/soundSynth';
 import { showEyeBreakNotification } from './utils/notifications';
 import { MEDICAL_TECHNIQUES } from './data/medicalTechniques';
 import { getSystemIdleSeconds, detectActiveMeeting, hasSystemIdleDetection, hasMeetingDetection, markPageActivity } from './utils/detector';
 import { TimerSession, PresenceReason, normalizeTimerSettings } from './utils/timerSession';
+import { normalizeMeetingApplications, splitMeetingsByDay } from './utils/meetings';
 
 import { Navbar, ActiveTab } from './components/Navbar';
 import { TimerWidget } from './components/TimerWidget';
@@ -24,11 +25,12 @@ import { CVSSurvey } from './components/CVSSurvey';
 import { ErgonomicsGuide } from './components/ErgonomicsGuide';
 import { StatisticsView } from './components/StatisticsView';
 import { SettingsModal } from './components/SettingsModal';
+import type { MeetingHistoryControlsProps } from './components/MeetingHistoryControls';
 import { LanguageSuggestion } from './components/LanguageSuggestion';
 import { TransientNotice } from './components/TransientNotice';
 import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
-import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer } from './utils/tauriBridge';
+import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory } from './utils/tauriBridge';
 
 import {
   BookOpen, Play, Lock, Video, UserCheck
@@ -58,6 +60,7 @@ export const App: React.FC = () => {
     setNotice(next);
   };
   const [inMeetingActive, setInMeetingActive] = useState(false);
+  const [currentMeetingApplications, setCurrentMeetingApplications] = useState<string[]>([]);
   const [savedRemainingBeforeReset, setSavedRemainingBeforeReset] = useState<number | null>(null);
   const undoRef = useRef<{ remainingMs: number; totalMs: number } | null>(null);
   const resetOnReturnRef = useRef(false);
@@ -66,11 +69,22 @@ export const App: React.FC = () => {
   const session = sessionRef.current;
   const nativeFocusRef = useRef(new Map<string, number>());
   const nativeActivityEndRef = useRef(0);
+  const nativeMeetingEndsRef = useRef(new Map<string, number>());
   const pendingActivityRef = useRef<ActivitySpan[]>([]);
+  const pendingMeetingsRef = useRef<MeetingSpan[]>([]);
   const lastActivityFlushRef = useRef(Date.now());
   const nativeAbsenceEpochRef = useRef(0);
   const nativeTickRef = useRef(0);
   const nativeMeetingEpochRef = useRef(0);
+  const nativeHistoryEpochRef = useRef(0);
+  const nativeHistoryMinimumEpochRef = useRef(0);
+  const nativeHistoryConsentGenerationRef = useRef(0);
+  const nativeHistoryAcknowledgedGenerationRef = useRef<number | null>(null);
+  const nativeMeetingSinceRef = useRef(settings.meetingHistoryEnabled ? 0 : Infinity);
+  const clearingMeetingsRef = useRef(false);
+  const applyNativeRef = useRef<(snapshot: NativeTimerSnapshot) => void>(() => {});
+  const [meetingHistoryPending, setMeetingHistoryPending] = useState(false);
+  const [meetingHistoryFeedback, setMeetingHistoryFeedback] = useState<'deleted' | 'failed' | null>(null);
   const [, publish] = useState(0);
   const breakIdRef = useRef<string | null>(null);
   const pendingBreakRef = useRef<{ eventId: string; deadlineMonotonicAt: number } | null>(null);
@@ -103,18 +117,35 @@ export const App: React.FC = () => {
     setTodayStats(loadTodayStats(stats));
     setAllStats(stats);
   };
+  const canRecordMeetingHistory = () => settingsRef.current.meetingHistoryEnabled && !clearingMeetingsRef.current &&
+    (!hasNativeTimer() || nativeHistoryAcknowledgedGenerationRef.current === nativeHistoryConsentGenerationRef.current);
   const flushFocus = () => {
     const focus = session.drainFocus();
     pendingActivityRef.current.push(...session.drainActivity());
-    if (focus.length === 0 && (pendingActivityRef.current.length === 0 || Date.now() - lastActivityFlushRef.current < 5000)) return;
+    if (focus.length === 0 && ((pendingActivityRef.current.length === 0 && pendingMeetingsRef.current.length === 0) || Date.now() - lastActivityFlushRef.current < 5000)) return;
     const activity = pendingActivityRef.current.splice(0);
+    const meetings = pendingMeetingsRef.current.splice(0).filter(canRecordMeetingHistory);
     lastActivityFlushRef.current = Date.now();
-    recordTimerProgress(focus, activity);
+    recordTimerProgress(focus, activity, meetings);
     refreshStats();
+  };
+  const synchronizeTimer = () => {
+    const generation = nativeHistoryConsentGenerationRef.current;
+    const historyEnabled = settingsRef.current.meetingHistoryEnabled;
+    synchronizeNativeTimer(session, settingsRef.current, snapshot => {
+      // Only the acknowledgement of this consent generation can open recording.
+      if (!mountedRef.current || !historyEnabled || !settingsRef.current.meetingHistoryEnabled ||
+        generation !== nativeHistoryConsentGenerationRef.current) return;
+      const epoch = snapshot.meetingHistoryEpoch ?? 0;
+      if (epoch < nativeHistoryMinimumEpochRef.current) return;
+      nativeHistoryMinimumEpochRef.current = Math.max(nativeHistoryMinimumEpochRef.current, epoch);
+      nativeHistoryEpochRef.current = Math.max(nativeHistoryEpochRef.current, epoch);
+      nativeHistoryAcknowledgedGenerationRef.current = generation;
+    });
   };
   const sync = () => {
     if (mountedRef.current) {
-      synchronizeNativeTimer(session, settingsRef.current);
+      synchronizeTimer();
       publish(value => value + 1);
     }
   };
@@ -401,10 +432,22 @@ export const App: React.FC = () => {
     if (updated.timerPreset === previous.timerPreset &&
       (updated.workMinutes !== previous.workMinutes || updated.breakSeconds !== previous.breakSeconds)) updated.timerPreset = 'custom';
     updated = normalizeTimerSettings(updated);
+    if (updated.meetingHistoryEnabled !== previous.meetingHistoryEnabled) {
+      // Discard buffered calls and require observations after this opt-in boundary.
+      nativeHistoryConsentGenerationRef.current += 1;
+      nativeHistoryAcknowledgedGenerationRef.current = null;
+      pendingMeetingsRef.current = [];
+      nativeMeetingSinceRef.current = updated.meetingHistoryEnabled ? Date.now() : Infinity;
+      nativeHistoryMinimumEpochRef.current = nativeHistoryEpochRef.current + 1;
+      nativeMeetingEndsRef.current.clear();
+      setCurrentMeetingApplications([]);
+      setMeetingHistoryFeedback(null);
+    }
     session.advance(Date.now());
     flushFocus();
     settingsRef.current = updated;
     setSettings(updated);
+    if (!updated.meetingHistoryEnabled) setCurrentMeetingApplications([]);
     saveSettings(updated);
     if (updated.workMinutes !== previous.workMinutes || updated.timerPreset !== previous.timerPreset) {
       setNoticeMessage(null);
@@ -417,6 +460,44 @@ export const App: React.FC = () => {
     void samplePresence();
     if (session.breakActive) sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(updated.strictMode));
     sync();
+  };
+  const handleClearMeetingHistory = async () => {
+    if (clearingMeetingsRef.current) return;
+    clearingMeetingsRef.current = true;
+    pendingMeetingsRef.current = [];
+    nativeMeetingSinceRef.current = Date.now();
+    setCurrentMeetingApplications([]);
+    setMeetingHistoryPending(true);
+    setMeetingHistoryFeedback(null);
+    try {
+      // Native invalidation must complete before removing persisted records.
+      const snapshot = await clearNativeMeetingHistory();
+      if (snapshot) {
+        nativeHistoryMinimumEpochRef.current = Math.max(nativeHistoryMinimumEpochRef.current, snapshot.meetingHistoryEpoch ?? 0);
+        nativeHistoryEpochRef.current = Math.max(nativeHistoryEpochRef.current, snapshot.meetingHistoryEpoch ?? 0);
+        applyNativeRef.current(snapshot);
+        nativeTickRef.current = Math.max(nativeTickRef.current, snapshot.tickCount);
+      }
+      pendingMeetingsRef.current = [];
+      nativeMeetingEndsRef.current.clear();
+      if (!clearMeetingHistory()) throw new Error('Call history storage deletion failed');
+      if (mountedRef.current) { refreshStats(); setMeetingHistoryFeedback('deleted'); }
+    } catch (error) {
+      console.warn('Blincho: Call history deletion failed:', error);
+      if (mountedRef.current) setMeetingHistoryFeedback('failed');
+    } finally {
+      clearingMeetingsRef.current = false;
+      if (mountedRef.current) setMeetingHistoryPending(false);
+    }
+  };
+  const meetingHistoryControls: Omit<MeetingHistoryControlsProps, 'id'> = {
+    enabled: settings.meetingHistoryEnabled,
+    supported: hasNativeTimer() && hasMeetingDetection(),
+    hasHistory: allStats.some(day => (day.meetings?.length ?? 0) > 0),
+    pending: meetingHistoryPending,
+    feedback: meetingHistoryFeedback,
+    onEnabledChange: enabled => handleUpdateSettings({ ...settingsRef.current, meetingHistoryEnabled: enabled }),
+    onDelete: handleClearMeetingHistory,
   };
   const handleSelectPreset = (preset: TimerPreset) => {
     setNoticeMessage(null);
@@ -541,6 +622,22 @@ export const App: React.FC = () => {
         pendingActivityRef.current.push(...activity);
         nativeActivityEndRef.current = Math.max(...activity.map(span => span.end));
       }
+      const meetingSpans = [...splitMeetingsByDay(snapshot.meetingSpans ?? []).values()].flat()
+        .sort((a, b) => a.start - b.start || a.end - b.end);
+      const historyEpoch = snapshot.meetingHistoryEpoch ?? 0;
+      nativeHistoryEpochRef.current = Math.max(nativeHistoryEpochRef.current, historyEpoch);
+      const canRecordMeetings = canRecordMeetingHistory() && hasMeetingDetection() &&
+        historyEpoch >= nativeHistoryMinimumEpochRef.current;
+      for (const span of canRecordMeetings ? meetingSpans : []) {
+        // One application's watermark cannot discard an overlapping call in another.
+        const previous = Math.max(nativeMeetingEndsRef.current.get(span.app) ?? 0, nativeMeetingSinceRef.current);
+        if (span.end <= previous) continue;
+        if (canRecordMeetings) pendingMeetingsRef.current.push({ ...span, start: Math.max(span.start, previous) });
+        nativeMeetingEndsRef.current.set(span.app, span.end);
+      }
+      const meetingApplications = canRecordMeetings ? normalizeMeetingApplications(snapshot.meetingApplications) : [];
+      setCurrentMeetingApplications(previous => previous.length === meetingApplications.length &&
+        previous.every((app, index) => app === meetingApplications[index]) ? previous : meetingApplications);
       session.lastUpdated = Date.now();
       // Add the new pause causes before removing old ones, avoiding a false return between causes.
       for (const active of [true, false]) for (const reason of ['suspended', 'locked', 'unconfirmed', 'idle'] as PresenceReason[]) {
@@ -556,8 +653,9 @@ export const App: React.FC = () => {
       }
       if (snapshot.expiryPending && snapshot.version === session.version && session.counting) void handlersRef.current.handleTimerExpired();
     };
+    applyNativeRef.current = applyNative;
     const unsubscribeNative = hasNativeTimer() ? subscribeNativeTimer(applyNative) : undefined;
-    if (hasNativeTimer()) synchronizeNativeTimer(session, settingsRef.current);
+    if (hasNativeTimer()) synchronizeTimer();
     const tick = async () => {
       if (polling) return;
       polling = true;
@@ -620,7 +718,8 @@ export const App: React.FC = () => {
     return () => {
       session.advance(Date.now());
       const finalActivity = [...pendingActivityRef.current.splice(0), ...session.drainActivity()];
-      if (finalActivity.length) recordActivitySpans(finalActivity);
+      const finalMeetings = pendingMeetingsRef.current.splice(0).filter(canRecordMeetingHistory);
+      if (finalActivity.length || finalMeetings.length) recordTimerProgress([], finalActivity, finalMeetings);
       mountedRef.current = false;
       pendingBreakRef.current = null;
       clearInterval(timer);
@@ -763,6 +862,8 @@ export const App: React.FC = () => {
               todayStats={todayStats}
               allStats={allStats}
               cvsResult={cvsResult}
+              meetingApplications={currentMeetingApplications}
+              meetingHistoryControls={meetingHistoryControls}
             />
           )}
         </main>
@@ -813,6 +914,7 @@ export const App: React.FC = () => {
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
           onClose={() => setIsSettingsOpen(false)}
+          meetingHistoryControls={meetingHistoryControls}
         />
       )}
     </div>

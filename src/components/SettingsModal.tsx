@@ -1,6 +1,8 @@
 import { useI18n } from '../i18n/useI18n';
 import { LanguagePicker } from './LanguagePicker';
 import { UpdateSettings } from './UpdateSettings';
+import { MeetingHistoryControls } from './MeetingHistoryControls';
+import type { MeetingHistoryControlsProps } from './MeetingHistoryControls';
 import { UpdateControls } from '../utils/updates';
 import { t, formatNumber } from '../i18n/runtime';
 import React, { useEffect, useRef, useState } from 'react';
@@ -14,6 +16,7 @@ interface SettingsModalProps {
   onUpdateSettings: (newSettings: AppSettings) => void;
   onClose: () => void;
   updates?: UpdateControls;
+  meetingHistoryControls?: Omit<MeetingHistoryControlsProps, 'id'>;
 }
 
 interface ToggleRowProps {
@@ -43,7 +46,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ id, title, description, checked, 
   </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, updates }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, updates, meetingHistoryControls }) => {
   const { preference, suggestedLocale, SUPPORTED_LANGUAGES, setLanguagePreference } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -63,6 +66,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
     dialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (event.target instanceof HTMLElement && dialogRef.current?.contains(event.target)
+          && event.target.closest('[data-escape-confirmation="true"]')) return;
         event.preventDefault();
         event.stopPropagation();
         onCloseRef.current();
@@ -222,6 +227,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
             <ToggleRow id="meeting-detection" title={t("Откладывать перерыв во время звонка")}
               description={meetingSupported ? t("При системных признаках звонка перерыв откладывается. Детектор может ошибаться.") : t("Недоступно в этой версии. Системный детектор звонков поддерживается в приложении для macOS.")}
               checked={meetingSupported && settings.meetingDetectionEnabled} disabled={!meetingSupported} onChange={value => handleChange('meetingDetectionEnabled', value)} />
+            {meetingHistoryControls && <MeetingHistoryControls id="settings-meeting-history" {...meetingHistoryControls} />}
             <ToggleRow id="idle-detection" title={t("Автопауза без активности")}
               description={isNative ? t("Отсутствие мыши и клавиатуры не означает, что вы отошли: чтение тоже считается неактивностью.") : t("Учитывает ввод только на этой странице и скрытие вкладки. Активность в других приложениях недоступна.")}
               checked={settings.idleDetectionEnabled} onChange={value => handleChange('idleDetectionEnabled', value)} />
