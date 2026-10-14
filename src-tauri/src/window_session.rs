@@ -324,6 +324,15 @@ fn capture(
     };
     Ok(SavedWindow {
         placement,
+        #[cfg(target_os = "macos")]
+        // A miniaturized window still belongs in Dock. Explicit tray hiding can
+        // retain its native minimized flag, so the last presentation intent wins.
+        visible: if minimized {
+            crate::ui::dock_is_visible(window.app_handle())?
+        } else {
+            window.is_visible().map_err(|e| e.to_string())?
+        },
+        #[cfg(not(target_os = "macos"))]
         visible: window.is_visible().map_err(|e| e.to_string())?,
         minimized,
     })
@@ -555,6 +564,7 @@ pub fn synchronize(app: &tauri::AppHandle) -> Result<(), String> {
         if saved.minimized && !window.is_minimized().map_err(|e| e.to_string())? {
             window.minimize().map_err(|e| e.to_string())?;
         }
+        crate::ui::set_dock_visible(app, saved.visible)?;
         session.saved = None;
         session.ready_at = None;
     }

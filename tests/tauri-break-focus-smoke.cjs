@@ -100,9 +100,23 @@ async function activate(fixture) {
   return until(() => fixtureState(fixture), state => state.sample > before && state.frontmostPID === fixture.pid,
     [fixture.handle], 5_000, 'actual companion frontmost PID');
 }
+async function observeApp(fixture, pid) {
+  const id = ++sequence;
+  const response = path.join(fixture.directory, 'response.json');
+  fs.rmSync(response, { force: true });
+  writeControl(path.join(fixture.directory, 'observe-app'), { id, pid });
+  await until(() => readJSON(response), reply => reply.id === id && reply.ok === true,
+    [fixture.handle], 5_000, 'observe native activation policy');
+  return until(() => fixtureState(fixture), state => state.observedPID === pid
+    && Number.isInteger(state.observedActivationPolicy), [fixture.handle], 5_000, 'native activation policy available');
+}
+async function dockPolicy(fixture, app, expected, description) {
+  await until(() => fixtureState(fixture), state => state.observedPID === app.handle.child.pid
+    && state.observedActivationPolicy === expected, [fixture.handle, app.handle], 5_000, description);
+}
 async function inspectRenderer(app, after = '') {
   const marker = ++probe;
-  await control(app, 'eval', { script: `(async()=>{${after};await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,focusProbe:${marker},dialog:!!document.querySelector('[role=dialog]')}})})().catch(error=>window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,focusProbe:${marker},error:String(error)}}))` });
+  await control(app, 'eval', { script: `(async()=>{${after};await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,focusProbe:${marker},dialog:!!document.querySelector('[role=dialog]'),dockCycleMs:window.__blinchoDockCycleMs??null}})})().catch(error=>window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,focusProbe:${marker},error:String(error)}}))` });
   const value = await until(app.read, state => state.renderer?.focusProbe === marker,
     [app.handle], 5_000, 'renderer probe ' + marker);
   assert.equal(value.renderer.error, undefined, value.renderer.error);
@@ -150,7 +164,7 @@ async function stopApp(app) {
   processes.delete(app.handle);
 }
 
-async function scenario(base, previous, third, { name, mode, strictMode, breakSeconds, chooseThird = false, explicitShow = false }) {
+async function scenario(base, previous, third, { name, mode, strictMode, breakSeconds, chooseThird = false, explicitShow = false, startupHidden = false, releaseAndHide = false }) {
   const directory = fs.mkdtempSync(path.join(base, name + '-'));
   const source = path.join(directory, 'legacy.json');
   fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
@@ -159,16 +173,42 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       autoTakeoverModal: true, soundEnabled: false, notificationsEnabled: false }),
     'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
   } }));
-  const handle = launch(executable, [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory,
+  if (startupHidden) await activate(previous);
+  const handle = launch(executable, startupHidden ? ['--autostart'] : [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory,
     BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1' } });
   const app = { handle, directory, read: () => readJSON(path.join(directory, 'runtime-diagnostics.json')) };
   const initial = await until(app.read, value => value.renderer?.ready && value.timer.totalMs > 0,
     [handle], 30_000, 'Blincho renderer launch');
   assert.equal(initial.pid, handle.child.pid);
+  await observeApp(previous, initial.pid);
+  await dockPolicy(previous, app, startupHidden ? 1 : 0, 'startup Dock policy must match window visibility');
+  if (startupHidden) {
+    assert.equal(initial.visible, false, 'Autostart must keep the main window hidden');
+    assert.equal(fixtureState(previous).frontmostPID, previous.pid, 'Hidden startup must preserve work focus');
+    await control(app, 'show');
+    await dockPolicy(previous, app, 0, 'opening an autostart app must restore Dock');
+    await control(app, 'minimize');
+    await dockPolicy(previous, app, 0, 'native minimized window remains in Dock');
+    await control(app, 'hide');
+    await dockPolicy(previous, app, 1, 'explicit hide while minimized must remove Dock');
+    await control(app, 'show');
+    await dockPolicy(previous, app, 0, 'show after hiding a minimized window must restore Dock');
+    await control(app, 'hide');
+    await dockPolicy(previous, app, 1, 'rapid reopen must start from tray state');
+    const rapid = await inspectRenderer(app, `const started=performance.now();for(const operation of ['show','hide']){await window.__TAURI__.core.invoke('desktop_command',{operation})}window.__blinchoDockCycleMs=performance.now()-started`);
+    assert(rapid.renderer.dockCycleMs < 1000, 'Rapid show/hide must run within one second');
+    await dockPolicy(previous, app, 1, 'rapid show/hide must end without Dock');
+    await until(app.read, value => !value.visible && !value.focused,
+      [handle], 5_000, 'rapid reopen/hide ends with hidden native window');
+    await control(app, 'show');
+    await dockPolicy(previous, app, 0, 'tray reopen after rapid hide must restore Dock');
+  }
   await control(app, 'power-event', { code: 99 }, 'Invalid power code');
   await control(app, 'unmaximize');
   await control(app, 'resize', { width: 780, height: 620 });
-  const monitor = initial.monitors?.[0];
+  const monitorState = await until(app.read, value => value.monitors?.length > 0,
+    [handle], 10_000, 'native monitor enumeration after startup');
+  const monitor = monitorState.monitors[0];
   assert(monitor, 'Native monitor enumeration is required');
   await control(app, 'move', { ...monitor.workArea.position, scale: monitor.scaleFactor });
   await until(app.read, value => value.visible && !value.minimized && !value.maximized && !value.fullscreen,
@@ -177,6 +217,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   const baseline = app.read();
   if (mode === 'tray') await control(app, 'hide');
   if (mode === 'minimized') await control(app, 'minimize');
+  await dockPolicy(previous, app, mode === 'tray' ? 1 : 0, 'tray app must leave Dock; minimized window stays in Dock');
   await activate(previous);
   await until(app.read, value => !value.focused && (mode === 'tray' ? !value.visible
     : mode === 'minimized' ? value.minimized : value.visible && !value.minimized),
@@ -191,12 +232,30 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     && (!strictMode || value.strict && value.strictShieldCount > 0),
     [handle, previous.handle, third.handle], 10_000, 'automatic break');
   const observedStart = Date.now();
+  // The native strict shield temporarily uses Accessory to cover other apps'
+  // fullscreen Spaces. Ordinary window/Dock policy must return after cleanup.
+  await dockPolicy(previous, app, strictMode ? 1 : 0, 'break presentation must use its native activation policy');
   assert(started.timer.breakEndAt > observedStart, 'The automatic break must have a real native deadline');
   assert(started.timer.breakEndAt - observedStart >= breakSeconds * 1000 - 1500,
     'The smoke must observe the configured countdown, without shortening it');
-  await until(() => fixtureState(previous), value => value.frontmostPID === initial.pid,
+  if (!releaseAndHide) await until(() => fixtureState(previous), value => value.frontmostPID === initial.pid,
     [handle, previous.handle], 5_000, 'Blincho frontmost during break');
   assert.equal((await inspectRenderer(app)).renderer.dialog, true, 'The real renderer must show the break');
+  if (releaseAndHide) {
+    await control(app, 'release-and-hide', { input: { ...input, breakActive: true, strictMode: false,
+      remainingMs: app.read().timer.remainingMs, version: app.read().timer.version + 1 } });
+    await dockPolicy(previous, app, 1, 'accepted hide must survive native strict teardown');
+    await until(app.read, value => !value.visible && !value.strict && value.strictShieldCount === 0,
+      [handle], 5_000, 'strict teardown preserves explicit tray state');
+    await control(app, 'fullscreen', { active: false });
+    await dockPolicy(previous, app, 1, 'repeated native teardown must not restore a hidden Dock icon');
+    await stopApp(app);
+    const result = { name, status: 'passed', mode, profile: directory, blinchoPID: initial.pid,
+      scope: 'Accepted hide before strict teardown, then repeated teardown; countdown/focus covered by other scenarios' };
+    fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
+    console.log('PASS: ' + name);
+    return result;
+  }
   let expected = previous;
   if (explicitShow) await control(app, 'show');
   if (chooseThird) {
@@ -213,6 +272,8 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       : mode === 'minimized' ? value.minimized : value.visible && !value.minimized);
   await until(app.read, restored, [handle, previous.handle, third.handle], breakSeconds * 1000 + 10_000,
     'original presentation after break completion');
+  const expectedPolicy = mode === 'tray' && !explicitShow ? 1 : 0;
+  await dockPolicy(previous, app, expectedPolicy, 'Dock must return to original window state');
   assert(Date.now() - observedStart >= breakSeconds * 1000 - 1500, 'Break must complete through the real countdown');
   await until(() => fixtureState(expected), value => value.frontmostPID === expectedPID,
     [handle, expected.handle], 5_000, 'expected work app frontmost after completion');
@@ -225,6 +286,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       const state = app.read();
       assert(restored(state), label + ': ' + JSON.stringify(state));
       assert.equal(fixtureState(expected).frontmostPID, expectedPID, label + ': actual frontmost PID');
+      assert.equal(fixtureState(previous).observedActivationPolicy, expectedPolicy, label + ': Dock activation policy');
       await sleep(100);
     }
     assert(app.read().timer.tickCount >= startTick + 4, 'Following native timer ticks must have been observed');
@@ -238,6 +300,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   await until(app.read, value => value.visible && !value.minimized && !value.fullscreen && sameGeometry(value, baseline),
     [handle], 5_000, 'manual reopen restores original position and size');
   const reopened = app.read();
+  await dockPolicy(previous, app, 0, 'manually reopened app must return to Dock');
   assert(sameGeometry(reopened, baseline), 'Manual reopen must retain the original normal frame');
   await stopApp(app);
   const result = { name, status: 'passed', mode, strictMode, breakSeconds, profile: directory,
@@ -273,6 +336,8 @@ async function main() {
       { name: 'strict-minimized', mode: 'minimized', strictMode: true, breakSeconds: 4 },
       { name: 'non-strict-preserves-new-work-app', mode: 'tray', strictMode: false, breakSeconds: 6, chooseThird: true },
       { name: 'explicit-show-keeps-open', mode: 'tray', strictMode: false, breakSeconds: 4, explicitShow: true },
+      { name: 'hidden-startup-dock', mode: 'tray', strictMode: false, breakSeconds: 4, startupHidden: true },
+      { name: 'hide-during-strict-release', mode: 'tray', strictMode: true, breakSeconds: 4, releaseAndHide: true },
     ];
     const selected = process.env.BLINCHO_FOCUS_SMOKE_CASE;
     assert(!selected || cases.some(options => options.name === selected), 'Unknown native focus smoke case');

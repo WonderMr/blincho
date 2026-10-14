@@ -2,6 +2,13 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.6.4]
+
+### Fixed
+
+- macOS removes the Dock icon when Blincho is hidden in the tray and restores it when its window opens, including break completion and hidden startup. Native minimized windows retain their Dock entry.
+- Rapid reopen and hide transitions preserve tray state, window placement and the working application focus.
+
 ## [1.6.3]
 
 - Return to the previous tray-hidden, minimized or visible window state when a screen break ends or is cancelled.
