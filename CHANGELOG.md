@@ -2,6 +2,14 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.7.3]
+
+### Added
+
+- Mark a currently detected call with a phone badge on the tray icon and show its application in the macOS and Windows hover preview. Linux shows the same call status in its tray menu. Restore the usual icon when the call ends or detection becomes unavailable.
+- Show translated active, inactive, unavailable and disabled call states in all 30 languages. Keep the call row separate from the next-break countdown and pause, break and exercise phases.
+- Refresh transient call status while break postponement or voluntary call history is enabled, including input-idle and manual pauses. Keep history off by default, reject stale detector results and clear the indicator on screen lock or sleep.
+
 ## [1.7.2]
 
 ### Added

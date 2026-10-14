@@ -143,9 +143,7 @@ fn observe_background_meeting(runtime: &Runtime) {
             return;
         };
         sample(&mut timer);
-        timer
-            .meeting_sample_allowed()
-            .then(|| timer.meeting_epoch())
+        timer.meeting_probe_allowed().then(|| timer.meeting_epoch())
     };
     let Some(epoch) = epoch else {
         runtime.meeting.invalidate();
@@ -1053,7 +1051,7 @@ fn main() {
                             let Ok(mut timer) = runtime.timer.lock() else {break;};
                             sample(&mut timer);
                             let same_epoch = timer.meeting_epoch() == meeting_epoch;
-                            if same_epoch && timer.meeting_sample_allowed() {
+                            if same_epoch && timer.meeting_probe_allowed() {
                                 if let Some(status) = &meeting_status {
                                     timer.observe_meeting(Utc::now().timestamp_millis(), status);
                                 }

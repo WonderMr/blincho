@@ -15,6 +15,8 @@ export interface NativeTimerSnapshot {
   meetingSpans?: MeetingSpan[];
   meetingApplications?: string[];
   meetingHistoryEpoch?: number;
+  liveMeetingEnabled?: boolean;
+  liveMeetingStatus?: { inMeeting: boolean; supported: boolean; applications: string[] } | null;
 }
 interface TauriGlobal {
   core: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };

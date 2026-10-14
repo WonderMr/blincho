@@ -64,6 +64,8 @@ pub struct Snapshot {
     pub activity_spans: Vec<ActivitySpan>,
     pub meeting_spans: Vec<MeetingSpan>,
     pub meeting_applications: Vec<String>,
+    pub live_meeting_enabled: bool,
+    pub live_meeting_status: Option<crate::platform::MeetingStatus>,
     pub meeting_history_epoch: u64,
     pub tick_count: u64,
     pub meeting_postponed_epoch: u64,
@@ -110,6 +112,8 @@ impl Timer {
                 activity_spans: vec![],
                 meeting_spans: vec![],
                 meeting_applications: vec![],
+                live_meeting_enabled: false,
+                live_meeting_status: None,
                 meeting_history_epoch: 0,
                 tick_count: 0,
                 meeting_postponed_epoch: 0,
@@ -158,6 +162,7 @@ impl Timer {
             // Postponement policy changes invalidate pending expiry probes,
             // while the separately enabled history observation remains live.
             self.meeting_epoch = self.meeting_epoch.wrapping_add(1);
+            self.snapshot.live_meeting_status = None;
         }
         let changed = self.input.is_none() || input.version != self.snapshot.version;
         if changed {
@@ -178,6 +183,7 @@ impl Timer {
         self.snapshot.manual_paused = input.manual_paused;
         self.snapshot.break_active = input.break_active && self.snapshot.reasons.is_empty();
         self.snapshot.exercising = input.exercising && self.snapshot.reasons.is_empty();
+        self.snapshot.live_meeting_enabled = input.meeting_enabled || input.meeting_history_enabled;
         self.input = Some(input);
         self.last_at = now;
         Ok(())
@@ -272,7 +278,7 @@ impl Timer {
     }
     pub fn tick(&mut self, now: i64, idle: Option<f64>, locked: Option<bool>) -> bool {
         let start = self.last_at;
-        let meeting_was_allowed = self.meeting_sample_allowed();
+        let meeting_was_allowed = self.meeting_probe_allowed();
         let previous_state = self.activity_state();
         let elapsed = (now - self.last_at).max(0) as f64;
         let was_present = self.snapshot.reasons.is_empty();
@@ -308,8 +314,10 @@ impl Timer {
         self.snapshot.reasons = reasons;
         if now < start
             || elapsed > 5000.
-            || (!self.meeting_sample_allowed()
-                && (meeting_was_allowed || self.last_meeting_at.is_some()))
+            || (!self.meeting_probe_allowed()
+                && (meeting_was_allowed
+                    || self.last_meeting_at.is_some()
+                    || self.snapshot.live_meeting_status.is_some()))
         {
             // A missing presence sample or clock jump does not establish any
             // call time after the last confirmed observation.
@@ -351,7 +359,15 @@ impl Timer {
         self.input
             .as_ref()
             .is_some_and(|input| input.meeting_history_enabled)
-            && !self.snapshot.locked
+            && self.meeting_presence_confirmed()
+    }
+
+    pub fn meeting_probe_allowed(&self) -> bool {
+        self.snapshot.live_meeting_enabled && self.meeting_presence_confirmed()
+    }
+
+    fn meeting_presence_confirmed(&self) -> bool {
+        !self.snapshot.locked
             && !self.snapshot.suspended
             && !self.unconfirmed
             && !self.snapshot.reasons.iter().any(|reason| reason != "idle")
@@ -375,7 +391,7 @@ impl Timer {
         now: i64,
         status: &crate::platform::MeetingStatus,
     ) -> bool {
-        if self.meeting_epoch != expected_epoch || !self.meeting_sample_allowed() {
+        if self.meeting_epoch != expected_epoch || !self.meeting_probe_allowed() {
             return false;
         }
         self.observe_meeting(now, status);
@@ -384,14 +400,37 @@ impl Timer {
 
     pub fn observe_meeting(&mut self, now: i64, status: &crate::platform::MeetingStatus) {
         if now < self.meeting_clock_floor {
-            if self.last_meeting_at.is_some() || !self.snapshot.meeting_applications.is_empty() {
+            if self.last_meeting_at.is_some()
+                || !self.snapshot.meeting_applications.is_empty()
+                || self.snapshot.live_meeting_status.is_some()
+            {
                 self.end_meeting_observation(now, false);
             }
             return;
         }
         self.meeting_clock_floor = now;
-        if !self.meeting_sample_allowed() {
+        if !self.meeting_probe_allowed() {
             self.end_meeting_observation(now, false);
+            return;
+        }
+        let mut applications = if status.supported && status.in_meeting {
+            crate::platform::normalize_meeting_applications(&status.applications)
+        } else {
+            vec![]
+        };
+        if status.supported && status.in_meeting && applications.is_empty() {
+            applications.push("unknown".into());
+        }
+        self.snapshot.live_meeting_status = Some(crate::platform::MeetingStatus {
+            in_meeting: status.supported && status.in_meeting,
+            supported: status.supported,
+            applications: applications.clone(),
+        });
+        // Tray state is transient. Recording still requires its own opt-in,
+        // even when postponement keeps the background detector enabled.
+        if !self.meeting_sample_allowed() {
+            self.last_meeting_at = None;
+            self.snapshot.meeting_applications.clear();
             return;
         }
         if !status.supported {
@@ -404,14 +443,6 @@ impl Timer {
         // A successful negative probe establishes an end boundary. Failed
         // probes above stop at the last observation instead of filling a gap.
         self.extend_meeting_to(now);
-        let mut applications = if status.in_meeting {
-            crate::platform::normalize_meeting_applications(&status.applications)
-        } else {
-            vec![]
-        };
-        if status.in_meeting && applications.is_empty() {
-            applications.push("unknown".into());
-        }
         self.snapshot.meeting_applications = applications;
         self.last_meeting_at = Some(now);
     }
@@ -423,6 +454,7 @@ impl Timer {
         self.last_meeting_at = None;
         self.meeting_clock_floor = self.meeting_clock_floor.max(now);
         self.snapshot.meeting_applications.clear();
+        self.snapshot.live_meeting_status = None;
         self.meeting_epoch = self.meeting_epoch.wrapping_add(1);
     }
 
@@ -579,6 +611,14 @@ mod tests {
         timer.configure(settings, 0).unwrap();
         timer
     }
+    fn live_meeting_timer() -> Timer {
+        let mut timer = Timer::new(0);
+        let mut settings = input();
+        settings.meeting_enabled = true;
+        settings.manual_paused = true;
+        timer.configure(settings, 0).unwrap();
+        timer
+    }
     fn meeting_sample(timer: &mut Timer, now: i64, applications: &[&str]) {
         timer.tick(now, Some(0.), Some(false));
         timer.observe_meeting(now, &meeting_status(applications));
@@ -609,6 +649,10 @@ mod tests {
         meeting_sample(&mut timer, 500, &["Zoom"]);
         assert!(timer.snapshot.meeting_spans.is_empty());
         assert!(timer.snapshot.meeting_applications.is_empty());
+        assert!(timer.snapshot.live_meeting_enabled);
+        let live = timer.snapshot.live_meeting_status.as_ref().unwrap();
+        assert!(live.in_meeting && live.supported);
+        assert_eq!(live.applications, ["Zoom"]);
         let mut opted_in = legacy;
         opted_in["meetingHistoryEnabled"] = true.into();
         let opted_in: TimerInput = serde_json::from_value(opted_in).unwrap();
@@ -617,6 +661,136 @@ mod tests {
         meeting_sample(&mut timer, 1000, &["Zoom"]);
         meeting_sample(&mut timer, 1250, &["Zoom"]);
         assert_eq!(meeting_intervals(&timer), [(1000, 1250, "Zoom")]);
+    }
+    #[test]
+    fn transient_calls_work_without_history_during_idle_pause_and_strict_mode() {
+        let mut timer = live_meeting_timer();
+        assert!(!timer.meeting_sample_allowed());
+        assert!(timer.meeting_probe_allowed());
+        meeting_sample(&mut timer, 250, &["CptHost", "Teams", "Zoom"]);
+        timer.tick(500, Some(120.), Some(false));
+        assert!(timer.observe_meeting_if_current(
+            timer.meeting_epoch(),
+            500,
+            &meeting_status(&["CptHost", "Teams", "Zoom"])
+        ));
+        assert_eq!(timer.snapshot.reasons, ["idle"]);
+        assert!(timer.snapshot.manual_paused);
+        assert!(timer.input.as_ref().unwrap().strict_mode);
+        assert!(timer.snapshot.meeting_spans.is_empty());
+        assert!(timer.snapshot.meeting_applications.is_empty());
+        let serialized = serde_json::to_value(&timer.snapshot).unwrap();
+        assert_eq!(serialized["liveMeetingEnabled"], true);
+        assert_eq!(serialized["liveMeetingStatus"]["inMeeting"], true);
+        assert_eq!(serialized["liveMeetingStatus"]["supported"], true);
+        assert_eq!(
+            serialized["liveMeetingStatus"]["applications"],
+            serde_json::json!(["Microsoft Teams", "Zoom"])
+        );
+    }
+    #[test]
+    fn detector_off_on_rejects_in_flight_live_probe_without_touching_history_consent() {
+        let mut timer = live_meeting_timer();
+        meeting_sample(&mut timer, 250, &["Zoom"]);
+        let stale_epoch = timer.meeting_epoch();
+        let history_epoch = timer.snapshot.meeting_history_epoch;
+        let mut settings = timer.input.clone().unwrap();
+        settings.meeting_enabled = false;
+        timer.configure(settings.clone(), 500).unwrap();
+        assert!(!timer.snapshot.live_meeting_enabled);
+        assert!(timer.snapshot.live_meeting_status.is_none());
+        assert!(!timer.meeting_probe_allowed());
+        assert!(!timer.observe_meeting_if_current(stale_epoch, 600, &meeting_status(&["Zoom"])));
+        settings.meeting_enabled = true;
+        timer.configure(settings, 750).unwrap();
+        assert!(timer.snapshot.live_meeting_enabled);
+        assert!(timer.snapshot.live_meeting_status.is_none());
+        assert!(!timer.observe_meeting_if_current(stale_epoch, 1000, &meeting_status(&["Zoom"])));
+        assert!(timer.snapshot.live_meeting_status.is_none());
+        assert_eq!(timer.snapshot.meeting_history_epoch, history_epoch);
+        assert!(timer.observe_meeting_if_current(
+            timer.meeting_epoch(),
+            1250,
+            &meeting_status(&["Discord"])
+        ));
+        assert_eq!(
+            timer
+                .snapshot
+                .live_meeting_status
+                .as_ref()
+                .unwrap()
+                .applications,
+            ["Discord"]
+        );
+        assert!(timer.snapshot.meeting_spans.is_empty());
+        assert!(timer.snapshot.meeting_applications.is_empty());
+    }
+    #[test]
+    fn live_call_probe_cannot_survive_lock_sleep_or_unconfirmed_presence() {
+        for (absent, present) in [(1, 2), (3, 4)] {
+            let mut timer = live_meeting_timer();
+            meeting_sample(&mut timer, 250, &["Zoom"]);
+            let stale_epoch = timer.meeting_epoch();
+            timer.power(absent, 500);
+            assert!(timer.snapshot.live_meeting_status.is_none());
+            assert!(!timer.meeting_probe_allowed());
+            assert!(!timer.observe_meeting_if_current(
+                stale_epoch,
+                750,
+                &meeting_status(&["Zoom"])
+            ));
+            timer.power(present, 1000);
+            timer.tick(1250, Some(0.), Some(false));
+            assert!(!timer.observe_meeting_if_current(
+                stale_epoch,
+                1250,
+                &meeting_status(&["Zoom"])
+            ));
+            assert!(timer.snapshot.live_meeting_status.is_none());
+            meeting_sample(&mut timer, 1500, &["Discord"]);
+            assert!(
+                timer
+                    .snapshot
+                    .live_meeting_status
+                    .as_ref()
+                    .unwrap()
+                    .in_meeting
+            );
+            assert!(timer.snapshot.meeting_spans.is_empty());
+        }
+        let mut timer = live_meeting_timer();
+        meeting_sample(&mut timer, 250, &["Zoom"]);
+        let stale_epoch = timer.meeting_epoch();
+        timer.tick(500, None, Some(false));
+        assert!(timer.snapshot.live_meeting_status.is_none());
+        assert!(!timer.meeting_probe_allowed());
+        timer.tick(750, Some(0.), Some(false));
+        assert!(!timer.observe_meeting_if_current(stale_epoch, 750, &meeting_status(&["Zoom"])));
+        assert!(timer.snapshot.live_meeting_status.is_none());
+    }
+    #[test]
+    fn live_status_distinguishes_unknown_and_inactive_without_private_metadata() {
+        let mut timer = live_meeting_timer();
+        timer.observe_meeting(
+            250,
+            &crate::platform::MeetingStatus {
+                in_meeting: true,
+                supported: true,
+                applications: vec!["Private call title".into()],
+            },
+        );
+        let live = timer.snapshot.live_meeting_status.as_ref().unwrap();
+        assert!(live.in_meeting);
+        assert_eq!(live.applications, ["unknown"]);
+        timer.observe_meeting(500, &crate::platform::MeetingStatus::inactive(false));
+        let live = timer.snapshot.live_meeting_status.as_ref().unwrap();
+        assert!(!live.in_meeting && !live.supported);
+        assert!(live.applications.is_empty());
+        timer.observe_meeting(750, &crate::platform::MeetingStatus::inactive(true));
+        let live = timer.snapshot.live_meeting_status.as_ref().unwrap();
+        assert!(!live.in_meeting && live.supported);
+        assert!(live.applications.is_empty());
+        assert!(timer.snapshot.meeting_spans.is_empty());
     }
     #[test]
     fn reenable_discards_retained_calls_even_after_clock_rollback() {

@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Anrufverlauf gelöscht.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Der Anrufverlauf konnte nicht gelöscht werden. Versuchen Sie es erneut.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Anrufe werden nur erfasst, wenn das Speichern des Verlaufs aktiviert ist und Blincho läuft.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Anrufe können nur in der Desktop-App von Blincho erfasst werden."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Anrufe können nur in der Desktop-App von Blincho erfasst werden.",
+  "Звонок": "Anruf",
+  "Нет активного звонка": "Kein aktiver Anruf",
+  "Статус звонка неизвестен": "Anrufstatus unbekannt",
+  "Определение звонков отключено": "Anruferkennung deaktiviert"
 }

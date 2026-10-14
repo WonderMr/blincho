@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Histórico de chamadas eliminado.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Não foi possível eliminar o histórico de chamadas. Tente novamente.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "As chamadas só são registadas quando o histórico está ativado e o Blincho está em execução.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "O registo de chamadas só está disponível na aplicação Blincho para computador."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "O registo de chamadas só está disponível na aplicação Blincho para computador.",
+  "Звонок": "Chamada",
+  "Нет активного звонка": "Nenhuma chamada em andamento",
+  "Статус звонка неизвестен": "Estado da chamada desconhecido",
+  "Определение звонков отключено": "Detecção de chamadas desativada"
 }

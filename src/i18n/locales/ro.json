@@ -528,5 +528,9 @@
   "История созвонов удалена.": "Istoricul apelurilor a fost șters.",
   "Не удалось удалить историю созвонов. Попробуйте ещё раз.": "Istoricul apelurilor nu a putut fi șters. Încearcă din nou.",
   "Созвоны записываются только при включённом сохранении истории, пока Blincho запущен.": "Apelurile sunt înregistrate doar când salvarea istoricului este activată și Blincho rulează.",
-  "Запись созвонов доступна только в настольном приложении Blincho.": "Înregistrarea apelurilor este disponibilă doar în aplicația Blincho pentru calculator."
+  "Запись созвонов доступна только в настольном приложении Blincho.": "Înregistrarea apelurilor este disponibilă doar în aplicația Blincho pentru calculator.",
+  "Звонок": "Apel",
+  "Нет активного звонка": "Niciun apel în desfășurare",
+  "Статус звонка неизвестен": "Starea apelului este necunoscută",
+  "Определение звонков отключено": "Detectarea apelurilor este dezactivată"
 }
