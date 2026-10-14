@@ -25,6 +25,7 @@ async function run() {
       if (platform === 'linux') env.APPIMAGE_EXTRACT_AND_RUN = '1';
     }
     execFileSync(process.execPath, [path.join(__dirname, 'tauri-cross-platform-smoke.cjs')], { env, cwd: root, stdio: 'inherit' });
+    execFileSync(process.execPath, [path.join(__dirname, 'tauri-camera-smoke.cjs')], { env, cwd: root, stdio: 'inherit' });
   } finally {
     if (extracted) fs.rmSync(extracted, { recursive: true, force: true });
   }

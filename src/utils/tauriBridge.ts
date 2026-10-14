@@ -49,6 +49,7 @@ export function synchronizeNativeTimer(session: TimerSession, settings: AppSetti
     version: session.version, breakSeconds: settings.breakSeconds, strictMode: settings.strictMode,
     idleEnabled: settings.idleDetectionEnabled, idleThresholdSeconds: settings.idleThresholdMinutes * 60,
     meetingEnabled: settings.meetingDetectionEnabled, meetingHistoryEnabled: settings.meetingHistoryEnabled,
+    cameraLockEnabled: settings.cameraLockEnabled,
     autoTakeover: settings.autoTakeoverModal };
   commandQueue = commandQueue.then(async () => {
     latest = await window.__TAURI__!.core.invoke<NativeTimerSnapshot>('configure_timer', { input });
@@ -133,6 +134,7 @@ async function installTauriBridge(): Promise<void> {
     setStrictLock: flag => command('strict', flag),
     getSystemIdleTime: async () => (await readNativeTimer())!.idleSeconds,
     getPowerState: async () => { const snapshot = (await readNativeTimer())!; return { locked: snapshot.locked, suspended: snapshot.suspended }; },
+    lockComputer: () => api.core.invoke<boolean>('lock_computer'),
     getPreferredLanguages: () => api.core.invoke<string[]>('preferred_languages'),
     onTriggerBreak: callback => { breaks.add(callback); return () => breaks.delete(callback); },
   };

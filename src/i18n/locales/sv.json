@@ -532,5 +532,10 @@
   "Звонок": "Samtal",
   "Нет активного звонка": "Inget pågående samtal",
   "Статус звонка неизвестен": "Samtalsstatus okänd",
-  "Определение звонков отключено": "Samtalsdetektering avstängd"
+  "Определение звонков отключено": "Samtalsdetektering avstängd",
+  "Блокировать компьютер, если никого нет": "Lås datorn när ingen är närvarande",
+  "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "I slutet av ett arbetsintervall kontrollerar kameran om någon är närvarande. Om ingen upptäcks låses datorn. Kontrollen sker på enheten; bilder sparas eller skickas inte. Kamerabehörighet krävs. Om kameran eller kontrollen inte är tillgänglig hoppas låsningen över.",
+  "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Tillgängligt i skrivbordsappen med kamerastöd. Webbläsaren låser inte datorn.",
+  "Камера не обнаружила человека. Компьютер заблокирован.": "Kameran upptäckte ingen person. Datorn är låst.",
+  "Не удалось заблокировать компьютер.": "Det gick inte att låsa datorn."
 }

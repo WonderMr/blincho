@@ -124,6 +124,12 @@ pub fn presence() -> Presence {
     };
     let idle_seconds = (unsafe { GetLastInputInfo(&mut last) } != 0)
         .then(|| parsing::windows_idle_seconds(unsafe { GetTickCount() }, last.dwTime));
+    Presence {
+        idle_seconds,
+        locked: session_locked(true),
+    }
+}
+fn session_locked(treat_inactive_as_locked: bool) -> Option<bool> {
     let mut buffer = null_mut();
     let mut bytes = 0;
     let success = unsafe {
@@ -140,7 +146,7 @@ pub fn presence() -> Presence {
             let info = unsafe { &*buffer.cast::<WTSINFOEXW>() };
             if info.Level == 1 {
                 let session = unsafe { info.Data.WTSInfoExLevel1 };
-                if session.SessionState != WTSActive {
+                if treat_inactive_as_locked && session.SessionState != WTSActive {
                     Some(true)
                 } else {
                     match session.SessionFlags as u32 {
@@ -160,10 +166,25 @@ pub fn presence() -> Presence {
             WTSFreeMemory(buffer.cast());
         }
     }
-    Presence {
-        idle_seconds,
-        locked,
+    locked
+}
+pub fn request_lock() -> Result<(), String> {
+    // The pinned windows-sys crate gates this API behind System::Shutdown.
+    // Its verified user32 signature needs no additional dependency feature.
+    #[link(name = "user32")]
+    extern "system" {
+        fn LockWorkStation() -> i32;
     }
+    if unsafe { LockWorkStation() } == 0 {
+        return Err(format!(
+            "Could not request workstation lock: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
+pub fn lock_confirmed() -> Option<bool> {
+    session_locked(false)
 }
 unsafe extern "system" fn power_window(
     hwnd: HWND,

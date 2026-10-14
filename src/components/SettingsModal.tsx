@@ -53,9 +53,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   onCloseRef.current = onClose;
   const [notificationFeedback, setNotificationFeedback] = useState('');
   const [notificationPending, setNotificationPending] = useState(false);
-  const nativeApi = window.electronAPI as (NonNullable<Window['electronAPI']> & { meetingDetectionSupported?: boolean }) | undefined;
+  const nativeApi = window.electronAPI as (NonNullable<Window['electronAPI']> & { meetingDetectionSupported?: boolean; lockComputer?: () => Promise<boolean> }) | undefined;
   const isNative = nativeApi?.isElectron === true;
   const meetingSupported = isNative && nativeApi?.meetingDetectionSupported === true;
+  const cameraLockSupported = typeof nativeApi?.lockComputer === 'function' && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
   const notificationsSupported = isNative || 'Notification' in window;
   const notificationsBlocked = !isNative && 'Notification' in window && Notification.permission === 'denied';
 
@@ -228,6 +229,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
               description={meetingSupported ? t("При системных признаках звонка перерыв откладывается. Детектор может ошибаться.") : t("Недоступно в этой версии. Системный детектор звонков поддерживается в приложении для macOS.")}
               checked={meetingSupported && settings.meetingDetectionEnabled} disabled={!meetingSupported} onChange={value => handleChange('meetingDetectionEnabled', value)} />
             {meetingHistoryControls && <MeetingHistoryControls id="settings-meeting-history" {...meetingHistoryControls} />}
+            <ToggleRow id="camera-lock-enabled" title={t("Блокировать компьютер, если никого нет")}
+              description={`${t("В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.")}${cameraLockSupported ? '' : ` ${t("Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.")}`}`}
+              checked={cameraLockSupported && settings.cameraLockEnabled} disabled={!cameraLockSupported} onChange={value => handleChange('cameraLockEnabled', value)} />
             <ToggleRow id="idle-detection" title={t("Автопауза без активности")}
               description={isNative ? t("Отсутствие мыши и клавиатуры не означает, что вы отошли: чтение тоже считается неактивностью.") : t("Учитывает ввод только на этой странице и скрытие вкладки. Активность в других приложениях недоступна.")}
               checked={settings.idleDetectionEnabled} onChange={value => handleChange('idleDetectionEnabled', value)} />

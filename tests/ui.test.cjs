@@ -6,6 +6,7 @@ const path = require('node:path');
 const { React, ReactDOMClient, ReactDOM, doc, DOMNode, transformer } = require('./support/syntheticDom.cjs');
 const { renderToStaticMarkup } = require('react-dom/server');
 const repo = path.resolve(__dirname, '..'), cache = new Map(), store = new Map();
+const navigatorStub = { mediaDevices: undefined };
 let reloads = 0;
 window.electronAPI = undefined; window.location = { reload() { reloads++; } };
 const localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) };
@@ -23,7 +24,7 @@ function load(relative) {
     name.endsWith('/soundSynth') ? { soundSynth: { enabled: false, playZenBowl() {} } } :
       name.endsWith('/notifications') ? { requestNotificationPermission: async () => false, showEyeBreakNotification() {} } :
         name.startsWith('.') ? load(path.relative(repo, path.resolve(path.dirname(file), name) + (path.extname(name) ? '' : fs.existsSync(path.resolve(path.dirname(file), name)+'.ts')?'.ts':'.tsx'))) : require(name);
-  vm.runInNewContext(source, { module, require: requireLocal, console, window, document: doc, HTMLElement: DOMNode, localStorage }, { filename: file });
+  vm.runInNewContext(source, { module, require: requireLocal, console, window, navigator: navigatorStub, document: doc, HTMLElement: DOMNode, localStorage }, { filename: file });
   return module.exports;
 }
 const { SettingsModal } = load('src/components/SettingsModal.tsx'), { DEFAULT_SETTINGS } = load('src/utils/storage.ts');
@@ -59,6 +60,37 @@ doc.dispatchEvent({ type: 'keydown', key: 'Tab', shiftKey: true, preventDefault(
 let stopped = false; doc.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault() {}, stopPropagation() { stopped = true; } }); assert.equal(closed, 1); assert(stopped);
 render(null); assert.equal(doc.activeElement, opener); assert.equal(doc._listeners.get('keydown').size, 0);
 results.push('settings default/custom idle threshold, strict absence policy, custom duration, atomic 25/300 preset, Tab/Escape, focus restore, listener cleanup and unsupported meeting control');
+
+const cameraToggle = () => find(node => node.getAttribute('id') === 'camera-lock-enabled');
+render(settingsElement());
+assert.equal(reactProps(cameraToggle()).disabled, true, 'browser camera locking is unavailable');
+assert.equal(reactProps(cameraToggle()).checked, false, 'an unavailable feature is shown inactive');
+assert.equal(settings.cameraLockEnabled, true, 'capability checks preserve the enabled preference');
+assert(host.textContent.includes('В браузере компьютер не блокируется.'));
+window.electronAPI = { lockComputer() { throw new Error('Settings must not lock the computer'); } };
+render(settingsElement());
+assert.equal(reactProps(cameraToggle()).disabled, true, 'a desktop bridge without camera support is unavailable');
+navigatorStub.mediaDevices = { getUserMedia() { throw new Error('Settings must not request camera access'); } };
+window.electronAPI = undefined;
+render(settingsElement());
+assert.equal(reactProps(cameraToggle()).disabled, true, 'camera support alone cannot enable OS locking');
+window.electronAPI = { lockComputer() { throw new Error('Settings must not lock the computer'); } };
+render(settingsElement());
+assert.equal(reactProps(cameraToggle()).disabled, false);
+assert.equal(reactProps(cameraToggle()).checked, true);
+assert.equal(cameraToggle().getAttribute('aria-describedby'), 'camera-lock-enabled-description');
+assert(host.textContent.includes('кадры не сохраняются и не отправляются'));
+assert(host.textContent.includes('Нужно разрешение камеры'));
+assert(host.textContent.includes('Если камера или проверка недоступны, блокировка пропускается.'));
+const workMinutesBeforeCameraChange = settings.workMinutes;
+invoke(cameraToggle(), 'onChange', { target: { checked: false } });
+assert.equal(settings.cameraLockEnabled, false);
+assert.equal(settings.workMinutes, workMinutesBeforeCameraChange);
+render(null); render(settingsElement());
+assert.equal(reactProps(cameraToggle()).checked, false, 'saved camera opt-out survives modal reopening');
+window.electronAPI = undefined; navigatorStub.mediaDevices = undefined;
+render(null);
+results.push('camera locking requires desktop and camera capabilities, explains local privacy and permissions, and preserves the opt-out without requesting camera access');
 
 let selected;
 render(React.createElement(ExerciseLibrary, { onSelectTechnique: item => { selected = item; }, onStartFullRoutine: noop }));

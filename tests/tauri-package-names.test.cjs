@@ -38,9 +38,10 @@ test('package smoke launches existing historical and descriptive payloads on eve
             fs.writeFileSync('extracted.txt', args[3]);
             return;
           }
-          if (command !== process.execPath || path.basename(args[0]) !== 'tauri-cross-platform-smoke.cjs') throw new Error('Unexpected GUI boundary');
+          if (command !== process.execPath || !['tauri-cross-platform-smoke.cjs', 'tauri-camera-smoke.cjs'].includes(path.basename(args[0]))) throw new Error('Unexpected GUI boundary');
           fs.accessSync(options.env.BLINCHO_PROTOTYPE_EXECUTABLE);
-          fs.writeFileSync('selected.json', JSON.stringify({ file: options.env.BLINCHO_PROTOTYPE_EXECUTABLE, appImage: options.env.APPIMAGE_EXTRACT_AND_RUN }));
+          const previous=fs.existsSync('selected.json')?JSON.parse(fs.readFileSync('selected.json','utf8')):{probes:[]};
+          fs.writeFileSync('selected.json', JSON.stringify({ file: options.env.BLINCHO_PROTOTYPE_EXECUTABLE, appImage: options.env.APPIMAGE_EXTRACT_AND_RUN,probes:[...previous.probes,path.basename(args[0])] }));
         };
         syncBuiltinESMExports();
       `);
@@ -49,6 +50,7 @@ test('package smoke launches existing historical and descriptive payloads on eve
       const selected = JSON.parse(await fs.readFile(path.join(directory, 'selected.json'), 'utf8'));
       assert.equal(path.basename(selected.file), platform === 'macos' ? 'blincho' : name);
       assert.equal(selected.appImage, platform === 'linux' ? '1' : '');
+      assert.deepEqual(selected.probes, ['tauri-cross-platform-smoke.cjs', 'tauri-camera-smoke.cjs']);
       if (platform === 'macos') {
         const extracted = await fs.readFile(path.join(directory, 'extracted.txt'), 'utf8');
         await assert.rejects(fs.stat(extracted), { code: 'ENOENT' });

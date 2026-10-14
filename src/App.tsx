@@ -13,6 +13,7 @@ import { soundSynth } from './audio/soundSynth';
 import { showEyeBreakNotification } from './utils/notifications';
 import { MEDICAL_TECHNIQUES } from './data/medicalTechniques';
 import { getSystemIdleSeconds, detectActiveMeeting, hasSystemIdleDetection, hasMeetingDetection, markPageActivity } from './utils/detector';
+import { checkCameraPresence } from './utils/cameraPresence';
 import { TimerSession, PresenceReason, normalizeTimerSettings } from './utils/timerSession';
 import { normalizeMeetingApplications, splitMeetingsByDay } from './utils/meetings';
 
@@ -95,6 +96,9 @@ export const App: React.FC = () => {
   const mountedRef = useRef(false);
   const presenceInFlightRef = useRef<Promise<boolean> | null>(null);
   const presenceRefreshRef = useRef(false);
+  const expiryInFlightRef = useRef(false);
+  const cameraCheckedVersionRef = useRef<number | null>(null);
+  const cameraAbortRef = useRef<AbortController | null>(null);
   const dateRef = useRef(getTodayDateString());
   const eventCounterRef = useRef(0);
   const sessionIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
@@ -162,6 +166,7 @@ export const App: React.FC = () => {
     sendDesktopCommand('setBreakFullscreen', () => window.electronAPI?.setBreakFullscreen?.(false));
   };
   const restartWork = (seconds = settingsRef.current.workMinutes * 60) => {
+    cameraAbortRef.current?.abort();
     session.restart(seconds, Date.now());
     setInMeetingActive(false);
     sync();
@@ -209,6 +214,7 @@ export const App: React.FC = () => {
     if (session.reasons.has(reason) === active) return;
     session.setReason(reason, active, Date.now(), startedAt);
     if (active) {
+      cameraAbortRef.current?.abort();
       if (reason === 'idle' && settingsRef.current.idleAction === 'reset') resetOnReturnRef.current = true;
       cancelAbsentActivity();
       flushFocus();
@@ -349,27 +355,60 @@ export const App: React.FC = () => {
     sync();
   };
   const handleTimerExpired = async () => {
-    const version = session.version;
-    const present = await samplePresence();
-    if (!present || version !== session.version || !session.counting || !session.expiryPending) return;
-    const current = settingsRef.current;
-    if (current.meetingDetectionEnabled && !current.strictMode && hasMeetingDetection()) {
-      const meeting = await detectActiveMeeting();
-      if (!mountedRef.current || version !== session.version || !session.counting) return;
-      if (meeting.inMeeting && settingsRef.current.meetingDetectionEnabled && !settingsRef.current.strictMode) {
-        session.postpone(300, Date.now());
-        setInMeetingActive(true);
-        setNoticeMessage("Обнаружена активная встреча. Перерыв отложен на 5 минут.");
-        if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Blincho: встреча активна"), t("Перерыв отложен на 5 минут."));
-        sync();
-        return;
+    if (expiryInFlightRef.current) return;
+    expiryInFlightRef.current = true;
+    try {
+      const version = session.version;
+      const present = await samplePresence();
+      if (!present || version !== session.version || !session.counting || !session.expiryPending) return;
+      const current = settingsRef.current;
+      if (current.meetingDetectionEnabled && !current.strictMode && hasMeetingDetection()) {
+        const meeting = await detectActiveMeeting();
+        if (!mountedRef.current || version !== session.version || !session.counting) return;
+        if (meeting.inMeeting && settingsRef.current.meetingDetectionEnabled && !settingsRef.current.strictMode) {
+          session.postpone(300, Date.now());
+          setInMeetingActive(true);
+          setNoticeMessage("Обнаружена активная встреча. Перерыв отложен на 5 минут.");
+          if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Blincho: встреча активна"), t("Перерыв отложен на 5 минут."));
+          sync();
+          return;
+        }
       }
-    }
-    if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting) return;
-    setInMeetingActive(false);
-    if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"), t("Отведите взгляд от экрана и дайте глазам отдохнуть."));
-    if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak();
-    else { soundSynth.playZenBowl(); restartWork(); }
+      if (settingsRef.current.cameraLockEnabled && window.electronAPI?.lockComputer && cameraCheckedVersionRef.current !== version) {
+        cameraCheckedVersionRef.current = version;
+        const controller = new AbortController();
+        cameraAbortRef.current = controller;
+        const camera = await checkCameraPresence(controller.signal);
+        if (!mountedRef.current || version !== session.version || !session.counting || !session.expiryPending) return;
+        if (camera === 'absent' && !controller.signal.aborted && settingsRef.current.cameraLockEnabled) {
+          if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting || !session.expiryPending) return;
+          if (hasNativeTimer()) {
+            const snapshot = await readNativeTimer();
+            if (!snapshot || snapshot.version !== version || !snapshot.expiryPending || snapshot.manualPaused || snapshot.reasons.length) return;
+          }
+          if (!mountedRef.current || version !== session.version || !session.counting || controller.signal.aborted || !settingsRef.current.cameraLockEnabled) return;
+          try {
+            if (await window.electronAPI.lockComputer()) {
+              if (mountedRef.current) {
+                setPresenceReason('locked', true);
+                setNoticeMessage("Камера не обнаружила человека. Компьютер заблокирован.");
+              }
+              return;
+            }
+            console.warn('Blincho: Computer lock was not confirmed.');
+            setNoticeMessage("Не удалось заблокировать компьютер.");
+          } catch (error) {
+            console.warn('Blincho: Computer lock failed:', error);
+            if (mountedRef.current) setNoticeMessage("Не удалось заблокировать компьютер.");
+          }
+        }
+      }
+      if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting) return;
+      setInMeetingActive(false);
+      if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"), t("Отведите взгляд от экрана и дайте глазам отдохнуть."));
+      if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak();
+      else { soundSynth.playZenBowl(); restartWork(); }
+    } finally { cameraAbortRef.current = null; expiryInFlightRef.current = false; }
   };
   const handleTriggerInstantBreak = async () => {
     if (await samplePresence()) beginBreak();
@@ -408,6 +447,7 @@ export const App: React.FC = () => {
     setSavedRemainingBeforeReset(null);
   };
   const handleTogglePlay = () => {
+    cameraAbortRef.current?.abort();
     session.advance(Date.now());
     flushFocus();
     session.manualPaused = !session.manualPaused;
@@ -446,6 +486,7 @@ export const App: React.FC = () => {
     session.advance(Date.now());
     flushFocus();
     settingsRef.current = updated;
+    if (!updated.cameraLockEnabled) cameraAbortRef.current?.abort();
     setSettings(updated);
     if (!updated.meetingHistoryEnabled) setCurrentMeetingApplications([]);
     saveSettings(updated);
@@ -511,6 +552,7 @@ export const App: React.FC = () => {
   };
   const startTechnique = (technique: ExerciseTechnique, routine?: ExerciseTechnique[]) => {
     if (!session.present || session.exercising) return;
+    cameraAbortRef.current?.abort();
     session.advance(Date.now());
     flushFocus();
     session.exercising = true;
@@ -719,6 +761,7 @@ export const App: React.FC = () => {
     window.addEventListener('focus', focus);
     document.addEventListener('visibilitychange', visibility);
     return () => {
+      cameraAbortRef.current?.abort();
       session.advance(Date.now());
       const finalActivity = [...pendingActivityRef.current.splice(0), ...session.drainActivity()];
       const finalMeetings = pendingMeetingsRef.current.splice(0).filter(canRecordMeetingHistory);

@@ -25,6 +25,7 @@ export function normalizeTimerSettings(settings: AppSettings): AppSettings {
     autoTakeoverModal: boolean(settings.autoTakeoverModal, true), idleDetectionEnabled: boolean(settings.idleDetectionEnabled, true),
     meetingDetectionEnabled: boolean(settings.meetingDetectionEnabled, true), strictMode: boolean(settings.strictMode, false),
     meetingHistoryEnabled: boolean(settings.meetingHistoryEnabled, false),
+    cameraLockEnabled: boolean(settings.cameraLockEnabled, true),
     strictModeIgnoreIdle: false,
   };
 }

@@ -15,6 +15,7 @@ declare global {
       checkMeetingActive?: () => Promise<{ inMeeting: boolean; details?: string; supported?: boolean }>;
       meetingDetectionSupported?: boolean;
       getPowerState?: () => Promise<{ suspended: boolean; locked: boolean }>;
+      lockComputer?: () => Promise<boolean>;
       setStrictLock?: (flag: boolean) => void;
       onPowerStateChange?: (callback: (state: 'suspend' | 'resume' | 'lock-screen' | 'unlock-screen') => void) => (() => void);
       onTriggerBreak?: (callback: () => void) => (() => void);

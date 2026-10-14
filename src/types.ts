@@ -47,6 +47,7 @@ export interface AppSettings {
   strictModeIgnoreIdle: boolean;
   meetingDetectionEnabled: boolean;
   meetingHistoryEnabled: boolean;
+  cameraLockEnabled: boolean;
   strictMode: boolean;
 }
 
