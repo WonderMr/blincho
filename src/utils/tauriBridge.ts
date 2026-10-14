@@ -14,6 +14,7 @@ export interface NativeTimerSnapshot {
   activitySpans?: ActivitySpan[];
   meetingSpans?: MeetingSpan[];
   meetingApplications?: string[];
+  meetingHistoryEpoch?: number;
 }
 interface TauriGlobal {
   core: { invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> };
@@ -38,15 +39,18 @@ export function hasNativeTimer(): boolean { return !!window.__TAURI__; }
 export function subscribeNativeTimer(callback: (snapshot: NativeTimerSnapshot) => void): () => void {
   frames.add(callback); return () => frames.delete(callback);
 }
-export function synchronizeNativeTimer(session: TimerSession, settings: AppSettings): void {
+export function synchronizeNativeTimer(session: TimerSession, settings: AppSettings,
+  onConfigured?: (snapshot: NativeTimerSnapshot) => void): void {
   if (!window.__TAURI__) return;
   const input = { totalMs: session.totalMs, remainingMs: session.remainingMs, manualPaused: session.manualPaused,
     breakActive: session.breakActive, exercising: session.exercising, expiryPending: session.expiryPending,
     version: session.version, breakSeconds: settings.breakSeconds, strictMode: settings.strictMode,
     idleEnabled: settings.idleDetectionEnabled, idleThresholdSeconds: settings.idleThresholdMinutes * 60,
-    meetingEnabled: settings.meetingDetectionEnabled, autoTakeover: settings.autoTakeoverModal };
+    meetingEnabled: settings.meetingDetectionEnabled, meetingHistoryEnabled: settings.meetingHistoryEnabled,
+    autoTakeover: settings.autoTakeoverModal };
   commandQueue = commandQueue.then(async () => {
     latest = await window.__TAURI__!.core.invoke<NativeTimerSnapshot>('configure_timer', { input });
+    onConfigured?.(latest);
   }).catch(error => console.warn('Blincho: Native timer update failed:', error));
 }
 export async function readNativeTimer(): Promise<NativeTimerSnapshot | null> {
@@ -54,6 +58,13 @@ export async function readNativeTimer(): Promise<NativeTimerSnapshot | null> {
   await commandQueue;
   latest = await window.__TAURI__.core.invoke<NativeTimerSnapshot>('timer_snapshot');
   return latest;
+}
+export async function clearNativeMeetingHistory(): Promise<NativeTimerSnapshot | null> {
+  if (!window.__TAURI__) return null;
+  // Serialize with settings changes so a queued configuration cannot undo the boundary.
+  const cleared = commandQueue.then(() => window.__TAURI__!.core.invoke<NativeTimerSnapshot>('clear_meeting_history'));
+  commandQueue = cleared.then(snapshot => { latest = snapshot; }).catch(() => {});
+  return cleared;
 }
 export function scheduleLegacyHistoryExport(): void {
   if (!window.electronAPI?.isElectron || window.electronAPI.platform !== 'darwin' || !window.electronAPI.exportLegacyHistory || window.__TAURI__) return;
