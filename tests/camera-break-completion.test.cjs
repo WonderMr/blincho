@@ -146,3 +146,60 @@ test('false or rejected lock after completion keeps work usable and reports fail
     } finally { h.destroy(); }
   }
 });
+
+test('stationary mouse event from fullscreen exit does not cancel the camera check', async () => {
+  const h = createHarness({ cameraLockEnabled: true, strictMode: true });
+  let resolveCamera, signal, locks = 0;
+  h.setCameraCheck(value => { signal = value; return new Promise(resolve => { resolveCamera = resolve; }); });
+  h.electronAPI.lockComputer = async () => { locks++; return true; };
+  try {
+    await beginAndElapse(h);
+    await h.emit('mousemove', { movementX: 0, movementY: 0 });
+    assert.equal(signal.aborted, false, 'window transition is not evidence of user input');
+    resolveCamera('absent');
+    await h.settle();
+    assert.equal(locks, 1);
+  } finally { h.destroy(); }
+});
+
+test('fresh system input in another app cancels absence without a renderer event', async () => {
+  for (const { idle, returned, description } of [
+    { idle: 22, returned: false, description: 'absence continues' },
+    { idle: 0, returned: true, description: 'return just before the final query' },
+    { idle: 1.5, returned: true, description: 'return half a second after capture starts' },
+    { idle: 1, returned: true, description: 'rounded idle after an early return' },
+  ]) {
+    const h = createHarness({ cameraLockEnabled: true });
+    let resolveCamera, locks = 0;
+    h.setCameraCheck(() => new Promise(resolve => { resolveCamera = resolve; }));
+    h.electronAPI.lockComputer = async () => { locks++; return true; };
+    try {
+      await beginAndElapse(h);
+      h.setIdle(idle);
+      await h.advance(2000);
+      resolveCamera('absent');
+      await h.settle();
+      assert.equal(locks, returned ? 0 : 1, description);
+    } finally { h.destroy(); }
+  }
+});
+
+test('delayed final idle query cannot hide input after camera capture began', async () => {
+  const h = createHarness({ cameraLockEnabled: true });
+  let resolveCamera, resolveFinalIdle, idleCalls = 0, locks = 0;
+  h.setCameraCheck(() => new Promise(resolve => { resolveCamera = resolve; }));
+  h.electronAPI.lockComputer = async () => { locks++; return true; };
+  try {
+    await beginAndElapse(h);
+    await h.advance(1200);
+    h.electronAPI.getSystemIdleTime = async () => ++idleCalls === 2
+      ? new Promise(resolve => { resolveFinalIdle = resolve; }) : 20;
+    resolveCamera('absent');
+    await h.settle();
+    assert.equal(typeof resolveFinalIdle, 'function', 'final idle query is pending');
+    await h.advance(2000);
+    resolveFinalIdle(1.5);
+    await h.settle();
+    assert.equal(locks, 0, 'input during the delayed query invalidates camera absence');
+  } finally { h.destroy(); }
+});
