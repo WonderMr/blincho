@@ -100,19 +100,31 @@ async function activate(fixture) {
   return until(() => fixtureState(fixture), state => state.sample > before && state.frontmostPID === fixture.pid,
     [fixture.handle], 5_000, 'actual companion frontmost PID');
 }
-async function observeApp(fixture, pid) {
+function assertAppIdentity(state, app) {
+  assert.equal(state.observedLookupFound, true, 'External application lookup must remain available');
+  assert.equal(state.observedProcessIdentifier, app.handle.child.pid, 'External observation must match the child PID');
+  assert.equal(state.observedTerminated, false, 'Observed application must remain alive');
+  assert.equal(state.observedBundleIdentifier, app.bundleIdentifier, 'External bundle identity must match the isolated app');
+  assert.equal(state.observedBundlePath, app.bundlePath, 'External bundle path must match the isolated app');
+  assert.equal(state.observedExecutablePath, app.binary, 'External executable path must match the copied binary');
+}
+async function observeApp(fixture, app) {
+  const pid = app.handle.child.pid;
   const id = ++sequence;
   const response = path.join(fixture.directory, 'response.json');
   fs.rmSync(response, { force: true });
   writeControl(path.join(fixture.directory, 'observe-app'), { id, pid });
   await until(() => readJSON(response), reply => reply.id === id && reply.ok === true,
     [fixture.handle], 5_000, 'observe native activation policy');
-  return until(() => fixtureState(fixture), state => state.observedPID === pid
+  const state = await until(() => fixtureState(fixture), state => state.observedPID === pid
     && Number.isInteger(state.observedActivationPolicy), [fixture.handle], 5_000, 'native activation policy available');
+  assertAppIdentity(state, app);
+  return state;
 }
 async function dockPolicy(fixture, app, expected, description) {
-  await until(() => fixtureState(fixture), state => state.observedPID === app.handle.child.pid
+  const state = await until(() => fixtureState(fixture), state => state.observedPID === app.handle.child.pid
     && state.observedActivationPolicy === expected, [fixture.handle, app.handle], 5_000, description);
+  assertAppIdentity(state, app);
 }
 async function inspectRenderer(app, after = '') {
   const marker = ++probe;
@@ -165,7 +177,18 @@ async function stopApp(app) {
 }
 
 async function scenario(base, previous, third, { name, mode, strictMode, breakSeconds, chooseThird = false, explicitShow = false, startupHidden = false, releaseAndHide = false }) {
-  const directory = fs.mkdtempSync(path.join(base, name + '-'));
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(base, name + '-')));
+  // Launch the unchanged Cargo binary with the same AppKit bundle registration
+  // as an installed app, and keep every scenario's identity isolated.
+  const bundlePath = path.join(directory, 'Blincho.app');
+  const contents = path.join(bundlePath, 'Contents');
+  const binary = path.join(contents, 'MacOS', 'blincho');
+  const bundleIdentifier = 'com.blincho.focussmoke.' + path.basename(directory);
+  fs.mkdirSync(path.dirname(binary), { recursive: true });
+  fs.copyFileSync(executable, binary);
+  fs.chmodSync(binary, 0o700);
+  assert(fs.readFileSync(executable).equals(fs.readFileSync(binary)), 'Focus smoke must use the unchanged compiled executable');
+  fs.writeFileSync(path.join(contents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>blincho</string><key>CFBundleIdentifier</key><string>${bundleIdentifier}</string><key>CFBundleName</key><string>Blincho</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`);
   const source = path.join(directory, 'legacy.json');
   fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
     myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 60, breakSeconds,
@@ -174,13 +197,14 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
   } }));
   const startupFocus = startupHidden ? await activate(previous) : null;
-  const handle = launch(executable, startupHidden ? ['--autostart'] : [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory,
+  const handle = launch(binary, startupHidden ? ['--autostart'] : [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory,
     BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1' } });
-  const app = { handle, directory, read: () => readJSON(path.join(directory, 'runtime-diagnostics.json')) };
+  const app = { handle, directory, bundlePath, bundleIdentifier, binary,
+    read: () => readJSON(path.join(directory, 'runtime-diagnostics.json')) };
   const initial = await until(app.read, value => value.renderer?.ready && value.timer.totalMs > 0,
     [handle], 30_000, 'Blincho renderer launch');
   assert.equal(initial.pid, handle.child.pid);
-  await observeApp(previous, initial.pid);
+  await observeApp(previous, app);
   await dockPolicy(previous, app, startupHidden ? 1 : 0, 'startup Dock policy must match window visibility');
   if (startupHidden) {
     assert.equal(initial.visible, false, 'Autostart must keep the main window hidden');
@@ -310,6 +334,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       assert(restored(state), label + ': ' + JSON.stringify(state));
       assert.equal(fixtureState(expected).frontmostPID, expectedPID, label + ': actual frontmost PID');
       const observed = fixtureState(previous);
+      assertAppIdentity(observed, app);
       const policyContext = label + ': ' + JSON.stringify({ nativeActivationPolicy: state.nativeActivationPolicy,
         dockVisible: state.dockVisible, observer: observed });
       assert.equal(observed.observedActivationPolicy, expectedPolicy, policyContext + ': Dock activation policy');
