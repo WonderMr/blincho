@@ -423,7 +423,8 @@ export const App: React.FC = () => {
     if (await samplePresence()) beginBreak();
   };
   const handleBreakElapsed = (eventId: string | null, deadlineMonotonicAt = performance.now()) => {
-    if (!eventId || breakIdRef.current !== eventId || !session.breakActive) return;
+    if (!mountedRef.current || !eventId || breakIdRef.current !== eventId || !session.breakActive) return;
+    soundSynth.playCompletionChime();
     pendingBreakRef.current = { eventId, deadlineMonotonicAt };
     endBreak(true);
     setNoticeMessage("Перерыв завершён. Рабочий цикл начат автоматически.");

@@ -2,6 +2,12 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.4]
+
+### Fixed
+
+- Play the break completion sound exactly once when either the native timer or the visible countdown finishes first. Keep cancelled breaks silent and respect the existing sound settings.
+
 ## [1.8.3]
 
 ### Fixed
