@@ -103,7 +103,7 @@ test('StrictMode break emits elapsed once without a return confirmation button',
     h.advance(1); assert.deepEqual(elapsed, [[2000, 2000]]);
     assert.equal(h.all(node => node.tagName === 'BUTTON' && node.textContent.includes('Вернуться к работе')).length, 0,
       'the completed break must not require an extra return confirmation');
-    h.advance(2000); assert.deepEqual(elapsed, [[2000, 2000]]); assert.equal(h.chimes, 1);
+    h.advance(2000); assert.deepEqual(elapsed, [[2000, 2000]]); assert.equal(h.chimes, 0, 'App owns the completion sound');
     assert.equal(closed, 0, 'elapsed owns completion; it must not also issue a cancel callback');
   } finally { h.destroy(); }
 });
@@ -113,7 +113,7 @@ test('delayed break heartbeat publishes the original deadline rather than its la
     onElapsed: deadline => elapsed.push({ deadline, observedAt: h.now }) }));
   h.advance(1000); h.jump(5000);
   assert.deepEqual(elapsed, [{ deadline: 2000, observedAt: 6000 }]);
-  h.advance(4000); assert.equal(elapsed.length, 1); assert.equal(h.chimes, 1); h.destroy();
+  h.advance(4000); assert.equal(elapsed.length, 1); assert.equal(h.chimes, 0); h.destroy();
 });
 test('wall-clock jumps neither shorten nor extend a break and its deadline stays monotonic', () => {
   for (const wallJump of [2500, -2500, 3600000, -3600000]) {
@@ -128,7 +128,7 @@ test('wall-clock jumps neither shorten nor extend a break and its deadline stays
       h.advance(1); assert.deepEqual(elapsed, [{ deadline: 8000, observedAt: 8000 }],
         `wall jump ${wallJump} must not extend the break or change its monotonic deadline`);
       assert.equal(h.wallNow, 86408000 + wallJump);
-      h.advance(10000); assert.equal(elapsed.length, 1); assert.equal(h.chimes, 1);
+      h.advance(10000); assert.equal(elapsed.length, 1); assert.equal(h.chimes, 0);
     } finally { h.destroy(); }
   }
 });
