@@ -367,6 +367,7 @@ export const App: React.FC = () => {
   };
   const checkCameraAndLock = async (version: number, requireExpiry = false): Promise<boolean> => {
     const controller = new AbortController();
+    const captureStartedAt = performance.now();
     const isCurrent = () => mountedRef.current && version === session.version && session.counting &&
       (!requireExpiry || session.expiryPending) && !controller.signal.aborted &&
       !cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled;
@@ -382,6 +383,12 @@ export const App: React.FC = () => {
         if (!snapshot || snapshot.version !== version || snapshot.manualPaused || snapshot.breakActive ||
           snapshot.exercising || snapshot.reasons.length || (requireExpiry && !snapshot.expiryPending)) return false;
       }
+      const idle = await getSystemIdleSeconds();
+      const sampledAt = performance.now();
+      // Input may have resumed in another app after the fullscreen break closed.
+      // Query completion and rounded-down idle give an upper bound on input time.
+      // Defer locking whenever that bound could fall after capture started.
+      if (idle === null || !Number.isFinite(idle) || idle < 0 || sampledAt - idle * 1000 > captureStartedAt) return false;
       if (!isCurrent()) return false;
       if (await window.electronAPI.lockComputer()) {
         if (mountedRef.current) {
@@ -777,7 +784,9 @@ export const App: React.FC = () => {
         void handlersRef.current.samplePresence(true);
       }
     });
-    const activity = () => {
+    const activity = (event: Event) => {
+      // macOS fullscreen transitions can emit a stationary mousemove.
+      if (event.type === 'mousemove' && (event as MouseEvent).movementX === 0 && (event as MouseEvent).movementY === 0) return;
       cameraAbortRef.current?.abort();
       markPageActivity();
       if (!hasSystemIdleDetection() && !window.electronAPI?.isElectron) {

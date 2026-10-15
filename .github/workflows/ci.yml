@@ -155,6 +155,11 @@ jobs:
         run: node tests/tauri-camera-smoke.cjs
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
+      - name: Smoke test macOS camera completion after normal and strict breaks
+        if: runner.os == 'macOS'
+        run: node tests/tauri-camera-completion-smoke.cjs
+        env:
+          RUST_TARGET: ${{ matrix.rust-target }}
       - name: Smoke test offline camera model in Linux WebView
         if: runner.os == 'Linux'
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/dev/null 2>&1 & node tests/tauri-camera-smoke.cjs'
@@ -211,3 +216,11 @@ jobs:
       - name: Launch the verified Linux AppImage
         if: runner.os == 'Linux'
         run: xvfb-run -a dbus-run-session -- bash -c 'openbox >/dev/null 2>&1 & node tests/tauri-package-smoke.cjs'
+      - name: Retain failed native startup diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-smoke-diagnostics-${{ matrix.platform }}-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/blincho-native-smoke-*/failure-artifacts/*
+          if-no-files-found: ignore
+          retention-days: 3
