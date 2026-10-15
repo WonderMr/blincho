@@ -2,6 +2,12 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.7]
+
+### Fixed
+
+- Check camera presence when a timed break finishes as well as before it starts. With camera locking enabled, lock the computer if the user left during the break. Cancel pending checks on fresh input, pause, settings changes, a new break, exercise, lock or sleep. Keep unavailable-camera checks from locking the computer.
+
 ## [1.8.6]
 
 ### Fixed

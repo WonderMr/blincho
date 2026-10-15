@@ -534,7 +534,7 @@
   "Статус звонка неизвестен": "Arama durumu bilinmiyor",
   "Определение звонков отключено": "Arama algılama kapalı",
   "Блокировать компьютер, если никого нет": "Kimse yoksa bilgisayarı kilitle",
-  "В конце рабочего интервала камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Çalışma aralığının sonunda kamera bir kişinin bulunup bulunmadığını kontrol eder. Kimse algılanmazsa bilgisayar kilitlenir. Kontrol cihazınızda yapılır; görüntüler kaydedilmez veya gönderilmez. Kamera izni gerekir. Kamera veya kontrol kullanılamıyorsa kilitleme atlanır.",
+  "Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.": "Moladan önce ve mola bittikten sonra kamera bir kişinin bulunup bulunmadığını kontrol eder. Kimse algılanmazsa bilgisayar kilitlenir. Kontrol cihazınızda yapılır; görüntüler kaydedilmez veya gönderilmez. Kamera izni gerekir. Kamera veya kontrol kullanılamıyorsa kilitleme atlanır. Her kontrolden sonra kamera kapanır.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Kamera desteği olan masaüstü uygulamasında kullanılabilir. Tarayıcı bilgisayarı kilitlemez.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "Kamera bir kişi algılamadı. Bilgisayar kilitlendi.",
   "Не удалось заблокировать компьютер.": "Bilgisayar kilitlenemedi.",
