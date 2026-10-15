@@ -42,6 +42,23 @@ for (const mode of ['single', 'routine']) test(`${mode} exercise starts from the
   } finally { h.destroy(); }
 });
 
+for (const mode of ['single', 'routine']) test(`${mode} exercise refreshes presence after an invalid pre-click query`, async () => {
+  const h = createHarness();
+  try {
+    await h.settle(); await h.call('Navbar', 'onSelectTab', 'library'); h.setIdle(60); await h.advance(1000);
+    let resolveOld, freshQueries = 0;
+    h.electronAPI.getSystemIdleTime = () => new Promise(resolve => { resolveOld = resolve; });
+    await h.emit('mousedown'); assert(resolveOld, 'a pre-click query is in flight');
+    const start = mode === 'single' ? h.captured.ExerciseLibrary.onSelectTechnique(item('fresh')) : h.captured.ExerciseLibrary.onStartFullRoutine();
+    await h.settle(); assert.equal(h.active.has('ExercisePlayer'), false);
+    h.electronAPI.getSystemIdleTime = async () => { freshQueries++; return 0; };
+    resolveOld(NaN); await start; await h.settle();
+    assert(freshQueries > 0, 'the failed old query cannot consume the requested fresh sample');
+    assert.equal(h.active.has('ExercisePlayer'), true);
+    assert.equal(h.captured.ExercisePlayer.technique.id, mode === 'single' ? 'fresh' : 'donald-korb-blinking');
+  } finally { h.destroy(); }
+});
+
 for (const failure of ['idle', 'invalid', 'unmount']) test(`pending exercise start is canceled after ${failure}`, async () => {
   const h = createHarness(); let destroyed = false;
   try {
