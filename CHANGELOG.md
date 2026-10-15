@@ -7,6 +7,7 @@ Release notes are curated here before a version tag is pushed. The website keeps
 ### Fixed
 
 - Show one tray hover summary on macOS and Windows. Keep the system tooltip disabled while the preview window is available, including after timer and language updates, and retain the text fallback when the preview cannot be created.
+- Keep repeated macOS break cleanup from reapplying an already restored Dock activation policy, while preserving restoration after strict breaks and explicit hide actions.
 
 ## [1.8.2]
 

@@ -91,6 +91,8 @@ int main(int argc, const char **argv) {
                 @"visible": @(window.visible), @"key": @(window.keyWindow),
                 @"active": @(NSApp.active), @"sample": @(++sequence),
                 @"observedPID": @(observedPID),
+                @"observedLookupFound": @(observed != nil),
+                @"observedTerminated": observed ? @(observed.terminated) : NSNull.null,
                 @"observedActivationPolicy": observed ? @(observed.activationPolicy) : NSNull.null,
                 @"reportedAtMs": @(reportedAtMs)
             });

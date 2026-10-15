@@ -218,6 +218,11 @@ int blincho_request_lock(void) {
 - (void)dealloc { [self stop]; }
 @end
 
+int blincho_activation_policy(void) {
+    if (!NSThread.isMainThread || !NSApp) return -1;
+    return (int)NSApp.activationPolicy;
+}
+
 void blincho_window_level(void *pointer, int strict) {
     NSWindow *window = (__bridge NSWindow *)pointer;
     static BlinchoStrictPresentation *presentation;
