@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..');
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.join(root, 'src-tauri/target',
   ...(process.env.RUST_TARGET ? [process.env.RUST_TARGET] : []), 'debug', 'blincho');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const COUNTDOWN_COMPLETION_TOLERANCE_MS = 1500;
 const processes = new Set();
 let sequence = 0;
 let probe = 0;
@@ -100,19 +101,31 @@ async function activate(fixture) {
   return until(() => fixtureState(fixture), state => state.sample > before && state.frontmostPID === fixture.pid,
     [fixture.handle], 5_000, 'actual companion frontmost PID');
 }
-async function observeApp(fixture, pid) {
+function assertAppIdentity(state, app) {
+  assert.equal(state.observedLookupFound, true, 'External application lookup must remain available');
+  assert.equal(state.observedProcessIdentifier, app.handle.child.pid, 'External observation must match the child PID');
+  assert.equal(state.observedTerminated, false, 'Observed application must remain alive');
+  assert.equal(state.observedBundleIdentifier, app.bundleIdentifier, 'External bundle identity must match the isolated app');
+  assert.equal(state.observedBundlePath, app.bundlePath, 'External bundle path must match the isolated app');
+  assert.equal(state.observedExecutablePath, app.binary, 'External executable path must match the copied binary');
+}
+async function observeApp(fixture, app) {
+  const pid = app.handle.child.pid;
   const id = ++sequence;
   const response = path.join(fixture.directory, 'response.json');
   fs.rmSync(response, { force: true });
   writeControl(path.join(fixture.directory, 'observe-app'), { id, pid });
   await until(() => readJSON(response), reply => reply.id === id && reply.ok === true,
     [fixture.handle], 5_000, 'observe native activation policy');
-  return until(() => fixtureState(fixture), state => state.observedPID === pid
+  const state = await until(() => fixtureState(fixture), state => state.observedPID === pid
     && Number.isInteger(state.observedActivationPolicy), [fixture.handle], 5_000, 'native activation policy available');
+  assertAppIdentity(state, app);
+  return state;
 }
 async function dockPolicy(fixture, app, expected, description) {
-  await until(() => fixtureState(fixture), state => state.observedPID === app.handle.child.pid
+  const state = await until(() => fixtureState(fixture), state => state.observedPID === app.handle.child.pid
     && state.observedActivationPolicy === expected, [fixture.handle, app.handle], 5_000, description);
+  assertAppIdentity(state, app);
 }
 async function inspectRenderer(app, after = '') {
   const marker = ++probe;
@@ -125,6 +138,45 @@ async function inspectRenderer(app, after = '') {
 const sameGeometry = (value, baseline) => Math.abs(value.position.x - baseline.position.x) <= 2
   && Math.abs(value.position.y - baseline.position.y) <= 2
   && value.size.width === baseline.size.width && value.size.height === baseline.size.height;
+
+function assertCountdownActive(state, countdown) {
+  const timer = state.timer;
+  assert.equal(timer.breakActive, true, 'The native countdown must still be active');
+  assert.deepEqual(timer.reasons, [], 'Presence must remain confirmed during the countdown');
+  assert.equal(timer.absenceEpoch, countdown.absenceEpoch, 'An absence must not replace the countdown');
+  assert.equal(timer.breakEndAt, countdown.deadline, 'An active countdown must keep its original deadline');
+  const spans = timer.activitySpans.filter(span => span.state === 'break' && span.start === countdown.startedAt);
+  assert.equal(spans.length, 1, 'The independent native break interval must remain available');
+  assert(spans[0].end > countdown.startedAt, 'Native activity must observe a positive break interval');
+}
+function nativeCountdown(state, breakSeconds, configuredAt, observedAt) {
+  const spans = state.timer.activitySpans.filter(span => span.state === 'break' && span.start >= configuredAt);
+  assert.equal(spans.length, 1, 'The countdown needs one independent post-request native break interval');
+  const countdown = Object.freeze({ startedAt: spans[0].start, deadline: state.timer.breakEndAt,
+    absenceEpoch: state.timer.absenceEpoch });
+  const timing = JSON.stringify({ ...countdown, breakSeconds, configuredAt, observedAt,
+    observationLagMs: observedAt - countdown.startedAt });
+  assert.equal(countdown.deadline - countdown.startedAt, breakSeconds * 1000,
+    'The configured native countdown must not be shortened: ' + timing);
+  assert(countdown.deadline > observedAt, 'The automatic break must have a live native deadline: ' + timing);
+  assertCountdownActive(state, countdown);
+  return countdown;
+}
+function assertCountdownCompleted(state, countdown, observedAt) {
+  const timer = state.timer;
+  assert.equal(timer.breakActive, false, 'The native countdown must complete');
+  assert.deepEqual(timer.reasons, [], 'An absence must not complete a normal countdown');
+  assert.equal(timer.absenceEpoch, countdown.absenceEpoch, 'The completed countdown must keep its presence epoch');
+  const spans = timer.activitySpans.filter(span => span.state === 'break' && span.start === countdown.startedAt);
+  assert.equal(spans.length, 1, 'Completion needs the same independent native break interval');
+  // Preserve the existing smoke's completion tolerance for asynchronous
+  // renderer/native clocks. A late file read cannot replace native coverage.
+  assert(spans[0].end >= countdown.deadline - COUNTDOWN_COMPLETION_TOLERANCE_MS,
+    'Native break activity must cover the original countdown within its completion tolerance: '
+    + JSON.stringify({ countdown, span: spans[0], observedAt }));
+  assert(observedAt >= countdown.deadline, 'Restoration must not precede the real native deadline');
+  return { observedAt, nativeEndedAt: spans[0].end, completionDeltaMs: spans[0].end - countdown.deadline };
+}
 
 async function startFixture(base, compiled, name) {
   const directory = path.join(base, name);
@@ -165,7 +217,18 @@ async function stopApp(app) {
 }
 
 async function scenario(base, previous, third, { name, mode, strictMode, breakSeconds, chooseThird = false, explicitShow = false, startupHidden = false, releaseAndHide = false }) {
-  const directory = fs.mkdtempSync(path.join(base, name + '-'));
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(base, name + '-')));
+  // Launch the unchanged Cargo binary with the same AppKit bundle registration
+  // as an installed app, and keep every scenario's identity isolated.
+  const bundlePath = path.join(directory, 'Blincho.app');
+  const contents = path.join(bundlePath, 'Contents');
+  const binary = path.join(contents, 'MacOS', 'blincho');
+  const bundleIdentifier = 'com.blincho.focussmoke.' + path.basename(directory);
+  fs.mkdirSync(path.dirname(binary), { recursive: true });
+  fs.copyFileSync(executable, binary);
+  fs.chmodSync(binary, 0o700);
+  assert(fs.readFileSync(executable).equals(fs.readFileSync(binary)), 'Focus smoke must use the unchanged compiled executable');
+  fs.writeFileSync(path.join(contents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>blincho</string><key>CFBundleIdentifier</key><string>${bundleIdentifier}</string><key>CFBundleName</key><string>Blincho</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`);
   const source = path.join(directory, 'legacy.json');
   fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
     myeyes_settings_v1: JSON.stringify({ timerPreset: 'custom', workMinutes: 60, breakSeconds,
@@ -174,13 +237,14 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
   } }));
   const startupFocus = startupHidden ? await activate(previous) : null;
-  const handle = launch(executable, startupHidden ? ['--autostart'] : [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory,
+  const handle = launch(binary, startupHidden ? ['--autostart'] : [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory,
     BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1' } });
-  const app = { handle, directory, read: () => readJSON(path.join(directory, 'runtime-diagnostics.json')) };
+  const app = { handle, directory, bundlePath, bundleIdentifier, binary,
+    read: () => readJSON(path.join(directory, 'runtime-diagnostics.json')) };
   const initial = await until(app.read, value => value.renderer?.ready && value.timer.totalMs > 0,
     [handle], 30_000, 'Blincho renderer launch');
   assert.equal(initial.pid, handle.child.pid);
-  await observeApp(previous, initial.pid);
+  await observeApp(previous, app);
   await dockPolicy(previous, app, startupHidden ? 1 : 0, 'startup Dock policy must match window visibility');
   if (startupHidden) {
     assert.equal(initial.visible, false, 'Autostart must keep the main window hidden');
@@ -232,19 +296,22 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     meetingEnabled: false, autoTakeover: true };
   const focusTrace = [];
   let lastFocusTick = -1;
+  const configuredAt = Date.now();
   await control(app, 'configure', { input });
   const started = await until(app.read, value => value.visible && value.timer.breakActive
+    && value.timer.activitySpans.some(span => span.state === 'break' && span.start >= configuredAt)
     && (!strictMode || value.strict && value.strictShieldCount > 0),
     [handle, previous.handle, third.handle], 10_000, 'automatic break');
   const observedStart = Date.now();
+  const countdown = nativeCountdown(started, breakSeconds, configuredAt, observedStart);
+  console.log('Native countdown: ' + JSON.stringify({ name, ...countdown, observedStart,
+    observationLagMs: observedStart - countdown.startedAt }));
   // The native strict shield temporarily uses Accessory to cover other apps'
   // fullscreen Spaces. Ordinary window/Dock policy must return after cleanup.
   await dockPolicy(previous, app, strictMode ? 1 : 0, 'break presentation must use its native activation policy');
-  assert(started.timer.breakEndAt > observedStart, 'The automatic break must have a real native deadline');
-  if (!releaseAndHide) assert(started.timer.breakEndAt - observedStart >= breakSeconds * 1000 - 1500,
-    'The smoke must observe the configured countdown, without shortening it');
   if (!releaseAndHide) await until(() => {
     const focus = fixtureState(previous), runtime = app.read();
+    if (runtime?.timer.breakActive) assertCountdownActive(runtime, countdown);
     if (runtime?.timer.tickCount !== lastFocusTick && focusTrace.length < 60) {
       lastFocusTick = runtime?.timer.tickCount;
       focusTrace.push({ at: Date.now(), tick: lastFocusTick, breakActive: runtime?.timer.breakActive,
@@ -292,11 +359,13 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     && value.strictShieldCount === 0 && !value.fullscreen && !value.maximized
     && (mode === 'tray' && !explicitShow ? !value.visible && !value.minimized
       : mode === 'minimized' ? value.minimized : value.visible && !value.minimized);
-  await until(app.read, restored, [handle, previous.handle, third.handle], breakSeconds * 1000 + 10_000,
-    'original presentation after break completion');
   const expectedPolicy = mode === 'tray' && !explicitShow ? 1 : 0;
+  await until(app.read, value => restored(value) && value.nativeActivationPolicy === expectedPolicy
+    && value.dockVisible === (expectedPolicy === 0), [handle, previous.handle, third.handle], breakSeconds * 1000 + 10_000,
+    'original presentation after break completion');
   await dockPolicy(previous, app, expectedPolicy, 'Dock must return to original window state');
-  assert(Date.now() - observedStart >= breakSeconds * 1000 - 1500, 'Break must complete through the real countdown');
+  const nativeCompletion = assertCountdownCompleted(app.read(), countdown, Date.now());
+  console.log('Native completion: ' + JSON.stringify({ name, ...nativeCompletion }));
   await until(() => fixtureState(expected), value => value.frontmostPID === expectedPID,
     [handle, expected.handle], 5_000, 'expected work app frontmost after completion');
   assert.equal((await inspectRenderer(app)).renderer.dialog, false, 'Renderer cleanup must remove the overlay');
@@ -304,11 +373,17 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     const startTick = app.read().timer.tickCount;
     const deadline = Date.now() + 2200;
     while (Date.now() < deadline) {
-      [handle, expected.handle].forEach(alive);
+      [handle, previous.handle, expected.handle].forEach(alive);
       const state = app.read();
       assert(restored(state), label + ': ' + JSON.stringify(state));
       assert.equal(fixtureState(expected).frontmostPID, expectedPID, label + ': actual frontmost PID');
-      assert.equal(fixtureState(previous).observedActivationPolicy, expectedPolicy, label + ': Dock activation policy');
+      const observed = fixtureState(previous);
+      assertAppIdentity(observed, app);
+      const policyContext = label + ': ' + JSON.stringify({ nativeActivationPolicy: state.nativeActivationPolicy,
+        dockVisible: state.dockVisible, observer: observed });
+      assert.equal(observed.observedActivationPolicy, expectedPolicy, policyContext + ': Dock activation policy');
+      assert.equal(state.nativeActivationPolicy, expectedPolicy, policyContext + ': actual AppKit activation policy');
+      assert.equal(state.dockVisible, expectedPolicy === 0, policyContext + ': Dock visibility intent');
       await sleep(100);
     }
     assert(app.read().timer.tickCount >= startTick + 4, 'Following native timer ticks must have been observed');
@@ -326,6 +401,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   assert(sameGeometry(reopened, baseline), 'Manual reopen must retain the original normal frame');
   await stopApp(app);
   const result = { name, status: 'passed', mode, strictMode, breakSeconds, profile: directory,
+    nativeCountdown: countdown, nativeCompletion,
     blinchoPID: initial.pid, priorPID: previous.pid, expectedFrontmostPID: expectedPID,
     baseline: { position: baseline.position, size: baseline.size },
     reopened: { position: reopened.position, size: reopened.size }, focusTrace };
@@ -391,4 +467,5 @@ async function main() {
   }
   if (failures.length) throw new Error(failures.join('\n'));
 }
+module.exports = { nativeCountdown, assertCountdownActive, assertCountdownCompleted };
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });

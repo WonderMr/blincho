@@ -26,6 +26,7 @@ extern "C" {
     );
     fn blincho_window_level(pointer: *mut c_void, strict: i32);
     fn blincho_strict_shield_count() -> i32;
+    fn blincho_activation_policy() -> i32;
     fn blincho_capture_focus() -> *mut c_void;
     fn blincho_restore_focus(target: *mut c_void) -> i32;
     fn blincho_release_focus(target: *mut c_void);
@@ -104,6 +105,17 @@ pub unsafe fn window_level(pointer: *mut c_void, strict: bool) {
 }
 pub fn strict_shield_count() -> i32 {
     unsafe { blincho_strict_shield_count() }
+}
+pub fn activation_policy(app: &tauri::AppHandle) -> Option<i32> {
+    let (sender, receiver) = mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(unsafe { blincho_activation_policy() });
+    })
+    .ok()?;
+    receiver
+        .recv_timeout(Duration::from_secs(2))
+        .ok()
+        .filter(|policy| (0..=2).contains(policy))
 }
 fn bundled() -> bool {
     std::env::current_exe()

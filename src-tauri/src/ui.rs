@@ -173,13 +173,11 @@ pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
     ui.autostart
         .set_text(label("autostart"))
         .map_err(|e| e.to_string())?;
-    if let Some(tray) = app.tray_by_id("blincho") {
-        // Windows can start login items before Explorer is ready. The tray
-        // library retains its window and registers again on TaskbarCreated.
-        // An optional tooltip update must not abort that recovery or startup.
-        if let Err(error) = tray.set_tooltip(Some(label("title"))) {
-            eprintln!("Tray tooltip: {error}");
-        }
+    // Windows can start login items before Explorer is ready. The tray
+    // library retains its window and registers again on TaskbarCreated.
+    // An optional tooltip update must not abort that recovery or startup.
+    if let Err(error) = crate::tray_preview::set_tooltip(app, label("title")) {
+        eprintln!("Tray tooltip: {error}");
     }
     #[cfg(target_os = "macos")]
     let result = (|| -> tauri::Result<()> {

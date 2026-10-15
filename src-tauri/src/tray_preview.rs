@@ -115,11 +115,53 @@ impl Summary {
 #[derive(Default)]
 pub struct Preview {
     summary: Mutex<Option<Summary>>,
-    tooltip: Mutex<String>,
+    tooltip: Mutex<SummaryTooltip>,
+    native_tooltip: Mutex<NativeTooltip>,
     call_indicator: Mutex<CallIndicator>,
     clicked: AtomicBool,
     #[cfg(target_os = "linux")]
     menu_rows: Mutex<Vec<tauri::menu::MenuItem<tauri::Wry>>>,
+}
+
+#[derive(Default)]
+struct SummaryTooltip {
+    text: String,
+    preview_available: bool,
+}
+
+#[derive(Clone, Default)]
+struct NativeTooltip {
+    applied: bool,
+    text: Option<String>,
+    error: Option<String>,
+}
+
+pub fn set_tooltip(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
+    let Some(tray) = app.tray_by_id("blincho") else {
+        return Ok(());
+    };
+    // A custom hover window replaces the OS tooltip. Keep the text fallback
+    // when that window could not be created or is no longer available.
+    let tooltip = app.get_webview_window(LABEL).is_none().then_some(text);
+    // Native tray setters dispatch to the UI thread, so lock only afterwards.
+    let result = tray.set_tooltip(tooltip).map_err(|error| error.to_string());
+    let state = app.state::<Preview>();
+    let mut native = state
+        .native_tooltip
+        .lock()
+        .map_err(|error| error.to_string())?;
+    match result {
+        Ok(()) => {
+            native.applied = true;
+            native.text = tooltip.map(str::to_owned);
+            native.error = None;
+            Ok(())
+        }
+        Err(error) => {
+            native.error = Some(error.clone());
+            Err(error)
+        }
+    }
 }
 
 #[derive(Default)]
@@ -303,6 +345,11 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
     unsafe {
         macos::exclude_from_window_menu(window.ns_window().map_err(|e| e.to_string())?);
     }
+    // An unavailable notification area must not invalidate a working hover
+    // window. The setter retains the native error for diagnostics and tests.
+    if let Err(error) = set_tooltip(app, "Blincho") {
+        eprintln!("Tray tooltip: {error}");
+    }
     Ok(())
 }
 
@@ -314,6 +361,11 @@ pub fn hide(app: &tauri::AppHandle) {
 
 pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
     let state = app.state::<Preview>();
+    let native_tooltip = state
+        .native_tooltip
+        .lock()
+        .map(|value| value.clone())
+        .unwrap_or_default();
     let (indicator_active, indicator_updates, indicator_attempts, indicator_error) = state
         .call_indicator
         .lock()
@@ -375,7 +427,10 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
         "callIndicatorUpdates": indicator_updates,
         "callIndicatorAttempts": indicator_attempts,
         "callIndicatorError": indicator_error,
-        "tooltip": state.tooltip.lock().ok().map(|tooltip| tooltip.clone()),
+        "tooltip": state.tooltip.lock().ok().map(|tooltip| tooltip.text.clone()),
+        "nativeTooltip": native_tooltip.text,
+        "nativeTooltipApplied": native_tooltip.applied,
+        "nativeTooltipError": native_tooltip.error,
         "callStatus": call_status,
     })
 }
@@ -384,6 +439,15 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
 pub fn test_event(app: &tauri::AppHandle, kind: &str, rect: tauri::Rect) -> Result<(), String> {
     if app.state::<Runtime>().test_dir.is_none() {
         return Err("Preview test requires isolated profile".into());
+    }
+    if kind == "destroy" {
+        if let Some(window) = app.get_webview_window(LABEL) {
+            window.destroy().map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    }
+    if kind == "initialize" {
+        return initialize(app);
     }
     let id = "blincho".into();
     let position = rect.position.to_physical::<f64>(1.);
@@ -670,14 +734,18 @@ pub fn update(app: &tauri::AppHandle, snapshot: &Snapshot, strict: bool) {
         format!("{}: {}", summary.breaks_label, summary.breaks_value),
     ];
     let tooltip = format!("{}\n{}", summary.title, rows.join("\n"));
+    let preview_available = app.get_webview_window(LABEL).is_some();
     {
         let Ok(mut previous) = state.tooltip.lock() else {
             return;
         };
-        if *previous == tooltip {
+        // Window loss and recovery also change the native tooltip policy when
+        // a paused timer leaves every summary row unchanged.
+        if previous.text == tooltip && previous.preview_available == preview_available {
             return;
         }
-        *previous = tooltip.clone();
+        previous.text = tooltip.clone();
+        previous.preview_available = preview_available;
     }
     #[cfg(target_os = "linux")]
     if let Ok(items) = state.menu_rows.lock().map(|items| items.clone()) {
@@ -686,8 +754,8 @@ pub fn update(app: &tauri::AppHandle, snapshot: &Snapshot, strict: bool) {
         }
     };
     #[cfg(not(target_os = "linux"))]
-    if let Some(tray) = app.tray_by_id("blincho") {
-        let _ = tray.set_tooltip(Some(tooltip));
+    if let Err(error) = set_tooltip(app, &tooltip) {
+        eprintln!("Tray tooltip: {error}");
     }
 }
 

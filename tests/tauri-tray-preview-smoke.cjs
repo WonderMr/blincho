@@ -8,6 +8,17 @@ const { spawn, spawnSync } = require('node:child_process');
 const { loadNotificationAreaProof, callIndicatorReady, assertCallIndicator, assertCallRestored } = require('./support/windowsNotificationArea.cjs');
 const notificationAreaProof = loadNotificationAreaProof();
 let nativeIconRejectionObserved = false;
+let nativeTooltipRejectionObserved = false;
+function assertNativeTooltip(tray, expected = null) {
+  if (tray.nativeTooltipError !== null) {
+    assert(notificationAreaProof, 'Tooltip failures require the same-machine native SDK proof');
+    assert.match(tray.nativeTooltipError, /^tray icon error: Unspecified error \(os error -2147467259\)$/);
+    nativeTooltipRejectionObserved = true;
+    return;
+  }
+  assert.equal(tray.nativeTooltipApplied, true);
+  assert.equal(tray.nativeTooltip, expected, 'A rich preview must not compete with the operating system tooltip');
+}
 function assertIndicator(tray, active) {
   assertCallIndicator(tray, active, notificationAreaProof);
   if (tray.callIndicatorError !== null) nativeIconRejectionObserved = true;
@@ -69,6 +80,9 @@ async function control(operation, args = {}) {
   console.log('Tray preview smoke profile: ' + directory);
   const initial = await until(value => value.renderer?.ready && value.timer.totalMs > 0 && value.trayPreview?.summary);
   const preview = initial.trayPreview;
+  if (process.platform !== 'linux') {
+    assertNativeTooltip(preview);
+  }
   assert.equal(initial.visible, false, 'isolated autostart keeps main hidden');
   assert(initial.monitors.length > 0, 'Native preview smoke requires an unlocked desktop with available monitors');
   const anchor = initial.monitors[0].position;
@@ -91,6 +105,7 @@ async function control(operation, args = {}) {
   await hover('enter');
   if (process.platform !== 'linux') {
     const callPopup = await until(value => value.trayPreview.visible);
+    assertNativeTooltip(callPopup.trayPreview);
     assert.equal(callPopup.trayPreview.focused, false);
     if (process.platform === 'darwin') assert.equal(callPopup.trayPreview.native.frontmostPid,
       beforeCallHover.trayPreview.native.frontmostPid, 'Active-call hover preserves the foreground application');
@@ -137,6 +152,7 @@ async function control(operation, args = {}) {
   } else {
     await hover('enter');
     const shown = await until(value => value.trayPreview.visible === true);
+    assertNativeTooltip(shown.trayPreview);
     assert.equal(shown.trayPreview.focused, false);
     assert.equal(shown.visible, false);
     assert.equal(shown.focused, false);
@@ -190,13 +206,56 @@ async function control(operation, args = {}) {
     await until(value => !value.strict && value.strictShieldCount === 0);
     await control('hide');
     console.log('PASS: strict break guard suppresses preview and retains its shield/focus behavior.');
+
+    const setNativeLocale = async locale => {
+      await control('eval', { script: `window.__TAURI__.core.invoke('set_locale', { locale: ${JSON.stringify(locale)} })
+        .then(() => window.__TAURI__.core.invoke('renderer_report', { report: { ready: true, tooltipLocale: ${JSON.stringify(locale)} } }))` });
+      return until(value => value.renderer?.tooltipLocale === locale);
+    };
+    assertNativeTooltip((await setNativeLocale('fr')).trayPreview);
+    assertNativeTooltip((await setNativeLocale('en')).trayPreview);
+    await sleep(1200);
+    assertNativeTooltip(read().trayPreview);
+    const pausedInput = { ...input, version: read().timer.version + 1, breakActive: false, strictMode: false, manualPaused: true };
+    await control('configure', { input: pausedInput });
+    await until(value => value.timer.manualPaused && value.trayPreview.tooltip.includes('Timer manually paused'));
+    const pausedTooltip = read().trayPreview.tooltip;
+    await sleep(1200);
+    assert.equal(read().trayPreview.tooltip, pausedTooltip, 'Paused summary stays unchanged during window loss');
+    await control('tray-preview', { kind: 'destroy' });
+    await until(value => value.trayPreview.visible === null);
+    const pausedFallback = await until(value => value.trayPreview.nativeTooltipError !== null || value.trayPreview.nativeTooltip === pausedTooltip);
+    assertNativeTooltip(pausedFallback.trayPreview, pausedTooltip);
+    await setNativeLocale('fr');
+    // Renderer acknowledgments and native diagnostics are collected separately.
+    // Wait for the actual tooltip apply rather than a mixed transition snapshot.
+    const fallbackTitle = await until(value => value.trayPreview.nativeTooltipError !== null ||
+      typeof value.trayPreview.nativeTooltip === 'string');
+    if (fallbackTitle.trayPreview.nativeTooltipError === null) {
+      assert.equal(typeof fallbackTitle.trayPreview.nativeTooltip, 'string');
+      assert(fallbackTitle.trayPreview.nativeTooltip.length > 0, 'Missing preview retains the localized OS fallback');
+      assertNativeTooltip(fallbackTitle.trayPreview, fallbackTitle.trayPreview.nativeTooltip);
+    } else assertNativeTooltip(fallbackTitle.trayPreview);
+    await setNativeLocale('en');
+    await control('tray-preview', { kind: 'initialize' });
+    const restoredPreview = await until(value => value.trayPreview.visible === false &&
+      (value.trayPreview.nativeTooltipError !== null || value.trayPreview.nativeTooltip === null));
+    assertNativeTooltip(restoredPreview.trayPreview);
+    await hover('enter');
+    assertNativeTooltip((await until(value => value.trayPreview.visible)).trayPreview);
+    await hover('leave');
+    await until(value => value.trayPreview.visible === false);
+    console.log('PASS: only one hover summary survives timer ticks and locale updates; a missing preview retains text fallback and recovery clears it.');
   }
   const notificationArea = nativeIconRejectionObserved
     ? 'unavailable: same-machine native SDK proof confirmed ARM64 CI NIM_ADD rejection; visible icon remains unverified'
     : 'native call icon and restoration successfully applied';
   console.log('Notification area: ' + notificationArea);
+  const nativeTooltip = process.platform === 'linux' ? 'not applicable: live menu rows replace unsupported hover and tooltips'
+    : nativeTooltipRejectionObserved ? 'unverified: independently proven unavailable notification area'
+    : 'suppression and fallback successfully applied';
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify({ passed: true, platform: process.platform,
-    notificationArea, final: read() }, null, 2));
+    notificationArea, nativeTooltip, final: read() }, null, 2));
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   if (child.exitCode === null && child.signalCode === null && !launchError) {
     try { await control('quit'); } catch { child.kill(); }

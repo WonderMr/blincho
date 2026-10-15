@@ -91,6 +91,12 @@ int main(int argc, const char **argv) {
                 @"visible": @(window.visible), @"key": @(window.keyWindow),
                 @"active": @(NSApp.active), @"sample": @(++sequence),
                 @"observedPID": @(observedPID),
+                @"observedLookupFound": observed ? @YES : @NO,
+                @"observedProcessIdentifier": observed ? @(observed.processIdentifier) : NSNull.null,
+                @"observedBundleIdentifier": observed.bundleIdentifier ?: NSNull.null,
+                @"observedBundlePath": observed.bundleURL.path ?: NSNull.null,
+                @"observedExecutablePath": observed.executableURL.path ?: NSNull.null,
+                @"observedTerminated": observed ? @(observed.terminated) : NSNull.null,
                 @"observedActivationPolicy": observed ? @(observed.activationPolicy) : NSNull.null,
                 @"reportedAtMs": @(reportedAtMs)
             });
