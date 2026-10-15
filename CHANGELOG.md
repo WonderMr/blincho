@@ -2,6 +2,12 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.8]
+
+### Fixed
+
+- Check camera presence after timed breaks as well as before them, including strict mode. Ignore stationary mouse events generated when the fullscreen break closes and recheck system input before locking, so returning in another app cancels a stale absence decision.
+
 ## [1.8.7]
 
 ### Fixed
