@@ -42,6 +42,36 @@ struct Runtime {
     meeting: platform::MeetingMonitor,
 }
 static HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
+// Fixed stage names only, explicitly opted in by native prototype tests. Keep
+// this separate from runtime diagnostics so a blocked setup leaves evidence.
+fn startup_trace(stage: &'static str) {
+    let directory = std::env::var_os("BLINCHO_PROTOTYPE_TEST_DIR").map(PathBuf::from);
+    write_startup_trace(directory.as_deref(), stage);
+}
+fn write_startup_trace(directory: Option<&std::path::Path>, stage: &'static str) {
+    use std::io::Write;
+    static LOCK: Mutex<()> = Mutex::new(());
+    const LIMIT: u64 = 16_384;
+    let Some(directory) = directory else { return };
+    let Ok(_guard) = LOCK.lock() else { return };
+    let path = directory.join("startup-trace.jsonl");
+    let line = format!(
+        "{}\n",
+        json!({"stage":stage,"pid":std::process::id(),"at":Utc::now().to_rfc3339()})
+    );
+    if std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0) + line.len() as u64 > LIMIT {
+        return;
+    }
+    if std::fs::create_dir_all(directory).is_ok() {
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
+}
 extern "C" fn power_event(code: i32) {
     if let Some(app) = HANDLE.get() {
         let runtime = app.state::<Runtime>();
@@ -560,10 +590,18 @@ fn renderer_report(report: Value, app: tauri::AppHandle) -> Result<(), String> {
     if report.to_string().len() > 16384 {
         return Err("Report too large".into());
     }
-    *app.state::<Runtime>()
-        .renderer
-        .lock()
-        .map_err(|e| e.to_string())? = report;
+    let runtime = app.state::<Runtime>();
+    let mut renderer = runtime.renderer.lock().map_err(|e| e.to_string())?;
+    let first_report = renderer.is_null();
+    let became_ready = renderer["ready"] != true && report["ready"] == true;
+    *renderer = report;
+    drop(renderer);
+    if first_report {
+        startup_trace("renderer-first-report");
+    }
+    if became_ready {
+        startup_trace("renderer-ready");
+    }
     Ok(())
 }
 #[tauri::command]
@@ -814,6 +852,7 @@ fn test_control_on_main(app: &tauri::AppHandle) {
     let _ = std::fs::write(directory.join("response.json"), response.to_string());
 }
 fn main() {
+    startup_trace("main-entry");
     let hidden = std::env::args_os().any(|arg| arg == "--autostart");
     let mut context = tauri::generate_context!();
     // A test profile must never address the normal instance's singleton socket.
@@ -823,12 +862,14 @@ fn main() {
         path.hash(&mut hash);
         context.config_mut().identifier = format!("com.myeyes.tauri.test{:x}", hash.finish());
     }
+    startup_trace("context-ready");
     let autostart_builder = tauri_plugin_autostart::Builder::new()
         .app_name(startup::LABEL)
         .arg("--autostart");
     #[cfg(target_os = "macos")]
     let autostart_builder =
         autostart_builder.macos_launcher(tauri_plugin_autostart::MacosLauncher::LaunchAgent);
+    startup_trace("app-build-start");
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             let autostart = args.iter().any(|arg| arg == "--autostart");
@@ -867,6 +908,7 @@ fn main() {
             handler(invoke)
         })
         .setup(move |app| {
+            startup_trace("setup-enter");
             ui::initialize_dock(app.handle(), !hidden);
             #[cfg(target_os = "macos")]
             if hidden {
@@ -874,6 +916,7 @@ fn main() {
                 // and tray reopening before constructing the webview.
                 ui::reconcile_dock(app.handle())?;
             }
+            startup_trace("dock-ready");
             let test_dir = std::env::var_os("BLINCHO_PROTOTYPE_TEST_DIR").map(PathBuf::from);
             let profile = match &test_dir {
                 Some(path) => path.join("profile"),
@@ -884,6 +927,7 @@ fn main() {
             if let Some(path) = &test_dir {
                 std::fs::create_dir_all(path)?;
             }
+            startup_trace("profile-ready");
             let mut builder =
                 tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
                     .visible(!hidden)
@@ -910,7 +954,15 @@ fn main() {
                 }
                 #[cfg(not(target_os = "macos"))]
                 { builder = builder.data_directory(path.join("webview")); }
+                builder = builder.on_page_load(|_, payload| {
+                    use tauri::webview::PageLoadEvent;
+                    startup_trace(match payload.event() {
+                        PageLoadEvent::Started => "renderer-page-started",
+                        PageLoadEvent::Finished => "renderer-page-finished",
+                    });
+                });
             }
+            startup_trace("webview-config-ready");
             let source = std::env::var_os("BLINCHO_PROTOTYPE_HISTORY_SOURCE")
                 .map(PathBuf::from)
                 .unwrap_or(history::legacy_profile_dir()?.join("tauri-history-export.json"));
@@ -933,6 +985,7 @@ fn main() {
             let updates_app=app.handle().clone();
             let bundled=startup::is_packaged();
             let update_controller=updates::UpdateController::new(profile.clone(),app.package_info().version.to_string(),std::env::consts::ARCH,bundled,move|state|{let _=updates_app.emit("update-state",state);});
+            startup_trace("update-controller-ready");
             let meeting = platform::MeetingMonitor::new();
             if test_dir.is_some()
                 && std::env::var_os("BLINCHO_SMOKE_MEETINGS").is_some_and(|value| value == "1")
@@ -956,8 +1009,12 @@ fn main() {
             HANDLE
                 .set(app.handle().clone())
                 .map_err(|_| "Duplicate runtime")?;
+            startup_trace("runtime-ready");
+            startup_trace("power-observer-start");
             if let Err(error) = platform::observe_power(power_event) { eprintln!("Power observer: {error}"); }
+            startup_trace("power-observer-ready");
             if bundled { platform::notifications_initialize(notification_clicked); }
+            startup_trace("native-menu-start");
             let show = MenuItem::with_id(app, "show", "Показать Blincho", true, None::<&str>)?;
             let rest = MenuItem::with_id(app, "rest", "Сделать перерыв", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
@@ -969,6 +1026,7 @@ fn main() {
             app.manage(ui::NativeUi{show:show.clone(),rest:rest.clone(),quit:quit.clone(),autostart:launch_at_login.clone(),guards:Mutex::new(vec![])});
             let startup_languages = preferred_languages();
             let startup_locale = startup_languages.first().map(String::as_str).unwrap_or("en");
+            startup_trace("tray-build-start");
             TrayIconBuilder::with_id("blincho")
                 .icon(tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
                     include_bytes!("../../assets/trayTemplate.png")
@@ -1006,6 +1064,7 @@ fn main() {
                     _ => {}
                 })
                 .build(app)?;
+            startup_trace("tray-build-ready");
             app.on_menu_event(|app, event| {
                 let operation = match event.id.as_ref() {
                     "native-hide" => "hide",
@@ -1015,7 +1074,9 @@ fn main() {
                 let _ = desktop_command(operation.into(), None, app.clone());
             });
             ui::set_locale(app.handle(), startup_locale)?;
+            startup_trace("window-build-start");
             let _main_window = builder.build()?;
+            startup_trace("window-build-ready");
             #[cfg(target_os = "linux")]
             camera_permission::install(&_main_window)?;
             if let Err(error) = tray_preview::initialize(app.handle()) {
@@ -1109,6 +1170,7 @@ fn main() {
                     diagnostics(&handle);
                 }
             });
+            startup_trace("setup-complete");
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1150,6 +1212,7 @@ fn main() {
         })
         .build(context)
         .expect("Blincho failed to start");
+    startup_trace("app-build-complete");
     #[cfg(target_os = "macos")]
     let mut app = app;
     #[cfg(target_os = "macos")]
@@ -1160,7 +1223,11 @@ fn main() {
     } else {
         tauri::ActivationPolicy::Regular
     });
+    startup_trace("event-loop-start");
     app.run(|app, event| {
+        if let tauri::RunEvent::Ready = event {
+            startup_trace("event-loop-ready");
+        }
         if let tauri::RunEvent::Exit = event {
             if let Some(runtime) = app.try_state::<Runtime>() {
                 runtime.quitting.store(true, Ordering::SeqCst);
@@ -1176,4 +1243,39 @@ fn main() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod startup_trace_tests {
+    use super::write_startup_trace;
+
+    #[test]
+    fn explicit_profile_trace_records_fixed_stages_and_stays_bounded() {
+        let directory = tempfile::tempdir().unwrap();
+        let profile = directory.path().join("prototype");
+        for _ in 0..300 {
+            write_startup_trace(Some(&profile), "window-build-start");
+        }
+        let bytes = std::fs::read(profile.join("startup-trace.jsonl")).unwrap();
+        assert!(!bytes.is_empty());
+        assert!(bytes.len() <= 16_384);
+        for line in std::str::from_utf8(&bytes).unwrap().lines() {
+            let value: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert_eq!(value["stage"], "window-build-start");
+            assert_eq!(value["pid"], std::process::id());
+            assert_eq!(value.as_object().unwrap().len(), 3);
+            assert!(chrono::DateTime::parse_from_rfc3339(value["at"].as_str().unwrap()).is_ok());
+        }
+    }
+
+    #[test]
+    fn absent_profile_and_unwritable_destination_do_not_fail_startup() {
+        write_startup_trace(None, "main-entry");
+        let directory = tempfile::tempdir().unwrap();
+        let file = directory.path().join("not-a-directory");
+        std::fs::write(&file, b"fixture").unwrap();
+        write_startup_trace(Some(&file), "main-entry");
+        assert_eq!(std::fs::read(file).unwrap(), b"fixture");
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
 }
