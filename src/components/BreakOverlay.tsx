@@ -1,7 +1,6 @@
 import { useI18n } from '../i18n/useI18n';
 import { t } from '../i18n/runtime';
 import React, { useEffect, useRef, useState } from 'react';
-import { soundSynth } from '../audio/soundSynth';
 import { Eye, Clock, X, ChevronRight, Check, Lock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useModalFocus } from '../utils/useModalFocus';
@@ -46,7 +45,6 @@ export const BreakOverlay: React.FC<BreakOverlayProps> = ({
         completedRef.current = true;
         clearInterval(interval);
         setIsFinished(true);
-        soundSynth.playCompletionChime();
         if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
           confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 }, colors: ['#38bdf8', '#10b981'] });
         }
