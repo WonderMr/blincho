@@ -292,9 +292,10 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     && value.strictShieldCount === 0 && !value.fullscreen && !value.maximized
     && (mode === 'tray' && !explicitShow ? !value.visible && !value.minimized
       : mode === 'minimized' ? value.minimized : value.visible && !value.minimized);
-  await until(app.read, restored, [handle, previous.handle, third.handle], breakSeconds * 1000 + 10_000,
-    'original presentation after break completion');
   const expectedPolicy = mode === 'tray' && !explicitShow ? 1 : 0;
+  await until(app.read, value => restored(value) && value.nativeActivationPolicy === expectedPolicy
+    && value.dockVisible === (expectedPolicy === 0), [handle, previous.handle, third.handle], breakSeconds * 1000 + 10_000,
+    'original presentation after break completion');
   await dockPolicy(previous, app, expectedPolicy, 'Dock must return to original window state');
   assert(Date.now() - observedStart >= breakSeconds * 1000 - 1500, 'Break must complete through the real countdown');
   await until(() => fixtureState(expected), value => value.frontmostPID === expectedPID,
@@ -304,11 +305,16 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     const startTick = app.read().timer.tickCount;
     const deadline = Date.now() + 2200;
     while (Date.now() < deadline) {
-      [handle, expected.handle].forEach(alive);
+      [handle, previous.handle, expected.handle].forEach(alive);
       const state = app.read();
       assert(restored(state), label + ': ' + JSON.stringify(state));
       assert.equal(fixtureState(expected).frontmostPID, expectedPID, label + ': actual frontmost PID');
-      assert.equal(fixtureState(previous).observedActivationPolicy, expectedPolicy, label + ': Dock activation policy');
+      const observed = fixtureState(previous);
+      const policyContext = label + ': ' + JSON.stringify({ nativeActivationPolicy: state.nativeActivationPolicy,
+        dockVisible: state.dockVisible, observer: observed });
+      assert.equal(observed.observedActivationPolicy, expectedPolicy, policyContext + ': Dock activation policy');
+      assert.equal(state.nativeActivationPolicy, expectedPolicy, policyContext + ': actual AppKit activation policy');
+      assert.equal(state.dockVisible, expectedPolicy === 0, policyContext + ': Dock visibility intent');
       await sleep(100);
     }
     assert(app.read().timer.tickCount >= startTick + 4, 'Following native timer ticks must have been observed');

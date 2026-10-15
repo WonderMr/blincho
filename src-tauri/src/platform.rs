@@ -122,6 +122,10 @@ pub unsafe fn window_level(pointer: *mut std::ffi::c_void, strict: bool) {
 pub fn strict_shield_count() -> i32 {
     macos::strict_shield_count()
 }
+#[cfg(target_os = "macos")]
+pub fn activation_policy(app: &tauri::AppHandle) -> Option<i32> {
+    macos::activation_policy(app)
+}
 use serde::Serialize;
 use std::{
     io::Read,

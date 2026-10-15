@@ -53,6 +53,11 @@ pub fn reconcile_dock(app: &tauri::AppHandle) -> Result<(), String> {
     // Strict shields temporarily own activation policy and restore their
     // captured baseline. A newer tray action must supersede that baseline.
     let visible = dock_is_visible(app)?;
+    // Compare AppKit's actual Regular (0) or Accessory (1) policy so duplicate
+    // teardown does not mutate an already restored application.
+    if crate::platform::activation_policy(app) == Some(if visible { 0 } else { 1 }) {
+        return Ok(());
+    }
     app.set_activation_policy(activation_policy(visible))
         .map_err(|e| e.to_string())
 }
