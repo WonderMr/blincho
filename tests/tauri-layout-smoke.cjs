@@ -14,7 +14,8 @@ fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date
   myeyes_settings_v1: JSON.stringify({ cameraLockEnabled: false, idleDetectionEnabled: true, meetingDetectionEnabled: true, strictMode: true,
     workMinutes: 20, breakSeconds: 20, soundEnabled: false, notificationsEnabled: false }),
   'blincho-language-v1': '{"preference":"en","acknowledged":true}',
-  myeyes_stats_v1: JSON.stringify([{ date, breaksCompleted: 11, exercisesCompleted: 4, focusMinutes: 656 }]),
+  myeyes_stats_v1: JSON.stringify([{ date, breaksCompleted: 11, exercisesCompleted: 4, focusMinutes: 656 },
+    { date: '2025-05-01', breaksCompleted: 2, exercisesCompleted: 0, focusMinutes: 45 }]),
 } }));
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.resolve(__dirname, '../src-tauri/target/debug/blincho');
 assert(fs.existsSync(executable), 'Build the native app before running layout checks');
@@ -73,16 +74,18 @@ async function measure(expectedPage, expectedLanguage) {
       const settingsNaturalWidth=naturalSettings.getBoundingClientRect().width;
       naturalSettings.remove();
       const breakButton=nav.querySelector('.nav-break-button');
-      const dateSelect=document.querySelector('.statistics-date-picker select');
+      const dateSelect=document.querySelector('.statistics-date-trigger');
       let dateControl=null;
       if(dateSelect){
         const style=getComputedStyle(dateSelect),text=document.createElement('span');
-        text.textContent=dateSelect.selectedOptions[0].textContent;
+        text.textContent=dateSelect.querySelector('span').textContent;
         Object.assign(text.style,{position:'fixed',visibility:'hidden',whiteSpace:'pre',font:style.font,letterSpacing:style.letterSpacing});
         document.body.append(text);
         const textWidth=text.getBoundingClientRect().width;
         text.remove();
-        dateControl={...describe(dateSelect),textWidth,availableTextWidth:dateSelect.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)};
+        // clientWidth rounds fractional CSS pixels, which can falsely report
+        // clipping for an intrinsically sized translated label.
+        dateControl={...describe(dateSelect),textWidth,availableTextWidth:dateSelect.getBoundingClientRect().width-parseFloat(style.borderLeftWidth)-parseFloat(style.borderRightWidth)-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)-dateSelect.querySelector('svg').getBoundingClientRect().width-parseFloat(style.columnGap)};
       }
       window.scrollTo(0,99999);
       main.scrollTop = main.scrollHeight;
@@ -180,7 +183,7 @@ function checkShell(layout) {
         const nr=nav.getBoundingClientRect(), mr=main.getBoundingClientRect();
         press(nav,nr.left+5,nr.top+100); press(main,mr.left+12,mr.top+2); press(titlebar,200,15);
         const freeStarts=starts;
-        for (const element of [document.querySelector('.nav-tabs button'),document.querySelector('.statistics-date-picker select')]) press(element,...middle(element));
+        for (const element of [document.querySelector('.nav-tabs button'),document.querySelector('.statistics-date-trigger')]) press(element,...middle(element));
         const heading=document.querySelector('.view-header h2'), range=document.createRange(); range.selectNodeContents(heading);
         const text=range.getClientRects()[0];press(heading,text.left+3,text.top+3);
         press(main,mr.right-1,mr.top+100); press(nav,nr.left+5,nr.top+100,2);
@@ -202,7 +205,30 @@ function checkShell(layout) {
     assert.equal(drag.selectedAfterText,6,'Pressing selected text preserves text interaction');
     assert.equal(drag.selectionPreserved,true,'Dragging free space retains the selected text');
     results.push({scope:'real-dom-drag-routing',...drag});
-    await control('eval',{script:"document.querySelector('.statistics-date-picker select').focus();"});
+    const dateMarker = ++sequence;
+    await control('eval', { script: `(() => {
+      const trigger=document.querySelector('.statistics-date-trigger'); trigger.click();
+      requestAnimationFrame(() => {
+        const panel=document.querySelector('.statistics-date-choices');
+        const choices=[...panel.querySelectorAll('button')];
+        const older=choices.find(button=>button.dataset.date==='2025-05-01');
+        const rect=panel.getBoundingClientRect();
+        window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${dateMarker},dateChoices:{
+          open:trigger.getAttribute('aria-expanded'),count:choices.length,visible:rect.width>0&&rect.height>0,
+          focus:document.activeElement?.dataset.date,olderLabel:older.textContent}}});
+      });
+    })()` });
+    const dateChoices=(await until(value=>value.renderer?.marker===dateMarker)).renderer.dateChoices;
+    assert.equal(dateChoices.open,'true');assert(dateChoices.visible);assert.equal(dateChoices.count,8);
+    assert.equal(dateChoices.focus,date,'Opening the list focuses the selected day');
+    const selectedDateMarker=++sequence;
+    await control('eval',{script:`document.querySelector('.statistics-date-choices button[data-date="2025-05-01"]').click();requestAnimationFrame(()=>window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${selectedDateMarker},dateSelection:{label:document.querySelector('.statistics-date-trigger span').textContent,closed:!document.querySelector('.statistics-date-choices'),recentSelected:document.querySelectorAll('.statistics-day-button[aria-pressed="true"]').length,focused:document.activeElement===document.querySelector('.statistics-date-trigger')}}}));`});
+    const dateSelection=(await until(value=>value.renderer?.marker===selectedDateMarker)).renderer.dateSelection;
+    assert.equal(dateSelection.label,dateChoices.olderLabel);assert(dateSelection.closed&&dateSelection.focused);
+    assert.equal(dateSelection.recentSelected,0,'An older saved date does not select a recent-day button');
+    results.push({scope:'in-app-date-choices',...dateChoices,...dateSelection});
+    await control('eval',{script:"document.querySelectorAll('.statistics-day-button')[6].click();"});
+    await control('eval',{script:"document.querySelector('.statistics-date-trigger').focus();"});
     const focusedDate=await measure('stats');checkShell(focusedDate);
     results.push({scope:'focused-date-control',...focusedDate});
     const hidden = await control('hide'); assert(hidden.ok);

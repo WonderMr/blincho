@@ -55,7 +55,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const [notificationFeedback, setNotificationFeedback] = useState('');
-  const [notificationPending, setNotificationPending] = useState(false);
+  const [notificationPending, setNotificationPending] = useState<'enable' | 'test' | null>(null);
+  const notificationRequestRef = useRef<{ enable: boolean; test: boolean } | null>(null);
   const [cameraPending, setCameraPending] = useState(false);
   const [cameraFeedback, setCameraFeedback] = useState('');
   const cameraRequestRef = useRef<AbortController | null>(null);
@@ -72,6 +73,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   const cameraLockSupported = typeof nativeApi?.lockComputer === 'function' && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
   const notificationsSupported = isNative || 'Notification' in window;
   const notificationsBlocked = !isNative && 'Notification' in window && Notification.permission === 'denied';
+  const notificationsGranted = isNative || ('Notification' in window && Notification.permission === 'granted');
 
   const updateCameraSetting = (enabled: boolean) => {
     const updated = { ...settingsRef.current, cameraLockEnabled: enabled };
@@ -90,7 +92,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
       if (showFeedback) setCameraFeedback("Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.");
     }
   };
-  const closeSettings = () => { cancelCameraRequest(); onClose(); };
+  const closeSettings = () => {
+    notificationRequestRef.current = null;
+    setNotificationPending(null);
+    cancelCameraRequest();
+    onClose();
+  };
   onCloseRef.current = closeSettings;
   const handleCameraChange = async (enabled: boolean) => {
     if (!enabled) {
@@ -149,6 +156,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
     document.addEventListener('keydown', handleKey, true);
     return () => {
       mountedRef.current = false;
+      notificationRequestRef.current = null;
       cancelCameraRequest();
       document.removeEventListener('keydown', handleKey, true);
       document.body.style.overflow = previousOverflow;
@@ -179,19 +187,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
     heading?.scrollIntoView({ block: 'start' });
     heading?.focus({ preventScroll: true });
   };
-  const testNotification = async () => {
-    setNotificationPending(true);
+  const requestNotifications = async (kind: 'enable' | 'test') => {
+    if (!notificationsSupported) return;
+    const pending = notificationRequestRef.current;
+    if (pending) {
+      pending[kind] = true;
+      setNotificationPending(pending.enable ? 'enable' : 'test');
+      return;
+    }
+    const request = { enable: kind === 'enable', test: kind === 'test' };
+    notificationRequestRef.current = request;
+    setNotificationPending(kind);
+    setNotificationFeedback('');
     try {
-      if (await requestNotificationPermission()) {
-        showEyeBreakNotification(t("Тестовое уведомление Blincho"), t("Так будет выглядеть напоминание о перерыве."));
-        setNotificationFeedback("Уведомление отправлено. Его показ зависит от настроек браузера или системы, включая режим «Не беспокоить».");
+      const granted = await requestNotificationPermission();
+      if (!mountedRef.current || notificationRequestRef.current !== request) return;
+      if (request.enable) handleChange('notificationsEnabled', granted);
+      if (granted) {
+        if (request.test) {
+          showEyeBreakNotification(t("Тестовое уведомление Blincho"), t("Так будет выглядеть напоминание о перерыве."));
+          setNotificationFeedback("Уведомление отправлено. Его показ зависит от настроек браузера или системы, включая режим «Не беспокоить».");
+        }
       } else {
         setNotificationFeedback("Разрешение не получено. Разрешите уведомления в настройках браузера или системы.");
       }
     } catch {
+      if (!mountedRef.current || notificationRequestRef.current !== request) return;
+      if (request.enable) handleChange('notificationsEnabled', false);
       setNotificationFeedback("Не удалось отправить уведомление. Проверьте разрешения браузера или системы.");
     } finally {
-      setNotificationPending(false);
+      if (mountedRef.current && notificationRequestRef.current === request) {
+        notificationRequestRef.current = null;
+        setNotificationPending(null);
+      }
+    }
+  };
+  const handleNotificationChange = (enabled: boolean) => {
+    if (enabled) {
+      void requestNotifications('enable');
+    } else {
+      notificationRequestRef.current = null;
+      setNotificationPending(null);
+      setNotificationFeedback('');
+      handleChange('notificationsEnabled', false);
     }
   };
 
@@ -281,8 +319,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
             </div>}
             <ToggleRow id="notifications-enabled" title={t("Системные уведомления")}
               description={!notificationsSupported ? t("Этот браузер не поддерживает уведомления.") : notificationsBlocked ? t("Уведомления заблокированы в браузере. Разрешите их в настройках сайта.") : isNative ? t("Показ зависит от разрешений и настроек системы.") : t("Для показа нужно разрешение браузера. Вкладка должна оставаться открытой.")}
-              checked={notificationsSupported && settings.notificationsEnabled} disabled={!notificationsSupported} onChange={value => handleChange('notificationsEnabled', value)}>
-              <button type="button" className="btn btn-secondary settings-test-button" onClick={testNotification} disabled={!notificationsSupported || notificationPending}>{notificationPending ? t("Проверка…") : t("Проверить")}</button>
+              checked={notificationsSupported && !notificationsBlocked && (notificationPending === 'enable' || (settings.notificationsEnabled && notificationsGranted))} disabled={!notificationsSupported} onChange={handleNotificationChange}>
+              <button type="button" className="btn btn-secondary settings-test-button" onClick={() => requestNotifications('test')} disabled={!notificationsSupported || notificationPending !== null}>{notificationPending ? t("Проверка…") : t("Проверить")}</button>
             </ToggleRow>
             {notificationFeedback && <p className="settings-feedback" role="status">{t(notificationFeedback)}</p>}
             <ToggleRow id="takeover-enabled" title={t("Экран отдыха по таймеру")} description={t("Показывает перерыв внутри окна Blincho. При выключении остаются выбранные напоминания.")}
