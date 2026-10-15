@@ -23,6 +23,8 @@ Windows desktop preparation normally requires `Shell_NotifyIconW` add, tooltip u
 
 Preparation passes a SHA-256-bound JSON proof in `RUNNER_TEMP` through `GITHUB_ENV`. Both actual call smoke tests validate its machine, runner session, workflow job, run, attempt, commit, timestamp and probe source hashes, then recheck the SDK layout, responsive taskbar and all four failures. A platform or environment flag alone cannot relax icon assertions. If native icon updates succeed after preparation, their successful active and restored transitions remain required. If they return the observed Windows error `-2147467259`, the tests require failed attempt counters, zero successful updates, cleared errors after call end or detection disable, and cooldown behavior. The result reports unavailable native display separately from passing call logic.
 
+Tooltip checks accept only that same native error with the same independently verified SDK proof, and report their native display state as unverified. On working notification areas they require successful tooltip suppression while the hover window exists, text fallback when it is unavailable, and suppression again after recovery.
+
 This exception leaves notification-area display unverified. Live calls with history off, inactive and disabled detection, native hover popups and focus guards, real renderer, history, hidden timer, break expiry, restart persistence, autostart and release-package launch checks must still pass. CI presence is simulated, so physical idle, lock and suspend behavior and visible tray/notification behavior require separate desktop verification.
 
 ## Packages and verification

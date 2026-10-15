@@ -585,8 +585,16 @@ fn diagnostics(app: &tauri::AppHandle) {
     let strict_shield_count = platform::strict_shield_count();
     #[cfg(not(target_os = "macos"))]
     let strict_shield_count = 0;
+    #[cfg(target_os = "macos")]
+    let (native_activation_policy, dock_visible) = (
+        platform::activation_policy(app),
+        ui::dock_is_visible(app).ok(),
+    );
+    #[cfg(not(target_os = "macos"))]
+    let (native_activation_policy, dock_visible) = (None::<i32>, None::<bool>);
     let value = json!({"timer":snapshot,"strict":strict,"visible":window(app).ok().and_then(|w|w.is_visible().ok()),
         "strictShieldCount":strict_shield_count,"trayPreview":tray_preview::diagnostics(app),
+        "nativeActivationPolicy":native_activation_policy,"dockVisible":dock_visible,
         "focused":window(app).ok().and_then(|w|w.is_focused().ok()),"events":runtime.events.lock().ok().map(|v|v.clone()),
         "fullscreen":window(app).ok().and_then(|w|w.is_fullscreen().ok()),
         "minimized":window(app).ok().and_then(|w|w.is_minimized().ok()),
