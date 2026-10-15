@@ -530,15 +530,18 @@ ipcMain.handle('get-power-state', () => {
 
 function hasActiveMeetingAssertion(output) {
   const summary = output.match(/^\s*PreventUserIdleDisplaySleep\s+(\d+)\s*$/m);
-  if (!summary || Number(summary[1]) === 0) return false;
+  const displaySleepPrevented = summary && Number(summary[1]) > 0;
   return output.split('\n').some(line => {
     const assertion = line.match(/\bpid\s+\d+\((.+?)\):.*?\b\d+:\d+:\d+\s+(\w+)\s+named:\s*"([^"]*)"/i);
-    if (!assertion || assertion[2] !== 'PreventUserIdleDisplaySleep') return false;
+    if (!assertion) return false;
     const owner = assertion[1].trim();
     const name = assertion[3];
     const knownOwner = /^(?:zoom(?:\.us)?|cpthost|microsoft teams|teams|webex|skype|facetime)$/i.test(owner);
     const browserOwner = /^(?:google chrome|chromium|safari|firefox|microsoft edge)$/i.test(owner);
-    return knownOwner || (browserOwner && /^(?:WebRTC(?:\b.*)?|.*meet\.google\.com.*)$/i.test(name));
+    const webRtc = /^WebRTC(?:\s.*)?$/i.test(name);
+    const backgroundWebRtc = browserOwner && webRtc && ['NoIdleSleepAssertion', 'PreventUserIdleSystemSleep'].includes(assertion[2]);
+    return backgroundWebRtc || (displaySleepPrevented && assertion[2] === 'PreventUserIdleDisplaySleep'
+      && (knownOwner || (browserOwner && (webRtc || /meet\.google\.com/i.test(name)))));
   });
 }
 

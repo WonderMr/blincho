@@ -300,12 +300,9 @@ pub fn active_meeting_applications(output: &str) -> Vec<String> {
     static ASSERTION: OnceLock<Regex> = OnceLock::new();
     let summary = SUMMARY
         .get_or_init(|| Regex::new(r"(?m)^\s*PreventUserIdleDisplaySleep\s+(\d+)\s*$").unwrap());
-    if !summary
+    let display_sleep_prevented = summary
         .captures(output)
-        .is_some_and(|capture| capture[1].parse::<u32>().is_ok_and(|value| value > 0))
-    {
-        return vec![];
-    }
+        .is_some_and(|capture| capture[1].parse::<u32>().is_ok_and(|value| value > 0));
     let assertion = ASSERTION.get_or_init(|| {
         Regex::new(r#"(?i)\bpid\s+\d+\((.+?)\):.*?\b\d+:\d+:\d+\s+(\w+)\s+named:\s*"([^"]*)""#)
             .unwrap()
@@ -314,9 +311,8 @@ pub fn active_meeting_applications(output: &str) -> Vec<String> {
         .lines()
         .filter_map(|line| assertion.captures(line))
         .filter_map(|capture| {
-            if &capture[2] != "PreventUserIdleDisplaySleep" {
-                return None;
-            }
+            let display_assertion =
+                display_sleep_prevented && &capture[2] == "PreventUserIdleDisplaySleep";
             let owner = capture[1].trim().to_lowercase();
             let name = capture[3].to_lowercase();
             let known = [
@@ -338,11 +334,18 @@ pub fn active_meeting_applications(output: &str) -> Vec<String> {
                 "microsoft edge",
             ]
             .contains(&owner.as_str());
-            let meeting = known
-                || browser
-                    && (name == "webrtc"
-                        || name.starts_with("webrtc ")
-                        || name.contains("meet.google.com"));
+            let webrtc = name == "webrtc" || name.starts_with("webrtc ");
+            // Background Chrome calls can keep the system awake without
+            // preventing display sleep, including while the microphone is muted.
+            let background_webrtc = browser
+                && webrtc
+                && matches!(
+                    &capture[2],
+                    "NoIdleSleepAssertion" | "PreventUserIdleSystemSleep"
+                );
+            let meeting = background_webrtc
+                || display_assertion
+                    && (known || browser && (webrtc || name.contains("meet.google.com")));
             meeting
                 .then(|| parsing::meeting_application(&owner).map(String::from))
                 .flatten()
@@ -473,6 +476,34 @@ mod tests {
             &assertion("zoom.us", "PreventUserIdleDisplaySleep", "meeting")
                 .replace("Sleep 1", "Sleep 0")
         ));
+    }
+    #[test]
+    fn background_browser_webrtc_does_not_require_display_sleep_prevention() {
+        let output = "PreventUserIdleDisplaySleep 0\nPreventUserIdleSystemSleep 1\n   pid 98974(Google Chrome): [0x000ef28000019b96] 00:17:39 NoIdleSleepAssertion named: \"WebRTC has active PeerConnections\"";
+        assert_eq!(active_meeting_applications(output), ["Google Chrome"]);
+        for playback in ["Playing audio", "Playing video"] {
+            assert!(active_meeting_applications(
+                &output.replace("WebRTC has active PeerConnections", playback)
+            )
+            .is_empty());
+        }
+        for owner in ["Spotify", "caffeinate", "zoom.us"] {
+            assert!(
+                active_meeting_applications(&output.replace("Google Chrome", owner)).is_empty()
+            );
+        }
+        for kind in ["BackgroundTask", "InternalPreventDisplaySleep"] {
+            assert!(
+                active_meeting_applications(&output.replace("NoIdleSleepAssertion", kind))
+                    .is_empty()
+            );
+        }
+        assert_eq!(
+            active_meeting_applications(
+                &output.replace("NoIdleSleepAssertion", "PreventUserIdleSystemSleep")
+            ),
+            ["Google Chrome"]
+        );
     }
     #[test]
     fn meeting_assertions_attribute_multiple_apps_without_retaining_titles() {
