@@ -89,7 +89,7 @@ async function stop(app) {
 }
 
 function installProbe(returnOutsideRenderer) {
-  return `(()=>{window.cameraCompletionProbe={acquisitions:0,stops:0,frames:0,locks:0,frameHashes:[],stationaryEvents:0,inputEvents:[],idleReads:[]};
+  return `(()=>{window.cameraCompletionProbe={acquisitions:0,stops:0,frames:0,locks:0,frameHashes:[],stationaryEvents:0,inputEvents:[],inputEventsAfterAcquisition:0,idleReads:[]};
     const probe=window.cameraCompletionProbe;
     try{
       const idleStartedAt=performance.now(),fakeVideos=new WeakMap();
@@ -97,7 +97,10 @@ function installProbe(returnOutsideRenderer) {
       for(const type of ['mousemove','mousedown','keydown','touchstart'])window.addEventListener(type,event=>{
         const stationary=event.type==='mousemove'&&event.movementX===0&&event.movementY===0;
         if(stationary&&probe.acquisitions>probe.stops)probe.stationaryEvents++;
-        else if(!stationary&&probe.inputEvents.length<20)probe.inputEvents.push({type:event.type,at:performance.now(),trusted:event.isTrusted});
+        else if(!stationary){
+          if(probe.acquisitions>0)probe.inputEventsAfterAcquisition++;
+          if(probe.inputEvents.length<20)probe.inputEvents.push({type:event.type,at:performance.now(),trusted:event.isTrusted});
+        }
       });
       Object.defineProperty(HTMLMediaElement.prototype,'srcObject',{configurable:true,get(){return fakeVideos.get(this)||descriptor.get.call(this)},set(value){
         if(value?.blinchoSynthetic){fakeVideos.set(this,value);this.blinchoSynthetic=true;
@@ -198,8 +201,10 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
     assert.equal(observed.probe.locks, returnOutsideRenderer ? 0 : 1, JSON.stringify(observed));
     if (returnOutsideRenderer) {
       assert(observed.probe.returnedAt > observed.probe.acquiredAt + 1000, 'System input must occur after capture began');
-      assert.equal(observed.probe.inputEventsAtReturn, 0, 'Modeled return must originate outside the renderer');
-      assert.equal(observed.probe.inputEvents.length, 0, 'No renderer activity may cancel the outside-return case');
+      // Input during the preceding break cannot cancel a future camera check.
+      // Only input after acquisition could mask this final system-idle guard.
+      assert.equal(observed.probe.inputEventsAfterAcquisition, 0,
+        'No renderer activity during capture may cancel the outside-return case');
       assert(observed.probe.idleReads.some(read => read.at >= observed.probe.returnedAt && read.idle < 1),
         'Fresh system idle must be read after the external return');
     }
