@@ -138,6 +138,43 @@ const sameGeometry = (value, baseline) => Math.abs(value.position.x - baseline.p
   && Math.abs(value.position.y - baseline.position.y) <= 2
   && value.size.width === baseline.size.width && value.size.height === baseline.size.height;
 
+function assertCountdownActive(state, countdown) {
+  const timer = state.timer;
+  assert.equal(timer.breakActive, true, 'The native countdown must still be active');
+  assert.deepEqual(timer.reasons, [], 'Presence must remain confirmed during the countdown');
+  assert.equal(timer.absenceEpoch, countdown.absenceEpoch, 'An absence must not replace the countdown');
+  assert.equal(timer.breakEndAt, countdown.deadline, 'An active countdown must keep its original deadline');
+  const spans = timer.activitySpans.filter(span => span.state === 'break' && span.start === countdown.startedAt);
+  assert.equal(spans.length, 1, 'The independent native break interval must remain available');
+  assert(spans[0].end > countdown.startedAt, 'Native activity must observe a positive break interval');
+}
+function nativeCountdown(state, breakSeconds, configuredAt, observedAt) {
+  const spans = state.timer.activitySpans.filter(span => span.state === 'break' && span.start >= configuredAt);
+  assert.equal(spans.length, 1, 'The countdown needs one independent post-request native break interval');
+  const countdown = Object.freeze({ startedAt: spans[0].start, deadline: state.timer.breakEndAt,
+    absenceEpoch: state.timer.absenceEpoch });
+  const timing = JSON.stringify({ ...countdown, breakSeconds, configuredAt, observedAt,
+    observationLagMs: observedAt - countdown.startedAt });
+  assert.equal(countdown.deadline - countdown.startedAt, breakSeconds * 1000,
+    'The configured native countdown must not be shortened: ' + timing);
+  assert(countdown.deadline > observedAt, 'The automatic break must have a live native deadline: ' + timing);
+  assertCountdownActive(state, countdown);
+  return countdown;
+}
+function assertCountdownCompleted(state, countdown, observedAt) {
+  const timer = state.timer;
+  assert.equal(timer.breakActive, false, 'The native countdown must complete');
+  assert.deepEqual(timer.reasons, [], 'An absence must not complete a normal countdown');
+  assert.equal(timer.absenceEpoch, countdown.absenceEpoch, 'The completed countdown must keep its presence epoch');
+  const spans = timer.activitySpans.filter(span => span.state === 'break' && span.start === countdown.startedAt);
+  assert.equal(spans.length, 1, 'Completion needs the same independent native break interval');
+  // A late file read alone cannot prove that an earlier cancellation waited
+  // for the real deadline. The native interval must cover it as well.
+  assert(spans[0].end >= countdown.deadline, 'Native break activity must continue through the original deadline: '
+    + JSON.stringify({ countdown, span: spans[0], observedAt }));
+  assert(observedAt >= countdown.deadline, 'Restoration must not precede the real native deadline');
+}
+
 async function startFixture(base, compiled, name) {
   const directory = path.join(base, name);
   const bundle = path.join(directory, name + '.app', 'Contents');
@@ -256,19 +293,22 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     meetingEnabled: false, autoTakeover: true };
   const focusTrace = [];
   let lastFocusTick = -1;
+  const configuredAt = Date.now();
   await control(app, 'configure', { input });
   const started = await until(app.read, value => value.visible && value.timer.breakActive
+    && value.timer.activitySpans.some(span => span.state === 'break' && span.start >= configuredAt)
     && (!strictMode || value.strict && value.strictShieldCount > 0),
     [handle, previous.handle, third.handle], 10_000, 'automatic break');
   const observedStart = Date.now();
+  const countdown = nativeCountdown(started, breakSeconds, configuredAt, observedStart);
+  console.log('Native countdown: ' + JSON.stringify({ name, ...countdown, observedStart,
+    observationLagMs: observedStart - countdown.startedAt }));
   // The native strict shield temporarily uses Accessory to cover other apps'
   // fullscreen Spaces. Ordinary window/Dock policy must return after cleanup.
   await dockPolicy(previous, app, strictMode ? 1 : 0, 'break presentation must use its native activation policy');
-  assert(started.timer.breakEndAt > observedStart, 'The automatic break must have a real native deadline');
-  if (!releaseAndHide) assert(started.timer.breakEndAt - observedStart >= breakSeconds * 1000 - 1500,
-    'The smoke must observe the configured countdown, without shortening it');
   if (!releaseAndHide) await until(() => {
     const focus = fixtureState(previous), runtime = app.read();
+    if (runtime?.timer.breakActive) assertCountdownActive(runtime, countdown);
     if (runtime?.timer.tickCount !== lastFocusTick && focusTrace.length < 60) {
       lastFocusTick = runtime?.timer.tickCount;
       focusTrace.push({ at: Date.now(), tick: lastFocusTick, breakActive: runtime?.timer.breakActive,
@@ -321,7 +361,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     && value.dockVisible === (expectedPolicy === 0), [handle, previous.handle, third.handle], breakSeconds * 1000 + 10_000,
     'original presentation after break completion');
   await dockPolicy(previous, app, expectedPolicy, 'Dock must return to original window state');
-  assert(Date.now() - observedStart >= breakSeconds * 1000 - 1500, 'Break must complete through the real countdown');
+  assertCountdownCompleted(app.read(), countdown, Date.now());
   await until(() => fixtureState(expected), value => value.frontmostPID === expectedPID,
     [handle, expected.handle], 5_000, 'expected work app frontmost after completion');
   assert.equal((await inspectRenderer(app)).renderer.dialog, false, 'Renderer cleanup must remove the overlay');
@@ -357,6 +397,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   assert(sameGeometry(reopened, baseline), 'Manual reopen must retain the original normal frame');
   await stopApp(app);
   const result = { name, status: 'passed', mode, strictMode, breakSeconds, profile: directory,
+    nativeCountdown: countdown,
     blinchoPID: initial.pid, priorPID: previous.pid, expectedFrontmostPID: expectedPID,
     baseline: { position: baseline.position, size: baseline.size },
     reopened: { position: reopened.position, size: reopened.size }, focusTrace };
@@ -422,4 +463,5 @@ async function main() {
   }
   if (failures.length) throw new Error(failures.join('\n'));
 }
+module.exports = { nativeCountdown, assertCountdownActive, assertCountdownCompleted };
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
