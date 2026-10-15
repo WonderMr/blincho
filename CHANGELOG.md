@@ -2,6 +2,16 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.5]
+
+### Fixed
+
+- Keep activity history date choices inside the app window so they remain visible and usable on macOS. Preserve older saved dates, keyboard selection, focus restoration and dismissal.
+- Let Space open activity and source details without pausing the main timer.
+- Allow exercise sound to be enabled for that exercise while keeping the saved global sound preference unchanged.
+- Start an exercise or full routine from the first click after inactivity by waiting for fresh presence confirmation.
+- Request notification permission when reminders are enabled and keep denied or canceled requests inactive.
+
 ## [1.8.4]
 
 ### Fixed
