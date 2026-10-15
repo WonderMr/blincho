@@ -5,7 +5,7 @@ const repo=path.resolve(__dirname, '..');
 doc.documentElement.classList={add(){},remove(){}};
 function createHarness(overrides={},strict=false,browser=false,start=1791712800000,sourceOverrides={}){
   let now=start,monotonicNow=0,nextId=1,idle=0,idleCalls=0,notificationCount=0;
-  const metrics={statsReads:0,statsWrites:0,statsParses:0,timerRenders:0};
+  const metrics={statsReads:0,statsWrites:0,statsParses:0,timerRenders:0,completionChimes:0};
   const warnings=[];const testConsole={...console,warn:(...args)=>warnings.push(args)};
   const timers=new Map(),captured={},active=new Set(),powerListeners=new Set(),triggerListeners=new Set(),events=new Map(),cache=new Map(),store=new Map();
   doc.visibilityState='visible';doc.addEventListener=(name,cb)=>{if(!events.has(name))events.set(name,new Set());events.get(name).add(cb)};doc.removeEventListener=(name,cb)=>events.get(name)?.delete(cb);
@@ -20,7 +20,7 @@ function createHarness(overrides={},strict=false,browser=false,start=17917128000
   const addTimer=(callback,delay,interval)=>{const id=nextId++;timers.set(id,{callback,delay,interval,due:now+delay});return id};
   const FakeDate=class extends Date{constructor(...args){super(...(args.length?args:[now]))}static now(){return now}};
   const performance={now:()=>monotonicNow};
-  const soundSynth={enabled:false,playZenBowl(){},playSoftBeep(){},playCompletionChime(){}};
+  const soundSynth={enabled:false,playZenBowl(){},playSoftBeep(){},playCompletionChime(){metrics.completionChimes++}};
   function load(file){if(file.endsWith('.json'))return JSON.parse(fs.readFileSync(file,'utf8'));if(cache.has(file))return cache.get(file).exports;const module={exports:{}};cache.set(file,module);
     const transformed=transformer.transformSync(file,fs.readFileSync(sourceOverrides[path.relative(repo,file)]||file,'utf8'),{jsx:{runtime:'classic'}}).code;
     const exported=[...transformed.matchAll(/export\s+(?:const|function|class|async function)\s+(\w+)/g)].map(match=>match[1]);
