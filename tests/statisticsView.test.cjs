@@ -60,11 +60,30 @@ const invoke = (node, event, value) => { assert(node, 'control exists'); ReactDO
 const results = [];
 try {
   render(React.createElement(StatisticsView, props));
-  const selector = () => find(node => node.tagName === 'SELECT');
-  const dayButtons = () => all(node => node.tagName === 'BUTTON' && node.getAttribute('aria-controls') === 'daily-activity-detail');
+  const selector = () => find(node => reactProps(node)?.className === 'statistics-date-trigger');
+  const dateChoices = () => all(node => node.tagName === 'BUTTON' && node.getAttribute('data-date') !== null);
+  const dayButtons = () => all(node => node.tagName === 'BUTTON' && node.getAttribute('aria-controls') === 'daily-activity-detail' && node.getAttribute('data-date') === null);
+  const pickDate = date => {
+    invoke(selector(), 'onClick');
+    assert.equal(selector().getAttribute('aria-expanded'), 'true');
+    invoke(dateChoices().find(node => node.getAttribute('data-date') === date), 'onClick');
+    assert.equal(selector().getAttribute('aria-expanded'), 'false');
+    assert.equal(doc.activeElement, selector(), 'selection returns focus to the date trigger');
+  };
   assert.equal(dayButtons().length, 7);
   assert.equal(dayButtons().filter(node => node.getAttribute('aria-pressed') === 'true').length, 1);
-  assert(selector().options.some(option => option.getAttribute('value') === legacy.date), 'older saved days remain selectable');
+  assert.equal(selector().getAttribute('aria-expanded'), 'false');
+  invoke(selector(), 'onClick');
+  assert(dateChoices().some(option => option.getAttribute('data-date') === legacy.date), 'older saved days remain selectable');
+  assert.equal(doc.activeElement.getAttribute('data-date'), today.date, 'opening focuses the current date');
+  let prevented = false, stopped = false;
+  ReactDOM.flushSync(() => doc.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } }));
+  assert(prevented && stopped);
+  assert.equal(dateChoices().length, 0, 'Escape dismisses the in-app date list');
+  assert.equal(doc.activeElement, selector());
+  invoke(selector(), 'onClick');
+  ReactDOM.flushSync(() => doc.dispatchEvent({ type: 'pointerdown', target: doc.body }));
+  assert.equal(dateChoices().length, 0, 'outside pointer presses dismiss the list');
   assert(host.textContent.includes('За этот день сохранены только итоги'));
   assert.equal(all(node => node.getAttribute('data-activity-state') === 'work').length, 0, 'aggregate focus must not invent timed work spans');
   const averageCards = all(node => reactProps(node)?.className === 'statistics-average-card');
@@ -73,7 +92,7 @@ try {
   assert(averageCards[1].textContent.includes('2 из 7'));
   results.push('calendar versus used-day averages include saved aggregate history and absent days without fabricated spans');
 
-  invoke(selector(), 'onChange', { target: { value: recorded.date } });
+  pickDate(recorded.date);
   assert.equal(dayButtons().filter(node => node.getAttribute('aria-pressed') === 'true').length, 1);
   const dailyMetrics = find(node => reactProps(node)?.className === 'statistics-daily-metrics');
   const sessions = find(node => reactProps(node)?.className === 'statistics-session-summary');
@@ -92,13 +111,13 @@ try {
   assert(details.textContent.includes('Длительность'));
   results.push('day selection reveals accurate work, absence, pause and rest durations, session summary and semantic interval table');
 
-  invoke(selector(), 'onChange', { target: { value: legacy.date } });
+  pickDate(legacy.date);
   assert(host.textContent.includes('За этот день сохранены только итоги'));
   assert.equal(dayButtons().filter(node => node.getAttribute('aria-pressed') === 'true').length, 0, 'older day does not falsely select a recent day');
   assert.equal(all(node => node.getAttribute('data-activity-state') === 'work').length, 0);
   assert.equal(find(node => node.tagName === 'DETAILS'), undefined);
   invoke(dayButtons()[6], 'onClick');
-  assert.equal(reactProps(selector()).value, today.date, 'native button restores selected recent day');
+  assert(selector().textContent.includes('14 октября 2026'), 'recent-day button restores the displayed date');
   assert.equal(dayButtons()[6].getAttribute('aria-pressed'), 'true');
   results.push('older aggregate-only records stay unknown and recent-day native buttons restore selection');
 

@@ -7,12 +7,12 @@ const assert = require('node:assert/strict');
 const { React, ReactDOMClient, ReactDOM, doc, DOMNode, transformer } = require('./support/syntheticDom.cjs');
 const repo = path.resolve(__dirname, '..');
 
-function harness(strictMode = true, canvasContext = null) {
+function harness(strictMode = true, canvasContext = null, scopedSynth = null) {
   let now = 0, wallNow = 0, sequence = 0, chimes = 0;
   const timers = new Map(), frames = new Map(), modules = new Map(), events = new Map(), locks = [];
   const previousContext = DOMNode.prototype.getContext;
   DOMNode.prototype.getContext = () => canvasContext;
-  const soundSynth = { enabled: true, playZenBowl() {}, playSoftBeep() {}, playCompletionChime() { chimes++; } };
+  const soundSynth = scopedSynth || { enabled: true, playZenBowl() {}, playSoftBeep() {}, playCompletionChime() { chimes++; } };
   window.matchMedia = () => ({ matches: true });
   window.getComputedStyle = () => ({ getPropertyValue: () => '#9bc9ad' });
   window.electronAPI = { setStrictLock: value => locks.push(value), setAlwaysOnTop() {} };
@@ -208,6 +208,32 @@ test('player pause excludes paused time and local mute preserves global sound', 
   h.click(h.button('Отключить звук')); assert.equal(h.soundSynth.enabled, true);
   h.click(h.button('Пауза / Продолжить (Пробел)')); h.advance(999); assert.deepEqual(done, []); h.advance(1);
   assert.deepEqual(done, [['pause', 7000]]); assert.equal(h.chimes, 0); h.destroy(); assert.equal(h.soundSynth.enabled, true);
+});
+test('local exercise enable admits real audio while global mute and later local mute remain intact', () => {
+  let starts = 0;
+  const parameter = () => ({ setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} });
+  const audioWindow = { AudioContext: class {
+    state = 'running'; currentTime = 0; destination = {};
+    createOscillator() { return { frequency: parameter(), connect() {}, disconnect() {}, start() { starts++; }, stop() {} }; }
+    createGain() { return { gain: parameter(), connect() {}, disconnect() {} }; }
+  } };
+  const file = path.join(repo, 'src/audio/soundSynth.ts'), module = { exports: {} };
+  const source = transformer.transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/export const /g, 'const ');
+  vm.runInNewContext(source + '\nmodule.exports = { soundSynth };', { module, window: audioWindow });
+  const synth = module.exports.soundSynth; synth.enabled = false;
+  synth.playSoftBeep(); synth.playCompletionChime(); assert.equal(starts, 0, 'default cues honor global mute');
+  const h = harness(false, null, synth);
+  try {
+    h.render(React.createElement(h.ExercisePlayer, { technique: technique('scoped', [1, 1]), onClose() {} }));
+    assert.equal(starts, 0); h.click(h.button('Включить звук')); assert.equal(starts, 1, 'gesture initializes and admits a real oscillator');
+    assert.equal(synth.enabled, false); h.advance(2000); assert(starts >= 8, 'step and five-note completion cues pass the real audio gate');
+    assert.equal(synth.enabled, false); synth.playSoftBeep(); assert.equal(starts, 8, 'other callers still honor global mute');
+    h.render(null); h.render(React.createElement(h.ExercisePlayer, { technique: technique('muted', [1, 1]), onClose() {} }));
+    h.click(h.button('Включить звук')); const enabledStarts = starts; h.click(h.button('Отключить звук')); h.advance(2000);
+    assert.equal(starts, enabledStarts, 'local mute blocks remaining step and completion cues'); assert.equal(synth.enabled, false);
+    synth.enabled = true; synth.playSoftBeep(660, false); synth.playCompletionChime(false);
+    assert.equal(starts, enabledStarts, 'an explicit scoped mute overrides a globally enabled synthesizer');
+  } finally { h.destroy(); }
 });
 test('optional exercise can be aborted immediately without completion credit', () => {
   const h = harness(), credits = []; let closed = 0;

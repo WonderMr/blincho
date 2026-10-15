@@ -90,6 +90,7 @@ export const App: React.FC = () => {
   const breakIdRef = useRef<string | null>(null);
   const pendingBreakRef = useRef<{ eventId: string; deadlineMonotonicAt: number } | null>(null);
   const exerciseIdRef = useRef<string | null>(null);
+  const exerciseStartPendingRef = useRef(false);
   const exerciseCompletionsRef = useRef(new Map<string, { eventId: string; promise: Promise<void> }>());
   const breakEventId = breakIdRef.current;
   const exerciseEventId = exerciseIdRef.current;
@@ -560,23 +561,33 @@ export const App: React.FC = () => {
     session.manualPaused = false;
     restartWork();
   };
-  const startTechnique = (technique: ExerciseTechnique, routine?: ExerciseTechnique[]) => {
-    if (!session.present || session.exercising) return;
-    cameraAbortRef.current?.abort();
-    session.advance(Date.now());
-    flushFocus();
-    session.exercising = true;
-    session.expiryPending = false;
-    session.version += 1;
-    exerciseIdRef.current = nextEventId('exercise');
-    setActiveTechnique(technique);
-    setActiveRoutine(routine);
-    sync();
+  const startTechnique = async (technique: ExerciseTechnique, routine?: ExerciseTechnique[]) => {
+    if (!mountedRef.current || session.exercising || exerciseStartPendingRef.current) return;
+    exerciseStartPendingRef.current = true;
+    try {
+      // A failed pre-click query must not consume this explicit start request.
+      const previousPresence = presenceInFlightRef.current;
+      if (previousPresence) await previousPresence;
+      if (!mountedRef.current || session.exercising) return;
+      if (!(await samplePresence(true)) || !mountedRef.current || session.exercising) return;
+      cameraAbortRef.current?.abort();
+      session.advance(Date.now());
+      flushFocus();
+      session.exercising = true;
+      session.expiryPending = false;
+      session.version += 1;
+      exerciseIdRef.current = nextEventId('exercise');
+      setActiveTechnique(technique);
+      setActiveRoutine(routine);
+      sync();
+    } finally {
+      exerciseStartPendingRef.current = false;
+    }
   };
   const handleStartFullRoutine = () => {
     const ids = ['donald-korb-blinking', 'figure-8-pursuit', 'near-far-tromboning', 'palming-relaxation'];
     const routine = ids.map(id => MEDICAL_TECHNIQUES.find(technique => technique.id === id)).filter((technique): technique is ExerciseTechnique => !!technique);
-    if (routine.length) startTechnique(routine[0], routine);
+    if (routine.length) return startTechnique(routine[0], routine);
   };
   const closeTechnique = async (eventId = exerciseIdRef.current) => {
     if (!eventId || exerciseIdRef.current !== eventId) return;
@@ -792,7 +803,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      const interactive = target?.isContentEditable || target?.closest?.('button, a, input, select, textarea, [contenteditable="true"], [contenteditable=""]');
+      const interactive = target?.isContentEditable || target?.closest?.('button, a, input, select, textarea, summary, [contenteditable="true"], [contenteditable=""]');
       if (interactive && (event.code === 'Space' || event.code === 'KeyR')) return;
       if (event.code === 'Escape') {
         if (activeTechnique) handlersRef.current.closeTechnique();
@@ -949,7 +960,7 @@ export const App: React.FC = () => {
             if (!breakEventId || breakIdRef.current !== breakEventId) return;
             if (!settingsRef.current.strictMode) await handleCloseBreakOverlay(breakEventId);
             if (!mountedRef.current) return;
-            handleStartFullRoutine();
+            await handleStartFullRoutine();
           }}
         />
       )}
