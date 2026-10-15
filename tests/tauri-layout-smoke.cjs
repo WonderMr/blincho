@@ -66,6 +66,24 @@ async function measure(expectedPage, expectedLanguage) {
       const describe = element => { const rect = element.getBoundingClientRect(); return {
         left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,width:rect.width,height:rect.height,
         clientWidth:element.clientWidth,scrollWidth:element.scrollWidth,clientHeight:element.clientHeight,scrollHeight:element.scrollHeight,scrollTop:element.scrollTop }; };
+      const settings=nav.querySelector('.nav-settings-button'), actions=nav.querySelector('.nav-actions');
+      const sound=actions.querySelector('.btn-icon'), naturalSettings=settings.cloneNode(true);
+      Object.assign(naturalSettings.style,{position:'fixed',visibility:'hidden',width:'max-content',maxWidth:'none',minWidth:'0',flex:'none',whiteSpace:'nowrap'});
+      actions.append(naturalSettings);
+      const settingsNaturalWidth=naturalSettings.getBoundingClientRect().width;
+      naturalSettings.remove();
+      const breakButton=nav.querySelector('.nav-break-button');
+      const dateSelect=document.querySelector('.statistics-date-picker select');
+      let dateControl=null;
+      if(dateSelect){
+        const style=getComputedStyle(dateSelect),text=document.createElement('span');
+        text.textContent=dateSelect.selectedOptions[0].textContent;
+        Object.assign(text.style,{position:'fixed',visibility:'hidden',whiteSpace:'pre',font:style.font,letterSpacing:style.letterSpacing});
+        document.body.append(text);
+        const textWidth=text.getBoundingClientRect().width;
+        text.remove();
+        dateControl={...describe(dateSelect),textWidth,availableTextWidth:dateSelect.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)};
+      }
       window.scrollTo(0,99999);
       main.scrollTop = main.scrollHeight;
       window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${marker},layout:{
@@ -73,8 +91,9 @@ async function measure(expectedPage, expectedLanguage) {
         rootScrollTop:scrollY,titlebarBottom:document.querySelector('.mac-titlebar-drag').getBoundingClientRect().bottom,
         main:describe(main),nav:describe(nav),lastBottom:main.lastElementChild.getBoundingClientRect().bottom,
         navControls:[...nav.querySelectorAll('button')].filter(element=>element.getBoundingClientRect().width>0).map(describe),
-        statistics:[...document.querySelectorAll('.statistics-metric,.statistics-date-picker select,.statistics-daily-metric')].map(describe),
-        dateControl:document.querySelector('.statistics-date-picker select')?describe(document.querySelector('.statistics-date-picker select')):null,
+        utilities:{settings:describe(settings),sound:describe(sound),row:describe(actions),settingsNaturalWidth,gap:parseFloat(getComputedStyle(actions).columnGap)||0,breakButton:breakButton?describe(breakButton):null},
+        statistics:[...document.querySelectorAll('.statistics-metric,.statistics-daily-metric')].map(describe),
+        dateControl,
         dialog:!!document.querySelector('[role=dialog]')}}});
       main.scrollTop=0;
     })()` });
@@ -97,9 +116,22 @@ function checkShell(layout) {
     assert(button.left >= layout.nav.left && button.right <= layout.nav.right, 'Every sidebar control stays inside the sidebar');
     assert(button.width >= 44 && button.height >= 44, 'Sidebar controls retain usable hit targets');
     assert(button.scrollWidth <= button.clientWidth, 'Complete translated button labels fit inside their controls');
+    assert(button.scrollHeight <= button.clientHeight, 'Translated sidebar labels are not clipped vertically');
+  }
+  const {settings,sound,row,settingsNaturalWidth,gap,breakButton}=layout.utilities;
+  const canShareRow=settingsNaturalWidth+sound.width+gap<=row.width+.01;
+  const shareRow=Math.abs((settings.top+settings.bottom-sound.top-sound.bottom)/2)<=1;
+  assert.equal(shareRow,canShareRow,'Settings and sound share a row exactly when their full labels and controls fit');
+  if(!shareRow) assert(settings.bottom<=sound.top+1,'Wrapped utilities form separate non-overlapping rows');
+  if(breakButton) {
+    assert(Math.abs(breakButton.width-row.width)<=1,'The separate instant-break action fills the utility width');
+    assert(breakButton.bottom<=Math.min(settings.top,sound.top)+1||breakButton.top>=Math.max(settings.bottom,sound.bottom)-1,'The instant-break action does not overlap Settings or sound');
   }
   for (const item of layout.statistics) assert(item.scrollWidth <= item.clientWidth, 'Statistics values and dates fit their columns');
-  if (layout.page === 'stats') assert(layout.dateControl?.height >= 44, 'The date control retains a 44px hit target');
+  if (layout.page === 'stats') {
+    assert(layout.dateControl?.height >= 44, 'The date control retains a 44px hit target');
+    assert(layout.dateControl.textWidth<=layout.dateControl.availableTextWidth+.01,'The complete selected date fits before the dropdown indicator');
+  }
 }
 (async () => {
   const results = [];
@@ -127,8 +159,11 @@ function checkShell(layout) {
       await control('resize', { width, height: 760 });
       for (const language of languages) {
         await control('eval', { script: `localStorage.setItem('blincho-language-v1',JSON.stringify({preference:${JSON.stringify(language)},acknowledged:true}));window.dispatchEvent(new StorageEvent('storage',{key:'blincho-language-v1'}));` });
-        const layout = await measure('stats', language); checkShell(layout);
-        results.push({ scope: 'translated-statistics', ...layout });
+        for (let tab=0;tab<5;tab++) {
+          await control('eval', {script:`document.querySelectorAll('.nav-tabs button')[${tab}].click();`});
+          const layout=await measure(['timer','library','survey','ergonomics','stats'][tab],language);checkShell(layout);
+          results.push({scope:'translated-page',...layout});
+        }
       }
     }
     const dragMarker = ++sequence;
@@ -167,10 +202,17 @@ function checkShell(layout) {
     assert.equal(drag.selectedAfterText,6,'Pressing selected text preserves text interaction');
     assert.equal(drag.selectionPreserved,true,'Dragging free space retains the selected text');
     results.push({scope:'real-dom-drag-routing',...drag});
+    await control('eval',{script:"document.querySelector('.statistics-date-picker select').focus();"});
+    const focusedDate=await measure('stats');checkShell(focusedDate);
+    results.push({scope:'focused-date-control',...focusedDate});
     const hidden = await control('hide'); assert(hidden.ok);
     const reopened = await control('show', {}, true);
     reopenStatus = 'passed';
-    if (reopened.ok) checkShell(await measure('stats'));
+    if (reopened.ok) {
+      const reopenedLayout = await measure('stats');
+      checkShell(reopenedLayout);
+      results.push({ scope: 'reopened', ...reopenedLayout });
+    }
     else {
       assert.equal(reopened.error, 'Presence is not confirmed');
       reopenStatus = 'not_run: real macOS presence is not confirmed';
@@ -191,8 +233,12 @@ function checkShell(layout) {
       }
     }
   }
-  if (failure) throw failure;
+  if (failure) {
+    fs.writeFileSync(path.join(directory,'result.json'),JSON.stringify({status:'failed',error:failure.message,results,reopenStatus},null,2));
+    console.error('Evidence: '+path.join(directory,'result.json'));
+    throw failure;
+  }
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify({ status: 'passed', results, reopenStatus }, null, 2));
-  console.log('PASS: native viewport sizing, all five pages, unclipped sidebar controls and statistics in 30 languages at three widths.');
+  console.log('PASS: native viewport sizing, adaptive Settings/sound rows, all five pages in 30 languages at three widths, unclipped sidebar controls and statistics.');
   console.log('Reopen: ' + reopenStatus + '. Evidence: ' + path.join(directory, 'result.json'));
 })().catch(error => { console.error(error); process.exitCode = 1; });

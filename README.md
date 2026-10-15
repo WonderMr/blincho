@@ -38,7 +38,7 @@ npm start
 
 On macOS, run `npm run tauri:test` for Rust and history migration checks, `npm run tauri:build:mac` to build `release/tauri-macos/Blincho.app`, or `npm run tauri:test:mac` for an isolated native smoke test. Install Blincho in `/Applications` before using its login startup feature so the registered executable has a stable path. Windows and Linux builds use `npm run tauri:build:win` and `npm run tauri:build:linux`.
 
-Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at several window sizes, through resize/restore and across all five pages, plus statistics and sidebar controls in all 30 languages at three widths. It uses synthetic settings and a separate WebKit profile. The document and titlebar stay fixed; long page content and sidebar controls retain their own scrolling. AppKit can clamp requested dimensions to the screen's available work area. The reopen check reports a skip when macOS cannot confirm presence, while the viewport checks still run.
+Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at several window sizes, through resize/restore and across all five pages in all 30 languages at three widths. It verifies that Settings and sound share a row whenever they fit, translated controls remain unclipped, and statistics fit the content pane. It uses synthetic settings and a separate WebKit profile. The document and titlebar stay fixed; long page content and sidebar controls retain their own scrolling. AppKit can clamp requested dimensions to the screen's available work area. The reopen check reports a skip when macOS cannot confirm presence, while the viewport checks still run.
 
 ## Website
 
