@@ -71,7 +71,9 @@ export const ExercisePlayer: React.FC<ExercisePlayerProps> = ({
 
   // Sound toggle
   const toggleSound = () => {
-    setSoundActive(!soundActive);
+    soundActiveRef.current = !soundActiveRef.current;
+    setSoundActive(soundActiveRef.current);
+    if (soundActiveRef.current) soundSynth.playSoftBeep(520, true);
   };
 
   // Step countdown timer
@@ -79,7 +81,7 @@ export const ExercisePlayer: React.FC<ExercisePlayerProps> = ({
     advancingRef.current = false;
     if (isPaused || isCompleted) return;
 
-    if (soundActiveRef.current) soundSynth.playSoftBeep(520);
+    if (soundActiveRef.current) soundSynth.playSoftBeep(520, soundActiveRef.current);
     const endsAt = Date.now() + Math.max(1, secondsRemaining) * 1000;
     const timer = setInterval(() => {
       const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
@@ -97,7 +99,7 @@ export const ExercisePlayer: React.FC<ExercisePlayerProps> = ({
     if (currentStepIndex + 1 < technique.steps.length) {
       setCurrentStepIndex(currentStepIndex + 1);
       setSecondsRemaining(technique.steps[currentStepIndex + 1].durationSeconds);
-      if (soundActiveRef.current) soundSynth.playSoftBeep(640);
+      if (soundActiveRef.current) soundSynth.playSoftBeep(640, soundActiveRef.current);
     } else {
       if (!skippedRef.current && !completedTechniquesRef.current.has(routineIndex)) {
         completedTechniquesRef.current.add(routineIndex);
@@ -117,7 +119,7 @@ export const ExercisePlayer: React.FC<ExercisePlayerProps> = ({
 
   const finishExercise = () => {
     setIsCompleted(true);
-    if (soundActiveRef.current) soundSynth.playCompletionChime();
+    if (soundActiveRef.current) soundSynth.playCompletionChime(soundActiveRef.current);
     if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) confetti({
       particleCount: 80,
       spread: 70,

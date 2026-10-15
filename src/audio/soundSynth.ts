@@ -69,8 +69,8 @@ class SoundSynthesizer {
   }
 
   // Soft rhythmic water droplet chime for countdown / blink cues
-  playSoftBeep(frequency = 660) {
-    if (!this.enabled) return;
+  playSoftBeep(frequency = 660, enabled = this.enabled) {
+    if (!enabled) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -105,8 +105,8 @@ class SoundSynthesizer {
   }
 
   // Harmonic chord celebration on break completion (Major 9th chord)
-  playCompletionChime() {
-    if (!this.enabled) return;
+  playCompletionChime(enabled = this.enabled) {
+    if (!enabled) return;
     try {
       this.initCtx();
       if (!this.ctx) return;

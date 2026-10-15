@@ -5,6 +5,7 @@ import { DayStats, CVSSurveyResult, ActivityState } from '../types';
 import { analyzeDayActivity, summarizeWeek } from '../utils/activity';
 import { analyzeDayMeetings, summarizeWeekMeetings } from '../utils/meetings';
 import { MeetingHistoryControls } from './MeetingHistoryControls';
+import { HistoryDatePicker } from './HistoryDatePicker';
 import type { MeetingHistoryControlsProps } from './MeetingHistoryControls';
 import { Trophy, Flame, CheckCircle2, Clock, Calendar, Zap, LockKeyhole, Activity, Monitor, Coffee, Pause, ChevronDown, Phone } from 'lucide-react';
 
@@ -140,11 +141,9 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allS
           <div><h3 id="daily-activity-title" className="card-title"><Activity size={19} aria-hidden="true" />{t("Активность по времени")}</h3>
             <p className="statistics-detail-note">{t("Когда вы работали, отходили от компьютера и отдыхали.")}</p>
           </div>
-          <label className="statistics-date-picker"><span>{t("Выбрать день")}</span>
-            <select value={displayedDate} onChange={event => setSelectedDate(event.target.value)} aria-controls="daily-activity-detail">
-              {availableDates.map(date => <option key={date} value={date}>{formatDate(date, { day: 'numeric', month: 'long', year: 'numeric' })}{date === todayStats.date ? t(" (сегодня)") : ''}</option>)}
-            </select>
-          </label>
+          <HistoryDatePicker value={displayedDate} dates={availableDates} label={t("Выбрать день")}
+            formatLabel={date => `${formatDate(date, { day: 'numeric', month: 'long', year: 'numeric' })}${date === todayStats.date ? t(" (сегодня)") : ''}`}
+            onChange={setSelectedDate} />
         </div>
         <div className="statistics-day-selector" role="group" aria-label={t("Последние 7 дней")}>
           {last7Days.map(day => <button key={day.dateStr} type="button" className={`statistics-day-button ${day.dateStr === displayedDate ? 'is-selected' : ''}`}
