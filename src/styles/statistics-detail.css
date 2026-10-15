@@ -1,7 +1,7 @@
 .statistics-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .statistics-detail-header > div { min-width: 0; }
 .statistics-detail-note { color: var(--text-secondary); font-size: .75rem; line-height: 1.6; margin-top: 7px; }
-.statistics-date-picker { position: relative; display: grid; gap: 5px; flex: 0 1 230px; min-width: 0; font-size: .7rem; color: var(--text-secondary); max-width: 100%; }
+.statistics-date-picker { position: relative; display: grid; gap: 5px; flex: 0 0 auto; width: max-content; min-width: 0; font-size: .7rem; color: var(--text-secondary); max-width: 100%; }
 .statistics-date-picker select { appearance: none; -webkit-appearance: none; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-control); border-radius: 9px; height: 44px; min-height: 44px; min-width: 0; width: 100%; padding: 7px 10px; padding-inline-end: 32px; font: inherit; font-size: .78rem; max-width: 100%; }
 .statistics-date-picker::after { content: ''; position: absolute; inset-inline-end: 14px; bottom: 19px; width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); pointer-events: none; }
 .statistics-day-selector { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-block: 14px; padding: 4px; border-radius: 10px; background: var(--surface-muted); }

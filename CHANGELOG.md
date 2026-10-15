@@ -2,6 +2,14 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.2]
+
+### Fixed
+
+- Keep Settings and sound together on one sidebar row whenever their full controls fit. Wrap only when the translated label needs more room, without clipping text or reducing button sizes.
+- Keep the instant-break action on its own full-width row across the exercise library, comfort journal, ergonomics and statistics screens.
+- Size the statistics date selector to its translated content on wide layouts, so longer dates remain visible instead of being clipped by a fixed width.
+
 ## [1.8.1]
 
 ### Improved

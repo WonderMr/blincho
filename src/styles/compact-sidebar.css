@@ -93,9 +93,9 @@ html[data-platform="darwin"] .app-workspace { --titlebar-height: 38px; }
 .nav-bar .nav-tab-btn:hover, .nav-bar .nav-settings-button:hover { background: var(--bg-secondary); color: var(--text-primary); }
 .nav-bar .nav-utilities { margin-top: auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
 /* Legacy header grid-area names must not create implicit utility columns. */
-.nav-bar .nav-actions { grid-area: auto; display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; gap: 4px; width: 100%; min-width: 0; }
-.nav-bar .nav-settings-button { width: 100%; padding-inline: 8px; }
-.nav-bar .nav-actions > .btn-icon { grid-column: 2; flex-shrink: 0; width: 44px; min-width: 44px; }
+.nav-bar .nav-actions { grid-area: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; width: 100%; min-width: 0; }
+.nav-bar .nav-settings-button { flex: 1 1 auto; width: max-content; max-width: 100%; padding-inline: 8px; }
+.nav-bar .nav-actions > .btn-icon { flex: 0 0 44px; width: 44px; min-width: 44px; }
 .nav-bar .nav-break-button { display: flex; max-width: none; width: 100%; min-height: 44px; font-size: .8rem; white-space: normal; overflow-wrap: normal; }
 @media (max-width: 760px) {
   .app-workspace { grid-template-columns: minmax(0, 1fr); }
@@ -115,7 +115,6 @@ html[data-platform="darwin"] .app-workspace { --titlebar-height: 38px; }
   .nav-bar .nav-tabs { grid-area: tabs; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 4px; }
   .nav-bar .nav-utilities { grid-area: utilities; grid-template-columns: repeat(2, 44px); gap: 4px; margin: 0; align-self: start; }
   .nav-bar .nav-actions { display: contents; }
-  .nav-bar .nav-actions > .btn-icon { grid-column: auto; }
   .nav-bar .nav-settings-button { width: 44px; justify-content: center; padding: 8px; }
   .nav-bar .nav-settings-button > span { display: none; }
   .nav-bar .nav-break-button { display: none; }
