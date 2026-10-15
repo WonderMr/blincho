@@ -56,7 +56,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   onCloseRef.current = onClose;
   const [notificationFeedback, setNotificationFeedback] = useState('');
   const [notificationPending, setNotificationPending] = useState<'enable' | 'test' | null>(null);
-  const notificationRequestRef = useRef<object | null>(null);
+  const notificationRequestRef = useRef<{ enable: boolean; test: boolean } | null>(null);
   const [cameraPending, setCameraPending] = useState(false);
   const [cameraFeedback, setCameraFeedback] = useState('');
   const cameraRequestRef = useRef<AbortController | null>(null);
@@ -92,7 +92,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
       if (showFeedback) setCameraFeedback("Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.");
     }
   };
-  const closeSettings = () => { cancelCameraRequest(); onClose(); };
+  const closeSettings = () => {
+    notificationRequestRef.current = null;
+    setNotificationPending(null);
+    cancelCameraRequest();
+    onClose();
+  };
   onCloseRef.current = closeSettings;
   const handleCameraChange = async (enabled: boolean) => {
     if (!enabled) {
@@ -183,17 +188,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
     heading?.focus({ preventScroll: true });
   };
   const requestNotifications = async (kind: 'enable' | 'test') => {
-    if (!notificationsSupported || (kind === 'test' && notificationRequestRef.current)) return;
-    const request = {};
+    if (!notificationsSupported) return;
+    const pending = notificationRequestRef.current;
+    if (pending) {
+      pending[kind] = true;
+      setNotificationPending(pending.enable ? 'enable' : 'test');
+      return;
+    }
+    const request = { enable: kind === 'enable', test: kind === 'test' };
     notificationRequestRef.current = request;
     setNotificationPending(kind);
     setNotificationFeedback('');
     try {
       const granted = await requestNotificationPermission();
       if (!mountedRef.current || notificationRequestRef.current !== request) return;
-      if (kind === 'enable') handleChange('notificationsEnabled', granted);
+      if (request.enable) handleChange('notificationsEnabled', granted);
       if (granted) {
-        if (kind === 'test') {
+        if (request.test) {
           showEyeBreakNotification(t("Тестовое уведомление Blincho"), t("Так будет выглядеть напоминание о перерыве."));
           setNotificationFeedback("Уведомление отправлено. Его показ зависит от настроек браузера или системы, включая режим «Не беспокоить».");
         }
@@ -202,7 +213,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
       }
     } catch {
       if (!mountedRef.current || notificationRequestRef.current !== request) return;
-      if (kind === 'enable') handleChange('notificationsEnabled', false);
+      if (request.enable) handleChange('notificationsEnabled', false);
       setNotificationFeedback("Не удалось отправить уведомление. Проверьте разрешения браузера или системы.");
     } finally {
       if (mountedRef.current && notificationRequestRef.current === request) {
@@ -213,7 +224,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   };
   const handleNotificationChange = (enabled: boolean) => {
     if (enabled) {
-      if (notificationPending !== 'enable') void requestNotifications('enable');
+      void requestNotifications('enable');
     } else {
       notificationRequestRef.current = null;
       setNotificationPending(null);

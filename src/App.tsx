@@ -565,6 +565,10 @@ export const App: React.FC = () => {
     if (!mountedRef.current || session.exercising || exerciseStartPendingRef.current) return;
     exerciseStartPendingRef.current = true;
     try {
+      // A failed pre-click query must not consume this explicit start request.
+      const previousPresence = presenceInFlightRef.current;
+      if (previousPresence) await previousPresence;
+      if (!mountedRef.current || session.exercising) return;
       if (!(await samplePresence(true)) || !mountedRef.current || session.exercising) return;
       cameraAbortRef.current?.abort();
       session.advance(Date.now());

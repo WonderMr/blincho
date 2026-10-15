@@ -57,6 +57,46 @@ test('browser enabling requests permission from its gesture, persists only a gra
   } finally { h.destroy(); }
 });
 
+for (const outcome of ['granted', 'denied', 'default']) test(`test then enable shares one permission request and applies a ${outcome} result`, async () => {
+  const pending = deferred(), h = harness({ request: () => pending.promise });
+  try {
+    h.test(); assert.equal(h.requests, 1); assert.equal(h.checked, false); assert.equal(h.delivered, 0);
+    h.change('notifications-enabled', true); assert.equal(h.requests, 1); assert.equal(h.checked, true);
+    assert.equal(h.settings.notificationsEnabled, false); h.change('work-minutes', '30');
+    h.setPermission(outcome); pending.resolve(outcome); await h.settle();
+    assert.equal(h.requests, 1); assert.equal(h.settings.notificationsEnabled, outcome === 'granted');
+    assert.equal(h.checked, outcome === 'granted'); assert.equal(h.settings.workMinutes, 30);
+    assert.equal(h.delivered, outcome === 'granted' ? 1 : 0);
+    assert(h.host.textContent.includes(outcome === 'granted' ? 'Уведомление отправлено' : 'Разрешение не получено'));
+  } finally { h.destroy(); }
+});
+
+for (const action of ['off', 'close', 'unmount']) test(`${action} cancels both intents of a pending test then enable`, async () => {
+  const pending = deferred(), h = harness({ request: () => pending.promise }); let destroyed = false;
+  try {
+    h.test(); h.change('notifications-enabled', true); assert.equal(h.requests, 1);
+    if (action === 'off') h.change('notifications-enabled', false);
+    if (action === 'close') h.close();
+    if (action === 'unmount') { h.destroy(); destroyed = true; }
+    const updates = h.updates; h.setPermission('granted'); pending.resolve('granted'); await h.settle();
+    assert.equal(h.updates, updates); assert.equal(h.settings.notificationsEnabled, false); assert.equal(h.delivered, 0);
+  } finally { if (!destroyed) h.destroy(); }
+});
+
+test('a canceled shared request cannot save or send after a replacement starts', async () => {
+  const first = deferred(), second = deferred(); let calls = 0;
+  const h = harness({ request: () => (++calls === 1 ? first : second).promise });
+  try {
+    h.test(); h.change('notifications-enabled', true); h.change('notifications-enabled', false);
+    h.change('notifications-enabled', true); assert.equal(h.requests, 2);
+    h.setPermission('granted'); first.resolve('granted'); await h.settle();
+    assert.equal(h.settings.notificationsEnabled, false); assert.equal(h.checked, true); assert.equal(h.delivered, 0);
+    assert(h.host.textContent.includes('Проверка…'));
+    h.setPermission('denied'); second.resolve('denied'); await h.settle();
+    assert.equal(h.settings.notificationsEnabled, false); assert.equal(h.checked, false); assert.equal(h.delivered, 0);
+  } finally { h.destroy(); }
+});
+
 for (const outcome of ['denied', 'default']) test(`${outcome} permission keeps notifications off and explains the result`, async () => {
   const h = harness({ request: async () => { h.setPermission(outcome); return outcome; } });
   try {
