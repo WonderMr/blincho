@@ -348,6 +348,7 @@ export const App: React.FC = () => {
   };
   const beginBreak = () => {
     if (!session.present || session.breakActive || session.exercising) return;
+    cameraAbortRef.current?.abort();
     session.advance(Date.now());
     flushFocus();
     session.breakActive = true;
@@ -363,6 +364,41 @@ export const App: React.FC = () => {
     sendDesktopCommand('bringToFront', () => window.electronAPI?.bringToFront?.({ alwaysOnTop: settingsRef.current.strictMode }));
     sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(settingsRef.current.strictMode));
     sync();
+  };
+  const checkCameraAndLock = async (version: number, requireExpiry = false): Promise<boolean> => {
+    const controller = new AbortController();
+    const isCurrent = () => mountedRef.current && version === session.version && session.counting &&
+      (!requireExpiry || session.expiryPending) && !controller.signal.aborted &&
+      !cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled;
+    if (!isCurrent() || !window.electronAPI?.lockComputer) return false;
+    cameraAbortRef.current?.abort();
+    cameraAbortRef.current = controller;
+    try {
+      const camera = await checkCameraPresence(controller.signal);
+      if (camera !== 'absent' || !isCurrent()) return false;
+      if (!(await samplePresence()) || !isCurrent()) return false;
+      if (hasNativeTimer()) {
+        const snapshot = await readNativeTimer();
+        if (!snapshot || snapshot.version !== version || snapshot.manualPaused || snapshot.breakActive ||
+          snapshot.exercising || snapshot.reasons.length || (requireExpiry && !snapshot.expiryPending)) return false;
+      }
+      if (!isCurrent()) return false;
+      if (await window.electronAPI.lockComputer()) {
+        if (mountedRef.current) {
+          setPresenceReason('locked', true);
+          setNoticeMessage("Камера не обнаружила человека. Компьютер заблокирован.");
+        }
+        return true;
+      }
+      console.warn('Blincho: Computer lock was not confirmed.');
+      if (mountedRef.current) setNoticeMessage("Не удалось заблокировать компьютер.");
+    } catch (error) {
+      console.warn('Blincho: Computer lock failed:', error);
+      if (isCurrent()) setNoticeMessage("Не удалось заблокировать компьютер.");
+    } finally {
+      if (cameraAbortRef.current === controller) cameraAbortRef.current = null;
+    }
+    return false;
   };
   const handleTimerExpired = async () => {
     if (expiryInFlightRef.current) return;
@@ -386,39 +422,14 @@ export const App: React.FC = () => {
       }
       if (!cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled && window.electronAPI?.lockComputer && cameraCheckedVersionRef.current !== version) {
         cameraCheckedVersionRef.current = version;
-        const controller = new AbortController();
-        cameraAbortRef.current = controller;
-        const camera = await checkCameraPresence(controller.signal);
-        if (!mountedRef.current || version !== session.version || !session.counting || !session.expiryPending) return;
-        if (camera === 'absent' && !controller.signal.aborted && !cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled) {
-          if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting || !session.expiryPending) return;
-          if (hasNativeTimer()) {
-            const snapshot = await readNativeTimer();
-            if (!snapshot || snapshot.version !== version || !snapshot.expiryPending || snapshot.manualPaused || snapshot.reasons.length) return;
-          }
-          if (!mountedRef.current || version !== session.version || !session.counting || controller.signal.aborted || cameraAccessPendingRef.current || !settingsRef.current.cameraLockEnabled) return;
-          try {
-            if (await window.electronAPI.lockComputer()) {
-              if (mountedRef.current) {
-                setPresenceReason('locked', true);
-                setNoticeMessage("Камера не обнаружила человека. Компьютер заблокирован.");
-              }
-              return;
-            }
-            console.warn('Blincho: Computer lock was not confirmed.');
-            if (mountedRef.current) setNoticeMessage("Не удалось заблокировать компьютер.");
-          } catch (error) {
-            console.warn('Blincho: Computer lock failed:', error);
-            if (mountedRef.current) setNoticeMessage("Не удалось заблокировать компьютер.");
-          }
-        }
+        if (await checkCameraAndLock(version, true)) return;
       }
       if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting) return;
       setInMeetingActive(false);
       if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"), t("Отведите взгляд от экрана и дайте глазам отдохнуть."));
       if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak();
       else { soundSynth.playZenBowl(); restartWork(); }
-    } finally { cameraAbortRef.current = null; expiryInFlightRef.current = false; }
+    } finally { expiryInFlightRef.current = false; }
   };
   const handleTriggerInstantBreak = async () => {
     if (await samplePresence()) beginBreak();
@@ -429,6 +440,7 @@ export const App: React.FC = () => {
     pendingBreakRef.current = { eventId, deadlineMonotonicAt };
     endBreak(true);
     setNoticeMessage("Перерыв завершён. Рабочий цикл начат автоматически.");
+    void checkCameraAndLock(session.version);
   };
   const handleCloseBreakOverlay = async (eventId = breakIdRef.current) => {
     if (settingsRef.current.strictMode || !eventId || breakIdRef.current !== eventId) return;
