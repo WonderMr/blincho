@@ -2,6 +2,12 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.6]
+
+### Fixed
+
+- Detect background Chrome calls on macOS when WebRTC keeps the system awake without preventing display sleep, including calls with a muted microphone. Continue postponing breaks while the call is active.
+
 ## [1.8.5]
 
 ### Fixed
