@@ -2,6 +2,12 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.3]
+
+### Fixed
+
+- Show one tray hover summary on macOS and Windows. Keep the system tooltip disabled while the preview window is available, including after timer and language updates, and retain the text fallback when the preview cannot be created.
+
 ## [1.8.2]
 
 ### Fixed
