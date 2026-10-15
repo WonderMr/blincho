@@ -95,14 +95,19 @@ async function stop() {
   const overlay = await inspectRenderer();
   assert.equal(overlay.renderer.dialog, true);
   await until(value => !value.timer.breakActive, breakSeconds * 1000 + 8000);
-  // Native monitor/geometry recovery can defer restoration beyond one tick.
-  const restored = await until(value => !value.visible && !value.timer.breakActive, 10_000);
+  // Visibility and native focus can settle on different event-loop turns.
+  // Wait for both instead of retaining an earlier hidden-but-focused snapshot.
+  const restored = await until(value => value.visible === false && value.focused === false && !value.timer.breakActive, 10_000);
   await sleep(300);
-  assert.equal(read().visible, false, 'Tray restoration remains stable after native cleanup');
+  const stableRestored = read();
+  assert.equal(stableRestored.visible, false, 'Tray restoration remains stable after native cleanup');
+  assert.equal(stableRestored.focused, false, 'Native focus stays released after cleanup');
   assert.equal(restored.visible, false, 'A break that began from the tray must return to the tray');
   assert.equal(restored.focused, false, 'A completed tray break must release native window focus');
   await sleep(1000);
-  assert.equal(read().visible, false, 'Later timer ticks must not reopen the restored tray window');
+  const laterRestored = read();
+  assert.equal(laterRestored.visible, false, 'Later timer ticks must not reopen the restored tray window');
+  assert.equal(laterRestored.focused, false, 'Later timer ticks must not refocus the restored tray window');
   await stop();
   fs.writeFileSync(source, '{corrupted old history');
   const restart = await launch(['--autostart']);
