@@ -345,7 +345,11 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
     unsafe {
         macos::exclude_from_window_menu(window.ns_window().map_err(|e| e.to_string())?);
     }
-    set_tooltip(app, "Blincho")?;
+    // An unavailable notification area must not invalidate a working hover
+    // window. The setter retains the native error for diagnostics and tests.
+    if let Err(error) = set_tooltip(app, "Blincho") {
+        eprintln!("Tray tooltip: {error}");
+    }
     Ok(())
 }
 
