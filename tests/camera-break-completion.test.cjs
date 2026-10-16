@@ -83,6 +83,131 @@ test('native deadline checks the camera even when the renderer countdown has not
   }
 });
 
+test('delayed native configuration keeps renderer expiry from ending a strict break early', async () => {
+  const previous = window.__TAURI__;
+  const start = 1791712800000;
+  let h, snapshot, ticks = 0, acceptBreak, nativeDeadline, checks = 0, locks = 0;
+  const strictCalls = [];
+  const copy = () => ({ ...snapshot, tickCount: ++ticks });
+  const configure = input => {
+    snapshot = {
+      ...input, reasons: [], focusByDate: {}, absenceEpoch: 0, absentSince: null,
+      idleSeconds: 0, locked: false, suspended: false, breakElapsed: false,
+      breakEndAt: input.breakActive ? h.now + input.breakSeconds * 1000 : null,
+    };
+    if (input.breakActive) nativeDeadline = snapshot.breakEndAt;
+    return copy();
+  };
+  window.__TAURI__ = { core: { async invoke(command, args) {
+    if (command === 'configure_timer') {
+      if (args.input.breakActive && nativeDeadline === undefined) {
+        return new Promise(resolve => { acceptBreak = () => resolve(configure(args.input)); });
+      }
+      return configure(args.input);
+    }
+    if (command === 'timer_snapshot') {
+      if (snapshot.breakActive && h.now >= snapshot.breakEndAt) snapshot.breakElapsed = true;
+      return copy();
+    }
+  } } };
+  try {
+    h = createHarness({ timerPreset: 'custom', workMinutes: 60, breakSeconds: 3,
+      cameraLockEnabled: true, strictMode: true, idleDetectionEnabled: false }, false, false, start);
+    h.setCameraCheck(async () => { checks++; return 'absent'; });
+    h.electronAPI.lockComputer = async () => { locks++; return true; };
+    h.electronAPI.setStrictLock = active => strictCalls.push(active);
+    await h.settle();
+    await h.call('TimerWidget', 'onTriggerInstantBreak');
+    const elapsed = h.captured.BreakOverlay.onElapsed;
+    assert.equal(h.captured.BreakOverlay.waitForNativeCompletion, true, 'App keeps the visual overlay under native authority');
+    assert.equal(typeof acceptBreak, 'function', 'native configuration is still waiting');
+    await h.advance(200);
+    acceptBreak();
+    await h.settle();
+    assert.equal(nativeDeadline, start + 3200, 'modeled IPC delay moves the native deadline');
+    await h.advance(2800);
+    assert.equal(h.now, start + 3000, 'the renderer countdown has reached zero');
+    assert.equal(snapshot.breakElapsed, false);
+    await elapsed(h.monotonicNow);
+    await h.settle();
+    assert.equal(h.active.has('BreakOverlay'), true, 'renderer expiry must wait for native completion');
+    assert.equal(snapshot.breakActive, true, 'renderer expiry must not clear the native break');
+    assert.equal(h.captured.TimerWidget.phase, 'break');
+    assert.equal(strictCalls.at(-1), true, 'strict lock stays active until the native deadline');
+    assert.equal(checks, 0, 'an early renderer callback cannot start the camera');
+    assert.equal(locks, 0);
+    assert.equal(h.metrics.completionChimes, 0);
+    await h.advance(100);
+    await h.emit('mousemove');
+    assert.equal(h.stats().breaksCompleted, 0, 'input before native expiry cannot credit the break');
+    h.setIdle(20);
+    await h.advance(900);
+    assert.equal(h.active.has('BreakOverlay'), false, 'native expiry closes the break');
+    assert.equal(strictCalls.at(-1), false);
+    assert.equal(checks, 1, 'native expiry starts one camera check');
+    assert.equal(locks, 1);
+    assert.equal(h.metrics.completionChimes, 1);
+    await elapsed(h.monotonicNow);
+    await h.advance(1000);
+    assert.equal(checks, 1, 'a duplicate renderer callback cannot repeat native completion');
+    assert.equal(locks, 1);
+    assert.equal(h.stats().breaksCompleted, 0);
+  } finally {
+    h?.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+  }
+});
+
+test('an expired native frame from an old version cannot finish a replacement break', async () => {
+  const previous = window.__TAURI__;
+  let snapshot, nextFrame, ticks = 0, checks = 0;
+  window.__TAURI__ = { core: { async invoke(command, args) {
+    if (command === 'configure_timer') snapshot = {
+      ...args.input, reasons: [], focusByDate: {}, absenceEpoch: 0, absentSince: null,
+      idleSeconds: 0, locked: false, suspended: false, breakElapsed: false, breakEndAt: null,
+    };
+    const frame = command === 'timer_snapshot' && nextFrame ? nextFrame : snapshot;
+    nextFrame = undefined;
+    if (command === 'configure_timer' || command === 'timer_snapshot') return { ...frame, tickCount: ++ticks };
+  } } };
+  const h = createHarness({ cameraLockEnabled: true });
+  h.setCameraCheck(async () => { checks++; return 'present'; });
+  h.electronAPI.lockComputer = async () => false;
+  try {
+    await h.settle();
+    await h.call('TimerWidget', 'onTriggerInstantBreak');
+    const oldElapsed = h.captured.BreakOverlay.onElapsed;
+    const oldFrame = { ...snapshot, breakElapsed: true, breakEndAt: h.now };
+    await h.call('BreakOverlay', 'onClose');
+    await h.call('TimerWidget', 'onTriggerInstantBreak');
+    const elapsed = h.captured.BreakOverlay.onElapsed;
+    assert(snapshot.version > oldFrame.version);
+    nextFrame = oldFrame;
+    await h.advance(1000);
+    await oldElapsed(h.monotonicNow);
+    await h.settle();
+    assert.equal(h.active.has('BreakOverlay'), true, 'new tick count cannot authorize an old break version');
+    assert.equal(h.captured.TimerWidget.phase, 'break');
+    assert.equal(checks, 0);
+    assert.equal(h.metrics.completionChimes, 0);
+    assert.equal(h.stats().breaksCompleted, 0);
+    snapshot = { ...snapshot, breakElapsed: true, breakEndAt: h.now };
+    await h.advance(1000);
+    assert.equal(h.active.has('BreakOverlay'), false);
+    assert.equal(checks, 1);
+    assert.equal(h.metrics.completionChimes, 1);
+    await oldElapsed(h.monotonicNow);
+    await elapsed(h.monotonicNow);
+    nextFrame = oldFrame;
+    await h.advance(1000);
+    assert.equal(checks, 1, 'stale native and renderer callbacks cannot repeat completion');
+    assert.equal(h.metrics.completionChimes, 1);
+  } finally {
+    h.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+  }
+});
+
 test('present, unavailable and opted-out camera leave the completed break in normal work', async () => {
   for (const [enabled, result] of [[true, 'present'], [true, 'unavailable'], [false, 'absent']]) {
     const h = createHarness({ cameraLockEnabled: enabled });

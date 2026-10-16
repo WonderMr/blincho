@@ -441,13 +441,19 @@ export const App: React.FC = () => {
   const handleTriggerInstantBreak = async () => {
     if (await samplePresence()) beginBreak();
   };
-  const handleBreakElapsed = (eventId: string | null, deadlineMonotonicAt = performance.now()) => {
+  const completeBreak = (eventId: string | null, deadlineMonotonicAt: number) => {
     if (!mountedRef.current || !eventId || breakIdRef.current !== eventId || !session.breakActive) return;
     soundSynth.playCompletionChime();
     pendingBreakRef.current = { eventId, deadlineMonotonicAt };
     endBreak(true);
     setNoticeMessage("Перерыв завершён. Рабочий цикл начат автоматически.");
     void checkCameraAndLock(session.version);
+  };
+  const handleBreakElapsed = (eventId: string | null, deadlineMonotonicAt = performance.now()) => {
+    // Native configuration can start later than the renderer countdown.
+    // Only its current expiry snapshot may complete a native break.
+    if (hasNativeTimer()) return;
+    completeBreak(eventId, deadlineMonotonicAt);
   };
   const handleCloseBreakOverlay = async (eventId = breakIdRef.current) => {
     if (settingsRef.current.strictMode || !eventId || breakIdRef.current !== eventId) return;
@@ -732,9 +738,10 @@ export const App: React.FC = () => {
       const today = getTodayDateString();
       if (today !== dateRef.current) { dateRef.current = today; refreshStats(); }
       publish(value => value + 1);
-      if (snapshot.breakElapsed && session.breakActive) {
+      if (snapshot.breakElapsed && snapshot.breakActive && snapshot.version === session.version &&
+        snapshot.reasons.length === 0 && session.breakActive) {
         const deadline = performance.now() - Math.max(0, Date.now() - (snapshot.breakEndAt ?? Date.now()));
-        handleBreakElapsed(breakIdRef.current, deadline);
+        completeBreak(breakIdRef.current, deadline);
       }
       if (snapshot.expiryPending && snapshot.version === session.version && session.counting) void handlersRef.current.handleTimerExpired();
     };
@@ -974,7 +981,8 @@ export const App: React.FC = () => {
         <BreakOverlay
           initialSeconds={activeBreakSeconds}
           strictMode={settings.strictMode}
-            onElapsed={deadlineMonotonicAt => handleBreakElapsed(breakEventId, deadlineMonotonicAt)}
+          waitForNativeCompletion={hasNativeTimer()}
+          onElapsed={deadlineMonotonicAt => handleBreakElapsed(breakEventId, deadlineMonotonicAt)}
           onClose={() => handleCloseBreakOverlay(breakEventId)}
           onPostpone={minutes => handlePostponeBreak(minutes, breakEventId)}
           onOpenExercises={async () => {
