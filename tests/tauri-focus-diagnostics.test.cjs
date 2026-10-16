@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
-const { assertAppIdentity, startFocusDiagnostics, focusFailureEvidence, logFocusFailure }
+const { spawnSync } = require('node:child_process');
+const { assertAppIdentity, assertAppPolicy, startFocusDiagnostics, focusFailureEvidence, logFocusFailure }
   = require('./tauri-break-focus-smoke.cjs');
 
 function fixture(t) {
@@ -17,7 +18,8 @@ function fixture(t) {
   const runtime = { pid: 123, visible: false, focused: false, nativeActivationPolicy: 1, dockVisible: false,
     timer: { tickCount: 10, breakActive: false, breakEndAt: 1000 } };
   const observer = { pid: 234, observedPID: 123, sample: 20, reportedAtMs: Date.now(), frontmostPID: 345,
-    observedLookupFound: false, observedProcessIdentifier: null, observedTerminated: null,
+    observedLookupFound: false, observedDirectLookupFound: false, observedLookupSource: null,
+    observedProcessIdentifier: null, observedTerminated: null,
     observedActivationPolicy: null, retainedProcessIdentifier: 123, retainedTerminated: false,
     retainedActivationPolicy: 1, workspaceContainsObservedPID: false };
   const write = (file, value) => fs.writeFileSync(path.join(directory, file), JSON.stringify(value));
@@ -26,7 +28,15 @@ function fixture(t) {
   return { directory, handle, app, runtime, observer, write };
 }
 
-test('a nil fresh lookup fails immediately and keeps its exact observation and native state', t => {
+function availableObserver(app, observer, source) {
+  return { ...observer, observedLookupFound: true,
+    observedDirectLookupFound: source === 'direct', observedLookupSource: source,
+    workspaceContainsObservedPID: source === 'workspace', observedProcessIdentifier: app.handle.child.pid,
+    observedBundleIdentifier: app.bundleIdentifier, observedBundlePath: app.bundlePath,
+    observedExecutablePath: app.binary, observedTerminated: false, observedActivationPolicy: 1 };
+}
+
+test('missing both fresh sources fails even with a retained live object and keeps exact evidence', t => {
   const { app, runtime, observer } = fixture(t);
   assert.throws(() => assertAppIdentity(observer, app, runtime), error => {
     assert.equal(error.code, 'ERR_ASSERTION');
@@ -41,6 +51,95 @@ test('a nil fresh lookup fails immediately and keeps its exact observation and n
     return true;
   });
 });
+
+test('fresh workspace identity passes when the direct lookup is nil', t => {
+  const { app, runtime, observer } = fixture(t);
+  const fresh = availableObserver(app, observer, 'workspace');
+  assert.doesNotThrow(() => assertAppIdentity(fresh, app, runtime));
+  assert.doesNotThrow(() => assertAppPolicy(fresh, runtime, 1, 'restored'));
+  assert.equal(fresh.observedDirectLookupFound, false);
+});
+
+test('both fresh sources still reject wrong PID, bundle, paths and terminated applications', t => {
+  const { app, runtime, observer } = fixture(t);
+  const mismatches = { observedProcessIdentifier: 999, observedBundleIdentifier: 'com.other.app',
+    observedBundlePath: '/other/Blincho.app', observedExecutablePath: '/other/blincho',
+    observedTerminated: true };
+  for (const source of ['direct', 'workspace']) {
+    for (const [field, value] of Object.entries(mismatches)) {
+      const invalid = { ...availableObserver(app, observer, source), [field]: value };
+      assert.throws(() => assertAppIdentity(invalid, app, runtime), error => {
+        assert.equal(error.code, 'ERR_ASSERTION', source + ': ' + field);
+        assert.equal(error.focusObservation.observer, invalid);
+        return true;
+      });
+    }
+  }
+});
+
+test('fresh workspace fallback cannot hide external or native policy and Dock mismatches', t => {
+  const { app, runtime, observer } = fixture(t);
+  const fresh = availableObserver(app, observer, 'workspace');
+  assert.throws(() => assertAppPolicy({ ...fresh, observedActivationPolicy: 0 }, runtime, 1, 'restored'),
+    /Dock activation policy/);
+  assert.throws(() => assertAppPolicy(fresh, { ...runtime, nativeActivationPolicy: 0 }, 1, 'restored'),
+    /actual AppKit activation policy/);
+  assert.throws(() => assertAppPolicy(fresh, { ...runtime, dockVisible: true }, 1, 'restored'),
+    /Dock visibility intent/);
+});
+
+test('native observer chooses an exact fresh workspace object only after a nil direct lookup',
+  { skip: process.platform !== 'darwin' }, t => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-focus-resolution-unit-'));
+    t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    const source = path.join(directory, 'resolution.m'), binary = path.join(directory, 'resolution');
+    // Compile the actual fixture helper with boundary objects. Its GUI entry
+    // point is renamed and never called; this executable uses Foundation only.
+    fs.writeFileSync(source, `#define main focusFixtureGUIEntryPoint
+#include ${JSON.stringify(path.join(__dirname, 'native/macos-focus-fixture.m'))}
+#undef main
+@interface FocusApplication : NSObject
+@property pid_t processIdentifier;
+@end
+@implementation FocusApplication
+@end
+int main(void) {
+  @autoreleasepool {
+    FocusApplication *fresh = [FocusApplication new]; fresh.processIdentifier = 123;
+    FocusApplication *other = [FocusApplication new]; other.processIdentifier = 999;
+    FocusApplication *retained = [FocusApplication new]; retained.processIdentifier = 123;
+    NSRunningApplication *direct = (NSRunningApplication *)other;
+    BOOL workspaceFound = NO;
+    NSRunningApplication *resolved = resolveObservedApplication(123, nil,
+      (NSArray<NSRunningApplication *> *)@[other, fresh], &workspaceFound);
+    if (resolved != (NSRunningApplication *)fresh || !workspaceFound || resolved == (NSRunningApplication *)retained) return 1;
+    resolved = resolveObservedApplication(123, direct,
+      (NSArray<NSRunningApplication *> *)@[fresh], &workspaceFound);
+    if (resolved != direct || !workspaceFound) return 2;
+    resolved = resolveObservedApplication(123, direct, @[], &workspaceFound);
+    if (resolved != direct || workspaceFound) return 3;
+    resolved = resolveObservedApplication(123, nil, @[], &workspaceFound);
+    if (resolved != nil || workspaceFound) return 4;
+    resolved = resolveObservedApplication(123, nil,
+      (NSArray<NSRunningApplication *> *)@[other], &workspaceFound);
+    if (resolved != nil || workspaceFound) return 5;
+    FocusApplication *unobserved = [FocusApplication new]; unobserved.processIdentifier = 0;
+    resolved = resolveObservedApplication(0, nil,
+      (NSArray<NSRunningApplication *> *)@[unobserved], &workspaceFound);
+    if (resolved != nil || workspaceFound) return 6;
+    puts("Fresh native observer resolution passed without launching an app");
+  }
+  return 0;
+}
+`);
+    const compile = spawnSync('/usr/bin/xcrun', ['clang', '-fobjc-arc', '-fblocks',
+      '-mmacosx-version-min=14.0', source, '-framework', 'AppKit', '-o', binary],
+    { encoding: 'utf8', timeout: 30_000 });
+    assert.equal(compile.status, 0, compile.stderr || compile.error?.message);
+    const run = spawnSync(binary, [], { encoding: 'utf8', timeout: 5_000 });
+    assert.equal(run.status, 0, run.stderr || run.error?.message);
+    assert.match(run.stdout, /Fresh native observer resolution passed/);
+  });
 
 test('bounded history and one second after failure retain lookup recovery and child exit before cleanup', async t => {
   const { app, handle, runtime, observer, write } = fixture(t);
@@ -59,7 +158,9 @@ test('bounded history and one second after failure retain lookup recovery and ch
     waits.push(milliseconds);
     assert.equal(handle.child.killed, false, 'post-failure observations must precede cleanup');
     write('state.json', { ...observer, sample: observer.sample + waits.length,
-      observedLookupFound: true, workspaceContainsObservedPID: true });
+      observedLookupFound: true, workspaceContainsObservedPID: true,
+      observedDirectLookupFound: waits.length > 1,
+      observedLookupSource: waits.length > 1 ? 'direct' : 'workspace' });
     if (waits.length === 2) {
       handle.child.exitCode = 7;
       handle.processExit = { code: 7, signal: null, atMs: Date.now() };
@@ -75,6 +176,10 @@ test('bounded history and one second after failure retain lookup recovery and ch
   assert.equal(report.postFailureSamples.length, 10);
   assert.deepEqual(waits, Array(10).fill(100));
   assert.equal(report.postFailureSamples[0].observers[0].state.observedLookupFound, true);
+  assert.equal(report.postFailureSamples[0].observers[0].state.observedDirectLookupFound, false);
+  assert.equal(report.postFailureSamples[0].observers[0].state.observedLookupSource, 'workspace');
+  assert.equal(report.postFailureSamples[1].observers[0].state.observedDirectLookupFound, true);
+  assert.equal(report.postFailureSamples[1].observers[0].state.observedLookupSource, 'direct');
   assert.equal(report.atFailure.children[0].exitCode, null);
   assert.equal(report.postFailureSamples[1].children[0].exitCode, 7);
   assert.equal(report.nativeOutput[0].output.length, 65_536);

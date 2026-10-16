@@ -39,6 +39,22 @@ static NSDictionary *readRequest(NSString *path) {
     return request;
 }
 
+static NSRunningApplication *resolveObservedApplication(pid_t observedPID,
+        NSRunningApplication *directObserved, NSArray<NSRunningApplication *> *runningApplications,
+        BOOL *workspaceContainsObservedPID) {
+    NSRunningApplication *workspaceObserved = nil;
+    for (NSRunningApplication *application in runningApplications) {
+        if (observedPID > 0 && application.processIdentifier == observedPID) {
+            workspaceObserved = application;
+            break;
+        }
+    }
+    *workspaceContainsObservedPID = workspaceObserved != nil;
+    // AppKit's direct lookup can transiently be nil while this fresh workspace
+    // list still supplies the live native object. Never substitute retained state.
+    return directObserved ?: workspaceObserved;
+}
+
 int main(int argc, const char **argv) {
     @autoreleasepool {
         if (argc != 3) {
@@ -86,18 +102,16 @@ int main(int argc, const char **argv) {
                 [focusChanges addObject:@{@"pid": @(frontmostPID), @"atMs": @(reportedAtMs)}];
                 lastFrontmostPID = frontmostPID;
             }
-            NSRunningApplication *observed = observedPID > 0
+            NSRunningApplication *directObserved = observedPID > 0
                 ? [NSRunningApplication runningApplicationWithProcessIdentifier:observedPID] : nil;
-            // Compare the fresh lookup with the first successful object for this
-            // PID. Neither retained state nor workspace membership replaces the
-            // fresh lookup required by the smoke's identity assertions.
+            BOOL workspaceContainsObservedPID = NO;
+            NSRunningApplication *observed = resolveObservedApplication(observedPID, directObserved,
+                NSWorkspace.sharedWorkspace.runningApplications, &workspaceContainsObservedPID);
+            // Keep the first resolved object only as diagnostic evidence. Every
+            // sample's identity and policy come from one of the two fresh sources.
             if (!retainedObserved && observed) {
                 retainedObserved = observed;
                 retainedAtMs = reportedAtMs;
-            }
-            BOOL workspaceContainsObservedPID = NO;
-            for (NSRunningApplication *application in NSWorkspace.sharedWorkspace.runningApplications) {
-                if (application.processIdentifier == observedPID) workspaceContainsObservedPID = YES;
             }
             NSDictionary *sample = @{
                 @"pid": @(getpid()), @"windowNumber": @(window.windowNumber),
@@ -106,6 +120,8 @@ int main(int argc, const char **argv) {
                 @"active": @(NSApp.active), @"sample": @(++sequence),
                 @"observedPID": @(observedPID),
                 @"observedLookupFound": observed ? @YES : @NO,
+                @"observedDirectLookupFound": directObserved ? @YES : @NO,
+                @"observedLookupSource": directObserved ? @"direct" : (observed ? @"workspace" : NSNull.null),
                 @"observedProcessIdentifier": observed ? @(observed.processIdentifier) : NSNull.null,
                 @"observedBundleIdentifier": observed.bundleIdentifier ?: NSNull.null,
                 @"observedBundlePath": observed.bundleURL.path ?: NSNull.null,
