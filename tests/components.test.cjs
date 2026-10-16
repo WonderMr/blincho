@@ -162,6 +162,31 @@ test('strict break offers no close or postpone before its deadline', () => {
   assert(h.host.textContent.includes('Строгий режим активен'));
   assert.equal(closed, 0); assert.equal(postponed, 0); h.destroy();
 });
+test('native break stays unfinished at visual zero until its parent confirms expiry', () => {
+  for (const strictMode of [true, false]) {
+    const h = harness(), elapsed = [];
+    try {
+      h.render(React.createElement(h.BreakOverlay, { initialSeconds: 3, strictMode,
+        waitForNativeCompletion: true, onClose() {}, onPostpone() {}, onOpenExercises() {},
+        onElapsed: deadline => elapsed.push(deadline) }));
+      h.advance(3000);
+      assert.equal(h.host.textContent.includes('Перерыв завершён'), false, 'visual zero must not announce native completion');
+      assert.equal(h.host.querySelector('[role="timer"]').textContent, '0с');
+      assert.equal(h.host.textContent.includes('Можно продолжить работу.'), false);
+      assert.deepEqual(elapsed, [], 'a visual countdown cannot report native expiry');
+      if (strictMode) {
+        assert(h.host.textContent.includes('Строгий режим активен'));
+        assert.equal(h.button('Закрыть'), undefined);
+        assert.equal(h.all(node => node.tagName === 'BUTTON' && node.textContent.includes('Отложить')).length, 0);
+      }
+      h.advance(10000);
+      assert.deepEqual(elapsed, []);
+      assert.equal(h.host.textContent.includes('Перерыв завершён'), false);
+      h.render(null);
+      assert.equal(h.host.querySelector('[aria-modal="true"]'), null);
+    } finally { h.destroy(); }
+  }
+});
 test('early non-strict close and postpone cancel the elapsed callback on unmount', () => {
   for (const action of ['close', 'postpone']) {
     const h = harness(), elapsed = [], cancelled = [];
