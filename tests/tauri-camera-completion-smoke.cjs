@@ -17,6 +17,12 @@ function readJSON(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error; }
 }
+function retainCameraFailure(base, name, report, output) {
+  const directory = path.join(base, 'failure-artifacts');
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, name + '-failure.json'), JSON.stringify(report, null, 2));
+  fs.writeFileSync(path.join(directory, name + '-native.log'), output);
+}
 function writeControl(app, operation, args = {}) {
   const id = ++sequence;
   const file = path.join(app.directory, 'control.json');
@@ -123,7 +129,7 @@ function installProbe(returnOutsideRenderer) {
       // Replace MediaDevices with a plain object. Patching its native method
       // alone is unreliable in WKWebView and could invoke the physical camera.
       Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{
-        probe.acquisitions++;probe.acquiredAt=performance.now();
+        probe.acquisitions++;probe.acquiredAt=performance.now();probe.acquiredWallAt=Date.now();
         setTimeout(()=>{window.dispatchEvent(new MouseEvent('mousemove',{movementX:0,movementY:0}));probe.dispatchedStationary=true},100);
         const track={readyState:'live',muted:false,stop(){if(this.readyState==='live')probe.stops++;this.readyState='ended';probe.trackState=this.readyState;probe.stoppedAt=performance.now()}};
         return{blinchoSynthetic:true,getTracks:()=>[track],getVideoTracks:()=>[track]}
@@ -157,7 +163,9 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
   });
   child.once('error', error => { app.launchError = error; });
   child.once('close', (code, signal) => { app.closed = true; app.exit = { code, signal }; });
-  let result, primaryError;
+  let result, primaryError, failure;
+  const countdown = { startSnapshot: null, nativeDeadline: null, completionSnapshot: null,
+    completionObservedAt: null, completionObservedMonotonicAt: null };
   try {
     const initial = await until(app, app.read, value => value.renderer?.ready && value.timer.totalMs > 0,
       'native renderer readiness');
@@ -172,9 +180,15 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
     const started = await until(app, app.read, value => value.timer.breakActive
       && (!strictMode || (value.strict && value.strictShieldCount > 0)), 'native break', 10_000);
     const deadline = started.timer.breakEndAt;
+    countdown.startSnapshot = started;
+    countdown.nativeDeadline = deadline;
     assert(deadline > Date.now(), 'Native countdown must still be active');
-    await until(app, app.read, value => !value.timer.breakActive, 'real native break completion', 10_000);
-    assert(Date.now() >= deadline, 'Camera capture must follow the native countdown');
+    const completed = await until(app, app.read, value => !value.timer.breakActive, 'real native break completion', 10_000);
+    const completionObservedAt = Date.now();
+    countdown.completionSnapshot = completed;
+    countdown.completionObservedAt = completionObservedAt;
+    countdown.completionObservedMonotonicAt = performance.now();
+    assert(completionObservedAt >= deadline, 'Camera capture must follow the native countdown');
     const end = Date.now() + 25_000;
     let observed;
     do {
@@ -183,6 +197,7 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
       await sleep(150);
     } while (Date.now() < end);
     assert.equal(observed.probe.acquisitions, 1, JSON.stringify(observed));
+    assert(observed.probe.acquiredWallAt >= deadline, 'Camera acquisition cannot precede the native deadline');
     assert.equal(observed.probe.frames, 3, 'Bundled local detector must sample three frames');
     assert.equal(new Set(observed.probe.frameHashes).size, 3, 'Every captured frame must have distinct pixels');
     assert.equal(observed.probe.stops, 1, 'Synthetic camera track must be released');
@@ -209,12 +224,14 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
         'Fresh system idle must be read after the external return');
     }
     result = { name, status: 'passed', strictMode, returnOutsideRenderer, version: initial.updates.currentVersion,
-      executable, profile: directory, pid: child.pid, nativeBreakDeadline: deadline, probe: observed.probe,
+      executable, profile: directory, pid: child.pid, nativeBreakDeadline: deadline, completionObservedAt, probe: observed.probe,
       realWKWebView: true, realNativeTimer: true, realLocalDetector: true };
   } catch (error) {
     primaryError = error;
-    fs.writeFileSync(path.join(directory, 'failure.json'), JSON.stringify({ error: error.stack,
-      exit: app.exit, runtime: app.read() }, null, 2));
+    failure = { scenario: name, error: error.stack, exit: app.exit, runtime: app.read(), countdown };
+    try { failure.rendererProbe = await inspect(app); }
+    catch (probeError) { failure.rendererProbeError = String(probeError); }
+    fs.writeFileSync(path.join(directory, 'failure.json'), JSON.stringify(failure, null, 2));
   } finally {
     try { await stop(app); }
     catch (error) {
@@ -222,7 +239,15 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
       if (!primaryError) primaryError = error;
     }
   }
-  if (primaryError) throw primaryError;
+  if (primaryError) {
+    failure ??= { scenario: name, error: primaryError.stack, exit: app.exit, runtime: app.read(), countdown };
+    retainCameraFailure(base, name, failure, app.output);
+    console.error('Camera completion failure: ' + JSON.stringify({ scenario: name,
+      nativeDeadline: countdown.nativeDeadline, completionObservedAt: countdown.completionObservedAt,
+      reasons: failure.runtime?.timer?.reasons, absenceEpoch: failure.runtime?.timer?.absenceEpoch,
+      acquiredWallAt: failure.rendererProbe?.probe?.acquiredWallAt }));
+    throw primaryError;
+  }
   result.shutdown = { closed: app.closed, exitCode: child.exitCode, signal: child.signalCode };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log('PASS: ' + name);
@@ -234,7 +259,7 @@ async function main() {
     console.log('SKIP: Native camera completion smoke requires macOS');
     return;
   }
-  const artifactRoot = process.env.BLINCHO_CAMERA_COMPLETION_ARTIFACTS || os.tmpdir();
+  const artifactRoot = process.env.BLINCHO_CAMERA_COMPLETION_ARTIFACTS || process.env.RUNNER_TEMP || os.tmpdir();
   fs.mkdirSync(artifactRoot, { recursive: true });
   const base = fs.mkdtempSync(path.join(artifactRoot, 'blincho-camera-completion-'));
   console.log('Native camera completion artifacts: ' + base);

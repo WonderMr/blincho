@@ -2,7 +2,16 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.13]
+
+### Fixed
+
+- Honor enabled call postponement in strict mode. Detected calls delay automatic breaks by five minutes and are checked again at the next deadline. After the call ends, the next break keeps the strict-mode behavior.
+- Wait for the native break deadline before completing the break or checking camera presence when native command processing is delayed. Keep strict controls active until the native countdown finishes.
+
 ## [1.8.12]
+
+This version was not published.
 
 ### Fixed
 
