@@ -1125,7 +1125,7 @@ fn main() {
                         let expected_policy = policy.as_ref().map(|input|(input.meeting_enabled,input.auto_takeover,input.strict_mode)).unwrap_or((false,false,false));
                         // Expiry needs a fresh observation, rather than the cached
                         // status used for the background statistics overlay.
-                        let meeting_status = policy.as_ref().is_some_and(|input|input.meeting_enabled && !input.strict_mode)
+                        let meeting_status = policy.as_ref().is_some_and(|input|input.meeting_enabled)
                             .then(|| runtime.meeting.check_fresh(meeting_epoch));
                         let allow_foreground = {
                             let Ok(mut timer) = runtime.timer.lock() else {break;};

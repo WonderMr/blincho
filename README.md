@@ -12,6 +12,7 @@ Website: https://blincho.app
 - Pauses timing when you are away, the screen locks or the computer sleeps.
 - Can check for a person with the camera before a break and after it finishes, locking the computer if no one is detected. Disabled by default. Enabling it in desktop Settings immediately checks camera access and requests permission when needed. Denied or unavailable access leaves the setting off. Frames are processed locally, never saved or uploaded. The camera turns off after each check. An unavailable check skips locking and preserves normal timer behavior.
 - Keeps the desktop timer running in Rust when the window is hidden or minimized.
+- When call postponement is enabled, detected calls delay automatic breaks by five minutes, including in strict mode. Blincho checks again at the next deadline; strict break behavior resumes when the call is no longer detected.
 - Restores the window on its previous monitor after lock or sleep, keeping hidden and minimized windows in the background. If that monitor is disconnected, the window returns to an available screen.
 - Includes exercises, a personal comfort journal and local statistics.
 - Uses a compact sidebar with fully visible controls and statistics that adapt to the available content width. Drag the native desktop window from empty page or sidebar space while retaining text selection, scrolling and controls.
