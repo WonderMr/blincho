@@ -1,6 +1,6 @@
 {
   "name": "blincho",
-  "version": "1.8.9",
+  "version": "1.8.10",
   "description": "Screen break reminders and habits for comfortable computer use",
   "main": "electron/main.cjs",
   "scripts": {
