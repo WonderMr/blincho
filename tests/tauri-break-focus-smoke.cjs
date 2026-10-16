@@ -203,6 +203,13 @@ function assertAppIdentity(state, app, runtime) {
     throw error;
   }
 }
+function assertAppPolicy(observed, runtime, expectedPolicy, label) {
+  const policyContext = label + ': ' + JSON.stringify({ nativeActivationPolicy: runtime.nativeActivationPolicy,
+    dockVisible: runtime.dockVisible, observer: observed });
+  assert.equal(observed.observedActivationPolicy, expectedPolicy, policyContext + ': Dock activation policy');
+  assert.equal(runtime.nativeActivationPolicy, expectedPolicy, policyContext + ': actual AppKit activation policy');
+  assert.equal(runtime.dockVisible, expectedPolicy === 0, policyContext + ': Dock visibility intent');
+}
 async function observeApp(fixture, app) {
   const pid = app.handle.child.pid;
   const id = ++sequence;
@@ -479,11 +486,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       assert.equal(fixtureState(expected).frontmostPID, expectedPID, label + ': actual frontmost PID');
       const observed = fixtureState(previous);
       assertAppIdentity(observed, app, state);
-      const policyContext = label + ': ' + JSON.stringify({ nativeActivationPolicy: state.nativeActivationPolicy,
-        dockVisible: state.dockVisible, observer: observed });
-      assert.equal(observed.observedActivationPolicy, expectedPolicy, policyContext + ': Dock activation policy');
-      assert.equal(state.nativeActivationPolicy, expectedPolicy, policyContext + ': actual AppKit activation policy');
-      assert.equal(state.dockVisible, expectedPolicy === 0, policyContext + ': Dock visibility intent');
+      assertAppPolicy(observed, state, expectedPolicy, label);
       await sleep(100);
     }
     assert(app.read().timer.tickCount >= startTick + 4, 'Following native timer ticks must have been observed');
@@ -573,5 +576,5 @@ async function main() {
   if (failures.length) throw new Error(failures.join('\n'));
 }
 module.exports = { nativeCountdown, assertCountdownActive, assertCountdownCompleted,
-  assertAppIdentity, startFocusDiagnostics, focusFailureEvidence, logFocusFailure };
+  assertAppIdentity, assertAppPolicy, startFocusDiagnostics, focusFailureEvidence, logFocusFailure };
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
