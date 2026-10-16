@@ -415,10 +415,10 @@ export const App: React.FC = () => {
       const present = await samplePresence();
       if (!present || version !== session.version || !session.counting || !session.expiryPending) return;
       const current = settingsRef.current;
-      if (current.meetingDetectionEnabled && !current.strictMode && hasMeetingDetection()) {
+      if (current.meetingDetectionEnabled && hasMeetingDetection()) {
         const meeting = await detectActiveMeeting();
         if (!mountedRef.current || version !== session.version || !session.counting) return;
-        if (meeting.inMeeting && settingsRef.current.meetingDetectionEnabled && !settingsRef.current.strictMode) {
+        if (meeting.inMeeting && settingsRef.current.meetingDetectionEnabled) {
           session.postpone(300, Date.now());
           setInMeetingActive(true);
           setNoticeMessage("Обнаружена активная встреча. Перерыв отложен на 5 минут.");

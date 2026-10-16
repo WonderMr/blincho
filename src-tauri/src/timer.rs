@@ -207,7 +207,7 @@ impl Timer {
             || self
                 .input
                 .as_ref()
-                .is_none_or(|input| !input.meeting_enabled || input.strict_mode)
+                .is_none_or(|input| !input.meeting_enabled)
         {
             return false;
         }
@@ -861,6 +861,37 @@ mod tests {
         meeting_sample(&mut timer, 750, &["Discord"]);
         meeting_sample(&mut timer, 1000, &["Discord"]);
         assert_eq!(meeting_intervals(&timer), vec![(750, 1000, "Discord")]);
+    }
+    #[test]
+    fn strict_meeting_postponement_keeps_strict_policy_and_rejects_disabled_detection() {
+        for enabled in [false, true] {
+            let mut timer = Timer::new(0);
+            let mut settings = input();
+            settings.meeting_enabled = enabled;
+            timer.configure(settings, 0).unwrap();
+            assert!(timer.tick(2000, Some(0.), Some(false)));
+            let version = timer.snapshot.version;
+            assert_eq!(timer.postpone_meeting(version, 2000), enabled);
+            assert!(timer.input.as_ref().unwrap().strict_mode);
+            assert!(!timer.snapshot.break_active);
+            if enabled {
+                assert_eq!(timer.snapshot.remaining_ms, 300_000.);
+                assert!(!timer.snapshot.expiry_pending);
+                assert_eq!(timer.snapshot.version, version + 1);
+                assert_eq!(timer.snapshot.meeting_postponed_epoch, 1);
+                assert!(!timer.postpone_meeting(version, 2000));
+                for now in (3000..=302000).step_by(1000) {
+                    timer.tick(now, Some(0.), Some(false));
+                }
+                assert!(timer.snapshot.expiry_pending);
+                assert!(timer.expiry_still_current(version + 1, 0, (true, true, true)));
+            } else {
+                assert_eq!(timer.snapshot.remaining_ms, 0.);
+                assert!(timer.snapshot.expiry_pending);
+                assert_eq!(timer.snapshot.version, version);
+                assert_eq!(timer.snapshot.meeting_postponed_epoch, 0);
+            }
+        }
     }
     #[test]
     fn history_and_postponement_have_independent_opt_in_flags() {
