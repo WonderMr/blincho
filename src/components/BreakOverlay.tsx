@@ -9,6 +9,7 @@ interface BreakOverlayProps {
   initialSeconds?: number;
   workMinutesGained?: number;
   strictMode?: boolean;
+  waitForNativeCompletion?: boolean;
   onClose: () => void;
   onElapsed?: (deadlineMonotonicAt: number) => void;
   onPostpone: (minutes: number) => void;
@@ -18,6 +19,7 @@ interface BreakOverlayProps {
 export const BreakOverlay: React.FC<BreakOverlayProps> = ({
   initialSeconds = 20,
   strictMode = false,
+  waitForNativeCompletion = false,
   onClose,
   onElapsed,
   onPostpone,
@@ -44,6 +46,7 @@ export const BreakOverlay: React.FC<BreakOverlayProps> = ({
       if (remaining === 0 && !completedRef.current) {
         completedRef.current = true;
         clearInterval(interval);
+        if (waitForNativeCompletion) return;
         setIsFinished(true);
         if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
           confetti({ particleCount: 40, spread: 50, origin: { y: 0.6 }, colors: ['#38bdf8', '#10b981'] });
@@ -55,7 +58,7 @@ export const BreakOverlay: React.FC<BreakOverlayProps> = ({
     return () => {
       clearInterval(interval);
     };
-  }, [initialSeconds]);
+  }, [initialSeconds, waitForNativeCompletion]);
 
   return (
     <div ref={dialogRef} className="fullscreen-break-takeover" role="dialog" aria-modal="true" aria-label={t("Перерыв для отдыха глаз")} tabIndex={-1}>
