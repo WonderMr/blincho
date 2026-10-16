@@ -41,7 +41,7 @@ async function until(predicate, timeout = 20000) {
   }
   throw Error('Meeting smoke timed out: ' + JSON.stringify(last));
 }
-async function control(operation, args = {}) {
+async function control(operation, args = {}, expectedError = null) {
   const id = ++sequence;
   const response = path.join(directory, 'response.json');
   fs.rmSync(response, { force: true });
@@ -51,7 +51,11 @@ async function control(operation, args = {}) {
   while (Date.now() < deadline) {
     try {
       const value = JSON.parse(fs.readFileSync(response, 'utf8'));
-      if (value.id === id) { assert.equal(value.ok, true, value.error); return value; }
+      if (value.id === id) {
+        assert.equal(value.ok, expectedError === null, value.error);
+        if (expectedError !== null) assert.equal(value.error, expectedError);
+        return value;
+      }
     } catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
     if (launchError) throw launchError;
     await sleep(100);
@@ -130,7 +134,10 @@ async function verifyStrictMeetingExpiry() {
   const strictBreak = await until(value => value.timer.breakActive && value.strict && value.visible &&
     (process.platform !== 'darwin' || value.strictShieldCount > 0));
   assert.equal(strictBreak.closable, false, 'A resumed strict break must keep its native close guard');
-  assert.equal(strictBreak.minimizable, false, 'A resumed strict break must keep its native minimize guard');
+  // Tauri's Linux backend always reports minimizable, so verify its command guard directly.
+  if (process.platform !== 'linux') assert.equal(strictBreak.minimizable, false);
+  await control('minimize', {}, 'Strict break active');
+  await until(value => value.timer.breakActive && value.strict && value.visible && !value.minimized);
   await inspectUntil(value => value.renderer.breakDialog);
   const restored = await until(value => !value.timer.breakActive && !value.strict &&
     !value.visible && !value.focused && value.strictShieldCount === 0 && !value.fullscreen, 30000);
