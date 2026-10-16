@@ -41,7 +41,7 @@ async function until(predicate, timeout = 20000) {
   }
   throw Error('Meeting smoke timed out: ' + JSON.stringify(last));
 }
-async function control(operation, args = {}) {
+async function control(operation, args = {}, expectedError = null) {
   const id = ++sequence;
   const response = path.join(directory, 'response.json');
   fs.rmSync(response, { force: true });
@@ -51,7 +51,11 @@ async function control(operation, args = {}) {
   while (Date.now() < deadline) {
     try {
       const value = JSON.parse(fs.readFileSync(response, 'utf8'));
-      if (value.id === id) { assert.equal(value.ok, true, value.error); return value; }
+      if (value.id === id) {
+        assert.equal(value.ok, expectedError === null, value.error);
+        if (expectedError !== null) assert.equal(value.error, expectedError);
+        return value;
+      }
     } catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
     if (launchError) throw launchError;
     await sleep(100);
@@ -67,7 +71,7 @@ async function launch() {
 }
 async function inspect() {
   const marker = ++sequence;
-  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,meetingProbe:${marker},stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')||'[]'),historyEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').meetingHistoryEnabled===true,historyToggle:document.querySelector('#statistics-meeting-history-enabled')?{checked:document.querySelector('#statistics-meeting-history-enabled').checked,disabled:document.querySelector('#statistics-meeting-history-enabled').disabled}:null,deleteConfirmation:!!document.querySelector('#statistics-meeting-history-confirm-delete'),activeElementId:document.activeElement?.id||'',callsText:document.querySelector('.statistics-meetings')?.textContent||'',callRows:document.querySelectorAll('.statistics-meeting-list tbody tr').length,horizontalOverflow:document.querySelector('.statistics-meetings')?document.querySelector('.statistics-meetings').scrollWidth-document.querySelector('.statistics-meetings').clientWidth:0}})` });
+  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,meetingProbe:${marker},stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')||'[]'),breakDialog:!!document.querySelector('.fullscreen-break-takeover[role="dialog"]'),historyEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').meetingHistoryEnabled===true,historyToggle:document.querySelector('#statistics-meeting-history-enabled')?{checked:document.querySelector('#statistics-meeting-history-enabled').checked,disabled:document.querySelector('#statistics-meeting-history-enabled').disabled}:null,deleteConfirmation:!!document.querySelector('#statistics-meeting-history-confirm-delete'),activeElementId:document.activeElement?.id||'',callsText:document.querySelector('.statistics-meetings')?.textContent||'',callRows:document.querySelectorAll('.statistics-meeting-list tbody tr').length,horizontalOverflow:document.querySelector('.statistics-meetings')?document.querySelector('.statistics-meetings').scrollWidth-document.querySelector('.statistics-meetings').clientWidth:0}})` });
   return until(value => value.renderer?.meetingProbe === marker);
 }
 async function stop() {
@@ -94,6 +98,53 @@ async function selectStatistics() {
 async function click(id) {
   await control('eval', { script: `document.getElementById(${JSON.stringify(id)}).click()` });
 }
+async function verifyStrictMeetingExpiry() {
+  const before = read();
+  const input = { totalMs: 3600000, remainingMs: 1000, manualPaused: false,
+    breakActive: false, exercising: false, expiryPending: false, version: before.timer.version + 1,
+    breakSeconds: 20, strictMode: true, idleEnabled: false, idleThresholdSeconds: 60,
+    meetingEnabled: true, meetingHistoryEnabled: false, autoTakeover: true };
+  await control('configure', { input });
+  const postponed = await until(value => value.timer.meetingPostponedEpoch > before.timer.meetingPostponedEpoch);
+  assert(postponed.timer.remainingMs > 295000 && postponed.timer.remainingMs <= 300000,
+    'An active call must postpone strict expiry for five minutes');
+  assert.equal(postponed.timer.expiryPending, false);
+  assert.equal(postponed.timer.breakActive, false);
+  assert.equal(postponed.strict, false);
+  assert.equal(postponed.visible, false, 'Strict meeting postponement cannot show the hidden window');
+  assert.equal(postponed.focused, false, 'Strict meeting postponement cannot steal focus');
+  assert.equal(postponed.strictShieldCount, 0, 'Strict meeting postponement cannot acquire native shields');
+  await sleep(1200);
+  const stable = read();
+  assert.equal(stable.timer.breakActive, false);
+  assert.equal(stable.visible, false);
+  assert.equal(stable.focused, false);
+  assert.equal(stable.strict, false);
+  // Accelerate only the work deadline. The real native postponement must still be five minutes.
+  await control('configure', { input: { ...input, version: stable.timer.version + 1 } });
+  const repeated = await until(value => value.timer.meetingPostponedEpoch > postponed.timer.meetingPostponedEpoch);
+  assert(repeated.timer.remainingMs > 295000 && repeated.timer.remainingMs <= 300000);
+  assert.equal(repeated.timer.breakActive, false);
+  assert.equal(repeated.visible, false);
+  assert.equal(repeated.focused, false);
+  assert.equal(repeated.strict, false);
+  await control('meeting', { active: false, applications: [] });
+  const ended = await until(value => value.timer.liveMeetingStatus?.inMeeting === false);
+  await control('configure', { input: { ...input, version: ended.timer.version + 1 } });
+  const strictBreak = await until(value => value.timer.breakActive && value.strict && value.visible &&
+    (process.platform !== 'darwin' || value.strictShieldCount > 0));
+  assert.equal(strictBreak.closable, false, 'A resumed strict break must keep its native close guard');
+  // Tauri's Linux backend always reports minimizable, so verify its command guard directly.
+  if (process.platform !== 'linux') assert.equal(strictBreak.minimizable, false);
+  await control('minimize', {}, 'Strict break active');
+  await until(value => value.timer.breakActive && value.strict && value.visible && !value.minimized);
+  await inspectUntil(value => value.renderer.breakDialog);
+  const restored = await until(value => !value.timer.breakActive && !value.strict &&
+    !value.visible && !value.focused && value.strictShieldCount === 0 && !value.fullscreen, 30000);
+  assert.equal(restored.timer.meetingPostponedEpoch, repeated.timer.meetingPostponedEpoch,
+    'An ended call cannot postpone the next strict break');
+  console.log('PASS: active calls repeatedly postpone hidden strict expiry, then call end restores strict presentation and cleanup.');
+}
 (async () => {
   console.log('Meeting smoke profile: ' + directory);
   const initial = await launch();
@@ -110,6 +161,7 @@ async function click(id) {
     'Stable calls cannot retry rejected icons before the cooldown');
   assert.equal(read().trayPreview.callIndicatorUpdates, liveDefaultOff.trayPreview.callIndicatorUpdates,
     'Stable calls cannot repeatedly replace icons');
+  await verifyStrictMeetingExpiry();
   const defaultOff = await selectStatistics();
   assert.equal(defaultOff.renderer.historyEnabled, false);
   assert.equal(defaultOff.renderer.historyToggle.checked, false);
@@ -250,7 +302,7 @@ async function click(id) {
     notificationArea: nativeIconRejectionObserved
       ? 'unavailable: same-machine native SDK proof confirmed ARM64 CI NIM_ADD rejection; visible icon remains unverified'
       : 'native call icon and restoration successfully applied',
-    checks: ['live call tray with history off', 'inactive and disabled detection', 'native icon success or independently proven rejection diagnostics', 'legacy default off', 'explicit UI opt-in', 'native hidden heartbeat', 'manual pause and strict recording', 'app attribution and transitions', 'call end', 'renderer storage', 'statistics app rows', 'opt-out without deletion', 'restart persistence', 'explicit delete confirmation', 'native and local deletion', 'no stale replay after clearing'],
+    checks: ['live call tray with history off', 'repeated hidden strict expiry postponement', 'call end resumes strict presentation and cleanup', 'inactive and disabled detection', 'native icon success or independently proven rejection diagnostics', 'legacy default off', 'explicit UI opt-in', 'native hidden heartbeat', 'manual pause and strict recording', 'app attribution and transitions', 'call end', 'renderer storage', 'statistics app rows', 'opt-out without deletion', 'restart persistence', 'explicit delete confirmation', 'native and local deletion', 'no stale replay after clearing'],
     limitation: 'Meeting and presence signals are modeled; actual app detection is tested separately by platform parsers.' };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
