@@ -11,9 +11,13 @@ const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.join(root, '
   ...(process.env.RUST_TARGET ? [process.env.RUST_TARGET] : []), 'debug', 'blincho');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const COUNTDOWN_COMPLETION_TOLERANCE_MS = 1500;
+const DIAGNOSTIC_SAMPLE_MS = 100;
+const RECENT_SAMPLE_LIMIT = 32;
+const POST_FAILURE_SAMPLE_COUNT = 10;
 const processes = new Set();
 let sequence = 0;
 let probe = 0;
+let diagnostics = null;
 
 function readJSON(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
@@ -25,7 +29,7 @@ function writeControl(file, request) {
 }
 function launch(command, args, options = {}) {
   const child = spawn(command, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
-  const handle = { child, launchError: null, output: '', exit: null };
+  const handle = { child, launchError: null, output: '', exit: null, processExit: null };
   processes.add(handle);
   for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => {
     handle.output += chunk.toString();
@@ -33,6 +37,7 @@ function launch(command, args, options = {}) {
     (stream === child.stderr ? process.stderr : process.stdout).write(chunk);
   });
   child.once('error', error => { handle.launchError = error; });
+  child.once('exit', (code, signal) => { handle.processExit = { code, signal, atMs: Date.now() }; });
   handle.closed = new Promise(resolve => child.once('close', (code, signal) => {
     handle.exit = { code, signal }; resolve(handle.exit);
   }));
@@ -87,8 +92,90 @@ async function control(app, operation, args = {}, expectedError = null) {
 }
 function fixtureState(fixture) {
   const state = readJSON(path.join(fixture.directory, 'state.json'));
+  if (diagnostics) diagnostics.lastObserverReads[fixture.pid] = { capturedAtMs: Date.now(), state };
   if (state && Date.now() - state.reportedAtMs > 1500) throw new Error('Companion focus observation is stale');
   return state;
+}
+function childState(handle) {
+  return { pid: handle.child.pid ?? null, exitCode: handle.child.exitCode, signalCode: handle.child.signalCode,
+    killed: handle.child.killed, processExit: handle.processExit, close: handle.exit,
+    launchError: handle.launchError?.message ?? null };
+}
+function diagnosticRead(file) {
+  let descriptor;
+  try {
+    if (!fs.lstatSync(file).isFile()) throw new Error('Diagnostic path is not a regular file');
+    descriptor = fs.openSync(file, 'r');
+    const bytes = Buffer.alloc(131_073);
+    const length = fs.readSync(descriptor, bytes, 0, bytes.length, 0);
+    if (length > 131_072) throw new Error('Diagnostic exceeds 131072 byte limit');
+    return JSON.parse(bytes.subarray(0, length).toString('utf8'));
+  }
+  catch (error) { return { diagnosticReadError: error.message }; }
+  finally { if (descriptor !== undefined) fs.closeSync(descriptor); }
+}
+function runtimeFocusState(state) {
+  if (!state || state.diagnosticReadError) return state;
+  const { pid, visible, focused, minimized, maximized, fullscreen, strict, strictShieldCount,
+    nativeActivationPolicy, dockVisible, position, size } = state;
+  const timer = state.timer && Object.fromEntries(['tickCount', 'breakActive', 'breakEndAt', 'remainingMs',
+    'absenceEpoch', 'reasons', 'version'].map(key => [key, state.timer[key]]));
+  return { pid, visible, focused, minimized, maximized, fullscreen, strict, strictShieldCount,
+    nativeActivationPolicy, dockVisible, position, size, timer };
+}
+function observerSample(state) {
+  if (!state) return state;
+  const { recentSamples, ...sample } = state;
+  return sample;
+}
+function focusSample(context, handles = processes) {
+  return { capturedAtMs: Date.now(), runtime: context
+    ? runtimeFocusState(diagnosticRead(path.join(context.app.directory, 'runtime-diagnostics.json'))) : null,
+  observers: context ? context.fixtures.map(fixture => ({ pid: fixture.pid,
+    state: observerSample(diagnosticRead(path.join(fixture.directory, 'state.json'))) })) : [],
+  children: [...handles].map(childState) };
+}
+function startFocusDiagnostics(app, fixtures, name, schedule = setInterval) {
+  if (diagnostics) clearInterval(diagnostics.timer);
+  const context = { app, fixtures, name, recentSamples: [], lastObserverReads: {}, lastRuntimeRead: null };
+  const record = () => {
+    context.recentSamples.push(focusSample(context));
+    if (context.recentSamples.length > RECENT_SAMPLE_LIMIT) context.recentSamples.shift();
+  };
+  record();
+  context.timer = schedule(record, DIAGNOSTIC_SAMPLE_MS);
+  return context;
+}
+async function focusFailureEvidence(error, context, handles = processes, wait = sleep) {
+  if (context) clearInterval(context.timer);
+  const report = { error: { name: error.name, message: error.message, stack: error.stack },
+    scenario: context?.name ?? null, failedObservation: error.focusObservation ?? null,
+    lastObserverReads: context?.lastObserverReads ?? {}, lastRuntimeRead: context?.lastRuntimeRead ?? null,
+    atFailure: focusSample(context, handles), recentSamples: context?.recentSamples.slice() ?? [],
+    runtimeAtFailure: context
+      ? diagnosticRead(path.join(context.app.directory, 'runtime-diagnostics.json')) : null,
+    recentNativeSamples: context ? context.fixtures.map(fixture => ({ pid: fixture.pid,
+      samples: diagnosticRead(path.join(fixture.directory, 'state.json'))?.recentSamples ?? [] })) : [],
+    postFailureSampleIntervalMs: DIAGNOSTIC_SAMPLE_MS, postFailureSamples: [] };
+  // Read-only evidence collection cannot make the failed assertion pass. Leave
+  // every child running for one bounded second before the caller cleans up.
+  for (let sample = 0; sample < POST_FAILURE_SAMPLE_COUNT; sample++) {
+    await wait(DIAGNOSTIC_SAMPLE_MS);
+    report.postFailureSamples.push(focusSample(context, handles));
+  }
+  report.nativeOutput = [...handles].map(handle => ({ ...childState(handle),
+    output: handle.output.slice(-65_536), outputTruncated: handle.output.length > 65_536 }));
+  return report;
+}
+function logFocusFailure(report, output) {
+  console.error('Native focus failure evidence: ' + output);
+  const failed = report.failedObservation;
+  console.error(JSON.stringify({ ...report, error: { name: report.error.name, message: report.error.message },
+    failedObservation: failed && { ...failed, runtime: runtimeFocusState(failed.runtime),
+      observer: observerSample(failed.observer) },
+    lastObserverReads: Object.fromEntries(Object.entries(report.lastObserverReads)
+      .map(([pid, read]) => [pid, { ...read, state: observerSample(read.state) }])),
+    recentSamples: report.recentSamples.slice(-10), runtimeAtFailure: undefined, nativeOutput: undefined }));
 }
 async function activate(fixture) {
   const id = ++sequence;
@@ -101,13 +188,20 @@ async function activate(fixture) {
   return until(() => fixtureState(fixture), state => state.sample > before && state.frontmostPID === fixture.pid,
     [fixture.handle], 5_000, 'actual companion frontmost PID');
 }
-function assertAppIdentity(state, app) {
-  assert.equal(state.observedLookupFound, true, 'External application lookup must remain available');
-  assert.equal(state.observedProcessIdentifier, app.handle.child.pid, 'External observation must match the child PID');
-  assert.equal(state.observedTerminated, false, 'Observed application must remain alive');
-  assert.equal(state.observedBundleIdentifier, app.bundleIdentifier, 'External bundle identity must match the isolated app');
-  assert.equal(state.observedBundlePath, app.bundlePath, 'External bundle path must match the isolated app');
-  assert.equal(state.observedExecutablePath, app.binary, 'External executable path must match the copied binary');
+function assertAppIdentity(state, app, runtime) {
+  try {
+    assert.equal(state.observedLookupFound, true, 'External application lookup must remain available');
+    assert.equal(state.observedProcessIdentifier, app.handle.child.pid, 'External observation must match the child PID');
+    assert.equal(state.observedTerminated, false, 'Observed application must remain alive');
+    assert.equal(state.observedBundleIdentifier, app.bundleIdentifier, 'External bundle identity must match the isolated app');
+    assert.equal(state.observedBundlePath, app.bundlePath, 'External bundle path must match the isolated app');
+    assert.equal(state.observedExecutablePath, app.binary, 'External executable path must match the copied binary');
+  } catch (error) {
+    error.focusObservation = { capturedAtMs: Date.now(), observer: state,
+      runtime: runtimeFocusState(runtime ?? diagnosticRead(path.join(app.directory, 'runtime-diagnostics.json'))),
+      child: childState(app.handle) };
+    throw error;
+  }
 }
 async function observeApp(fixture, app) {
   const pid = app.handle.child.pid;
@@ -240,7 +334,12 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
   const handle = launch(binary, startupHidden ? ['--autostart'] : [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory,
     BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1' } });
   const app = { handle, directory, bundlePath, bundleIdentifier, binary,
-    read: () => readJSON(path.join(directory, 'runtime-diagnostics.json')) };
+    read: () => {
+      const state = readJSON(path.join(directory, 'runtime-diagnostics.json'));
+      if (diagnostics?.app === app) diagnostics.lastRuntimeRead = { capturedAtMs: Date.now(), state: runtimeFocusState(state) };
+      return state;
+    } };
+  diagnostics = startFocusDiagnostics(app, [previous, third], name);
   const initial = await until(app.read, value => value.renderer?.ready && value.timer.totalMs > 0,
     [handle], 30_000, 'Blincho renderer launch');
   assert.equal(initial.pid, handle.child.pid);
@@ -342,6 +441,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     const result = { name, status: 'passed', mode, profile: directory, blinchoPID: initial.pid,
       scope: 'Accepted hide before strict teardown, then repeated teardown; countdown/focus covered by other scenarios' };
     fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
+    clearInterval(diagnostics.timer);
     console.log('PASS: ' + name);
     return result;
   }
@@ -378,7 +478,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
       assert(restored(state), label + ': ' + JSON.stringify(state));
       assert.equal(fixtureState(expected).frontmostPID, expectedPID, label + ': actual frontmost PID');
       const observed = fixtureState(previous);
-      assertAppIdentity(observed, app);
+      assertAppIdentity(observed, app, state);
       const policyContext = label + ': ' + JSON.stringify({ nativeActivationPolicy: state.nativeActivationPolicy,
         dockVisible: state.dockVisible, observer: observed });
       assert.equal(observed.observedActivationPolicy, expectedPolicy, policyContext + ': Dock activation policy');
@@ -406,6 +506,7 @@ async function scenario(base, previous, third, { name, mode, strictMode, breakSe
     baseline: { position: baseline.position, size: baseline.size },
     reopened: { position: reopened.position, size: reopened.size }, focusTrace };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
+  clearInterval(diagnostics.timer);
   console.log('PASS: ' + name);
   return result;
 }
@@ -415,7 +516,7 @@ async function main() {
     console.log('SKIP: Native break focus smoke requires macOS');
     return;
   }
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'blincho-break-focus-'));
+  const base = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'blincho-break-focus-'));
   console.log('Native focus smoke artifacts: ' + base);
   let primaryError = null;
   try {
@@ -453,10 +554,14 @@ async function main() {
   } catch (error) {
     primaryError = error;
     try {
-      fs.writeFileSync(path.join(base, 'failure.json'), JSON.stringify({ error: error.stack,
-        nativeOutput: [...processes].map(handle => ({ pid: handle.child.pid, output: handle.output })) }, null, 2));
+      const report = await focusFailureEvidence(error, diagnostics);
+      const output = path.join(base, 'failure-artifacts');
+      logFocusFailure(report, output);
+      fs.mkdirSync(output, { recursive: true });
+      fs.writeFileSync(path.join(output, 'failure.json'), JSON.stringify(report, null, 2));
     } catch (artifactError) { console.error('Failure artifact: ' + artifactError.message); }
   }
+  if (diagnostics) clearInterval(diagnostics.timer);
   const failures = [];
   for (const handle of processes) {
     try { await cleanup(handle); } catch (error) { failures.push(error.message); }
@@ -467,5 +572,6 @@ async function main() {
   }
   if (failures.length) throw new Error(failures.join('\n'));
 }
-module.exports = { nativeCountdown, assertCountdownActive, assertCountdownCompleted };
+module.exports = { nativeCountdown, assertCountdownActive, assertCountdownCompleted,
+  assertAppIdentity, startFocusDiagnostics, focusFailureEvidence, logFocusFailure };
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });

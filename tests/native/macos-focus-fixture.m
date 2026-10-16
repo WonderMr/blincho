@@ -72,8 +72,11 @@ int main(int argc, const char **argv) {
         NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:240];
         __block unsigned long long sequence = 0;
         __block pid_t observedPID = 0;
+        __block NSRunningApplication *retainedObserved = nil;
+        __block long long retainedAtMs = 0;
         __block pid_t lastFrontmostPID = -1;
         NSMutableArray *focusChanges = [NSMutableArray new];
+        NSMutableArray *recentSamples = [NSMutableArray new];
         void (^report)(void) = ^{
             NSRunningApplication *frontmost = NSWorkspace.sharedWorkspace.frontmostApplication;
             pid_t frontmostPID = frontmost ? frontmost.processIdentifier : 0;
@@ -85,9 +88,20 @@ int main(int argc, const char **argv) {
             }
             NSRunningApplication *observed = observedPID > 0
                 ? [NSRunningApplication runningApplicationWithProcessIdentifier:observedPID] : nil;
-            writeJSON([directory stringByAppendingPathComponent:@"state.json"], @{
+            // Compare the fresh lookup with the first successful object for this
+            // PID. Neither retained state nor workspace membership replaces the
+            // fresh lookup required by the smoke's identity assertions.
+            if (!retainedObserved && observed) {
+                retainedObserved = observed;
+                retainedAtMs = reportedAtMs;
+            }
+            BOOL workspaceContainsObservedPID = NO;
+            for (NSRunningApplication *application in NSWorkspace.sharedWorkspace.runningApplications) {
+                if (application.processIdentifier == observedPID) workspaceContainsObservedPID = YES;
+            }
+            NSDictionary *sample = @{
                 @"pid": @(getpid()), @"windowNumber": @(window.windowNumber),
-                @"frontmostPID": @(frontmostPID), @"focusChanges": focusChanges.copy,
+                @"frontmostPID": @(frontmostPID),
                 @"visible": @(window.visible), @"key": @(window.keyWindow),
                 @"active": @(NSApp.active), @"sample": @(++sequence),
                 @"observedPID": @(observedPID),
@@ -98,8 +112,22 @@ int main(int argc, const char **argv) {
                 @"observedExecutablePath": observed.executableURL.path ?: NSNull.null,
                 @"observedTerminated": observed ? @(observed.terminated) : NSNull.null,
                 @"observedActivationPolicy": observed ? @(observed.activationPolicy) : NSNull.null,
+                @"workspaceContainsObservedPID": @(workspaceContainsObservedPID),
+                @"retainedObservedAtMs": retainedObserved ? @(retainedAtMs) : NSNull.null,
+                @"retainedProcessIdentifier": retainedObserved ? @(retainedObserved.processIdentifier) : NSNull.null,
+                @"retainedBundleIdentifier": retainedObserved.bundleIdentifier ?: NSNull.null,
+                @"retainedBundlePath": retainedObserved.bundleURL.path ?: NSNull.null,
+                @"retainedExecutablePath": retainedObserved.executableURL.path ?: NSNull.null,
+                @"retainedTerminated": retainedObserved ? @(retainedObserved.terminated) : NSNull.null,
+                @"retainedActivationPolicy": retainedObserved ? @(retainedObserved.activationPolicy) : NSNull.null,
                 @"reportedAtMs": @(reportedAtMs)
-            });
+            };
+            if (recentSamples.count == 32) [recentSamples removeObjectAtIndex:0];
+            [recentSamples addObject:sample];
+            NSMutableDictionary *state = [sample mutableCopy];
+            state[@"focusChanges"] = focusChanges.copy;
+            state[@"recentSamples"] = recentSamples.copy;
+            writeJSON([directory stringByAppendingPathComponent:@"state.json"], state);
         };
         report();
         [NSTimer scheduledTimerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer) {
@@ -118,6 +146,8 @@ int main(int argc, const char **argv) {
                     finish(EXIT_FAILURE);
                 }
                 observedPID = pid.intValue;
+                retainedObserved = nil;
+                retainedAtMs = 0;
                 writeJSON([directory stringByAppendingPathComponent:@"response.json"], @{@"id": observe[@"id"], @"ok": @YES});
             }
             NSDictionary *activate = readRequest([directory stringByAppendingPathComponent:@"activate"]);

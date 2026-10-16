@@ -2,7 +2,15 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.11]
+
+### Fixed
+
+- Honor enabled call postponement in strict mode. Detected calls delay automatic breaks by five minutes and are checked again at the next deadline. After the call ends, the next break keeps the strict-mode behavior.
+
 ## [1.8.10]
+
+This version was not published.
 
 ### Fixed
 
