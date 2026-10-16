@@ -104,8 +104,13 @@ async function verifyStrictMeetingExpiry() {
     breakActive: false, exercising: false, expiryPending: false, version: before.timer.version + 1,
     breakSeconds: 20, strictMode: true, idleEnabled: false, idleThresholdSeconds: 60,
     meetingEnabled: true, meetingHistoryEnabled: false, autoTakeover: true };
+  // The native heartbeat and renderer can both claim expiry. Either path must
+  // publish the same five-minute timer without acquiring break presentation.
+  const isPostponed = (value, version) => value.timer.version > version &&
+    value.timer.remainingMs > 295000 && value.timer.remainingMs <= 300000 &&
+    !value.timer.expiryPending;
   await control('configure', { input });
-  const postponed = await until(value => value.timer.meetingPostponedEpoch > before.timer.meetingPostponedEpoch);
+  const postponed = await until(value => isPostponed(value, input.version));
   assert(postponed.timer.remainingMs > 295000 && postponed.timer.remainingMs <= 300000,
     'An active call must postpone strict expiry for five minutes');
   assert.equal(postponed.timer.expiryPending, false);
@@ -121,8 +126,9 @@ async function verifyStrictMeetingExpiry() {
   assert.equal(stable.focused, false);
   assert.equal(stable.strict, false);
   // Accelerate only the work deadline. The real native postponement must still be five minutes.
-  await control('configure', { input: { ...input, version: stable.timer.version + 1 } });
-  const repeated = await until(value => value.timer.meetingPostponedEpoch > postponed.timer.meetingPostponedEpoch);
+  const repeatedVersion = stable.timer.version + 1;
+  await control('configure', { input: { ...input, version: repeatedVersion } });
+  const repeated = await until(value => isPostponed(value, repeatedVersion));
   assert(repeated.timer.remainingMs > 295000 && repeated.timer.remainingMs <= 300000);
   assert.equal(repeated.timer.breakActive, false);
   assert.equal(repeated.visible, false);
