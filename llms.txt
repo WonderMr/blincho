@@ -1,0 +1,19 @@
+# Blincho
+
+> Free, open-source screen break reminder for macOS, Windows and Linux, with local statistics, exercises and 30 languages.
+
+Blincho reminds people who work at a computer to take short breaks and rest their eyes. It pauses timing when you are away, the screen locks or the computer sleeps, can postpone breaks during detected calls, and keeps settings, a comfort journal and work statistics on the device. Desktop apps use Tauri 2 with Rust and the system WebView and share one React + TypeScript interface; an optional local MCP server lets AI clients read status and request timer actions. Blincho is a general wellness tool and does not diagnose or treat eye conditions. Website and downloads: https://blincho.app
+
+## Docs
+
+- [README](https://github.com/WonderMr/blincho/blob/main/README.md): features, development setup, local MCP, website, data and compatibility
+- [AGENTS.md](https://github.com/WonderMr/blincho/blob/main/AGENTS.md): layout, commands, translation rules and boundaries for coding agents
+- [RELEASE.md](https://github.com/WonderMr/blincho/blob/main/RELEASE.md): tag-driven build, verification and publication pipeline
+- [CHANGELOG.md](https://github.com/WonderMr/blincho/blob/main/CHANGELOG.md): release notes by version
+
+## Optional
+
+- [package.json](https://github.com/WonderMr/blincho/blob/main/package.json): npm scripts for tests, builds and the website
+- [src-tauri/tauri.conf.json](https://github.com/WonderMr/blincho/blob/main/src-tauri/tauri.conf.json): Tauri desktop configuration
+- [.github/workflows/ci.yml](https://github.com/WonderMr/blincho/blob/main/.github/workflows/ci.yml): validation on pull requests and main
+- [LICENSE](https://github.com/WonderMr/blincho/blob/main/LICENSE): MIT

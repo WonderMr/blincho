@@ -2,6 +2,8 @@
 
 A free screen-break companion for macOS, Windows and Linux. Every feature is free.
 
+Blincho is an open-source break reminder for people who spend long hours at a computer. It reminds you to take short screen breaks and rest your eyes (for example with the 20-20-20 rule), offers short exercises, pauses when you step away and keeps work-time statistics on your device. No account is required.
+
 From version 1.6.0, all desktop apps use Tauri, Rust and the system WebView (WKWebView on macOS, WebView2 on Windows and WebKitGTK on Linux). All desktop versions share the same React interface, local statistics and 30 languages.
 
 Website: https://blincho.app
