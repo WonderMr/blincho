@@ -2,6 +2,17 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.14]
+
+### Added
+
+- Connect local AI clients through an optional MCP server in desktop settings. Read timer status, settings and daily totals, or request normal timer actions. The server is off by default, listens only on this computer and requires a rotating access token.
+- Copy connection settings from the app. Disabling MCP closes the listener and cancels pending commands. Commands preserve timer and break identity, respect strict mode and presence checks, and cannot affect a replacement break.
+
+### Fixed
+
+- Check camera presence only when a timed break ends. Keep the native deadline authoritative and preserve fresh-input safeguards before locking the computer.
+
 ## [1.8.13]
 
 ### Fixed

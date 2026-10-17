@@ -1,9 +1,10 @@
 // Cross-platform Notification Dispatcher (Electron IPC & Web Notifications)
 import type { UpdateBridge } from './updates';
+import type { LocalMcpBridge } from './localMcp';
 
 declare global {
   interface Window {
-    electronAPI?: UpdateBridge & {
+    electronAPI?: UpdateBridge & LocalMcpBridge & {
       requestNotificationPermission?: () => Promise<boolean>;
       showNotification: (title: string, body: string) => void;
       flashWindow: () => void;

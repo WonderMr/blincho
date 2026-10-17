@@ -534,7 +534,6 @@
   "Статус звонка неизвестен": "Arama durumu bilinmiyor",
   "Определение звонков отключено": "Arama algılama kapalı",
   "Блокировать компьютер, если никого нет": "Kimse yoksa bilgisayarı kilitle",
-  "Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.": "Moladan önce ve mola bittikten sonra kamera bir kişinin bulunup bulunmadığını kontrol eder. Kimse algılanmazsa bilgisayar kilitlenir. Kontrol cihazınızda yapılır; görüntüler kaydedilmez veya gönderilmez. Kamera izni gerekir. Kamera veya kontrol kullanılamıyorsa kilitleme atlanır. Her kontrolden sonra kamera kapanır.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Kamera desteği olan masaüstü uygulamasında kullanılabilir. Tarayıcı bilgisayarı kilitlemez.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "Kamera bir kişi algılamadı. Bilgisayar kilitlendi.",
   "Не удалось заблокировать компьютер.": "Bilgisayar kilitlenemedi.",
@@ -543,5 +542,19 @@
   "Доступ к камере разрешён.": "Kamera erişimine izin verildi.",
   "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Kamera erişimine izin verilmedi. Sistem ayarlarından izin verin, ardından bu seçeneği tekrar açın.",
   "Камера недоступна. Проверьте подключение и попробуйте снова.": "Kamera kullanılamıyor. Bağlantıyı kontrol edip tekrar deneyin.",
-  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "macOS’te: Sistem Ayarları → Gizlilik ve Güvenlik → Kamera."
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "macOS’te: Sistem Ayarları → Gizlilik ve Güvenlik → Kamera.",
+  "В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Molanın sonunda kamera bir kişinin bulunup bulunmadığını kontrol eder. Kimse algılanmazsa bilgisayar kilitlenir. Kontrol cihazınızda yapılır; görüntüler kaydedilmez veya gönderilmez. Kamera izni gerekir. Kamera veya kontrol kullanılamıyorsa kilitleme atlanır.",
+  "MCP доступен в настольном приложении.": "MCP, masaüstü uygulamasında kullanılabilir.",
+  "MCP не запущен.": "MCP çalışmıyor.",
+  "MCP работает: {url}": "MCP çalışıyor: {url}",
+  "Копировать подключение": "Bağlantıyı kopyala",
+  "Локальный MCP": "Yerel MCP",
+  "Настройки подключения": "Bağlantı ayarları",
+  "Настройки подключения скопированы.": "Bağlantı ayarları kopyalandı.",
+  "Не удалось запустить MCP. Попробуйте выключить и включить его снова.": "MCP başlatılamadı. Kapatıp tekrar açmayı deneyin.",
+  "Не удалось получить состояние MCP.": "MCP durumu alınamadı.",
+  "Не удалось скопировать. Выделите настройки подключения ниже.": "Kopyalanamadı. Aşağıdaki bağlantı ayarlarını seçin.",
+  "Подключение AI-клиентов": "AI istemcilerini bağlama",
+  "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Durumu, ayarları ve günlük özetleri okumaya, mola başlatmaya ve zamanlayıcıyı yönetmeye izin verir. Erişim yalnızca bu bilgisayardan bir belirteç ile mümkündür. Devre dışı bırakıldığında sunucu durur.",
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Belirteç, Blincho'yu yönetme erişimi sağlar. MCP yeniden etkinleştirildiğinde değişir."
 }
