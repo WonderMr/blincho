@@ -534,7 +534,6 @@
   "Статус звонка неизвестен": "Anrufstatus unbekannt",
   "Определение звонков отключено": "Anruferkennung deaktiviert",
   "Блокировать компьютер, если никого нет": "Computer sperren, wenn niemand anwesend ist",
-  "Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.": "Vor einer Pause und nach ihrem Ende prüft die Kamera, ob eine Person anwesend ist. Wird niemand erkannt, wird der Computer gesperrt. Die Prüfung erfolgt auf dem Gerät; Bilder werden weder gespeichert noch gesendet. Eine Kameraberechtigung ist erforderlich. Ist die Kamera oder die Prüfung nicht verfügbar, wird die Sperrung übersprungen. Nach jeder Prüfung wird die Kamera ausgeschaltet.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "In der Desktop-App mit Kameraunterstützung verfügbar. Im Browser wird der Computer nicht gesperrt.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "Die Kamera hat keine Person erkannt. Der Computer ist gesperrt.",
   "Не удалось заблокировать компьютер.": "Der Computer konnte nicht gesperrt werden.",
@@ -543,5 +542,19 @@
   "Доступ к камере разрешён.": "Kamerazugriff ist erlaubt.",
   "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Kamerazugriff ist nicht erlaubt. Erlaube ihn in den Systemeinstellungen und aktiviere diese Option anschließend erneut.",
   "Камера недоступна. Проверьте подключение и попробуйте снова.": "Die Kamera ist nicht verfügbar. Prüfe die Verbindung und versuche es erneut.",
-  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Unter macOS: Systemeinstellungen → Datenschutz & Sicherheit → Kamera."
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Unter macOS: Systemeinstellungen → Datenschutz & Sicherheit → Kamera.",
+  "В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Am Ende einer Pause prüft die Kamera, ob eine Person anwesend ist. Wird niemand erkannt, wird der Computer gesperrt. Die Prüfung erfolgt auf dem Gerät; Bilder werden weder gespeichert noch gesendet. Eine Kameraberechtigung ist erforderlich. Ist die Kamera oder die Prüfung nicht verfügbar, wird die Sperrung übersprungen.",
+  "MCP доступен в настольном приложении.": "MCP ist in der Desktop-App verfügbar.",
+  "MCP не запущен.": "MCP läuft nicht.",
+  "MCP работает: {url}": "MCP läuft: {url}",
+  "Копировать подключение": "Verbindung kopieren",
+  "Локальный MCP": "Lokales MCP",
+  "Настройки подключения": "Verbindungseinstellungen",
+  "Настройки подключения скопированы.": "Verbindungseinstellungen kopiert.",
+  "Не удалось запустить MCP. Попробуйте выключить и включить его снова.": "MCP konnte nicht gestartet werden. Versuche, es aus- und wieder einzuschalten.",
+  "Не удалось получить состояние MCP.": "Der MCP-Status konnte nicht abgerufen werden.",
+  "Не удалось скопировать. Выделите настройки подключения ниже.": "Kopieren fehlgeschlagen. Markiere die Verbindungseinstellungen unten.",
+  "Подключение AI-клиентов": "KI-Clients verbinden",
+  "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Ermöglicht das Lesen von Status, Einstellungen und Tagesübersichten sowie das Starten einer Pause und die Steuerung des Timers. Der Zugriff ist nur von diesem Computer aus mit einem Token möglich. Beim Ausschalten wird der Server beendet.",
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Das Token ermöglicht die Steuerung von Blincho. Es ändert sich, wenn MCP erneut eingeschaltet wird."
 }

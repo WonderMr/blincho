@@ -534,7 +534,6 @@
   "Статус звонка неизвестен": "Call status unknown",
   "Определение звонков отключено": "Call detection off",
   "Блокировать компьютер, если никого нет": "Lock the computer when no one is present",
-  "Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.": "Before a break and after it finishes, the camera checks for a person. If no one is detected, the computer locks. The check runs on your device; frames are never saved or sent. Camera permission is required. If the camera or check is unavailable, locking is skipped. The camera turns off after each check.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Available in the desktop app with camera support. The browser does not lock the computer.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "The camera did not detect a person. The computer is locked.",
   "Не удалось заблокировать компьютер.": "Could not lock the computer.",
@@ -543,5 +542,19 @@
   "Доступ к камере разрешён.": "Camera access is allowed.",
   "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Camera access is not allowed. Allow it in your system settings, then turn this option on again.",
   "Камера недоступна. Проверьте подключение и попробуйте снова.": "The camera is unavailable. Check its connection and try again.",
-  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "On macOS: System Settings → Privacy & Security → Camera."
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "On macOS: System Settings → Privacy & Security → Camera.",
+  "В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "At the end of a break, the camera checks for a person. If no one is detected, the computer locks. The check runs on your device; frames are never saved or sent. Camera permission is required. If the camera or check is unavailable, locking is skipped.",
+  "MCP доступен в настольном приложении.": "MCP is available in the desktop app.",
+  "MCP не запущен.": "MCP is not running.",
+  "MCP работает: {url}": "MCP is running: {url}",
+  "Копировать подключение": "Copy connection",
+  "Локальный MCP": "Local MCP",
+  "Настройки подключения": "Connection settings",
+  "Настройки подключения скопированы.": "Connection settings copied.",
+  "Не удалось запустить MCP. Попробуйте выключить и включить его снова.": "Could not start MCP. Try turning it off and on again.",
+  "Не удалось получить состояние MCP.": "Could not get the MCP status.",
+  "Не удалось скопировать. Выделите настройки подключения ниже.": "Could not copy. Select the connection settings below.",
+  "Подключение AI-клиентов": "AI client connections",
+  "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Allows reading status, settings and daily summaries, starting a break and controlling the timer. Access is limited to this computer and requires a token. Turning it off stops the server.",
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "The token grants control of Blincho. It changes when MCP is enabled again."
 }

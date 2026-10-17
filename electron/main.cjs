@@ -4,6 +4,8 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const { performance } = require('node:perf_hooks');
 const { createLinuxSessionProbe } = require('./linuxSession.cjs');
+const { createLocalMcp } = require(path.join(__dirname, 'localMcp.cjs'));
+const localMcp = createLocalMcp();
 const { createComputerLocker } = require(path.join(__dirname, 'lockComputer.cjs'));
 const { locales, isLocale, resolveLocale } = require('./locales.cjs');
 const { createUpdateController, registerUpdateIpc } = require('./updater.cjs');
@@ -244,6 +246,7 @@ if (!gotTheLock) {
 
 app.on('before-quit', event => {
   isQuitting = true;
+  void localMcp.shutdown();
   updateController?.beforeQuit(event);
   powerGeneration += 1;
   linuxSession?.invalidate();
@@ -386,6 +389,10 @@ function createWindow() {
 }
 
 // IPC Handlers
+ipcMain.handle('local-mcp-configure', (event, enabled) => { requireMainRenderer(event); return localMcp.configure(enabled); });
+ipcMain.handle('local-mcp-status', event => { requireMainRenderer(event); return localMcp.state(); });
+ipcMain.handle('local-mcp-publish', (event, snapshot) => { requireMainRenderer(event); localMcp.publish(snapshot); });
+ipcMain.handle('local-mcp-take-commands', event => { requireMainRenderer(event); return localMcp.takeCommands(); });
 registerUpdateIpc({ ipcMain, requireMainRenderer, getController: () => updateController,
   openDownload: () => shell.openExternal('https://blincho.app/#download') });
 

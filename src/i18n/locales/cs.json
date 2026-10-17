@@ -534,7 +534,6 @@
   "Статус звонка неизвестен": "Stav hovoru není znám",
   "Определение звонков отключено": "Rozpoznávání hovorů je vypnuté",
   "Блокировать компьютер, если никого нет": "Zamknout počítač, když nikdo není přítomen",
-  "Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.": "Před přestávkou a po jejím skončení kamera ověří, zda je někdo přítomen. Pokud nikoho nezjistí, počítač se zamkne. Kontrola probíhá v zařízení; snímky se neukládají ani neodesílají. Je nutné oprávnění ke kameře. Pokud kamera nebo kontrola nejsou dostupné, zamknutí se přeskočí. Po každé kontrole se kamera vypne.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Dostupné v desktopové aplikaci s podporou kamery. Prohlížeč počítač nezamyká.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "Kamera nezjistila žádnou osobu. Počítač je zamčený.",
   "Не удалось заблокировать компьютер.": "Počítač se nepodařilo zamknout.",
@@ -543,5 +542,19 @@
   "Доступ к камере разрешён.": "Přístup ke kameře je povolen.",
   "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Přístup ke kameře není povolen. Povolte jej v nastavení systému a poté tuto možnost znovu zapněte.",
   "Камера недоступна. Проверьте подключение и попробуйте снова.": "Kamera není dostupná. Zkontrolujte připojení a zkuste to znovu.",
-  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "V macOS: Nastavení systému → Soukromí a zabezpečení → Kamera."
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "V macOS: Nastavení systému → Soukromí a zabezpečení → Kamera.",
+  "В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Na konci přestávky kamera ověří, zda je někdo přítomen. Pokud nikoho nezjistí, počítač se zamkne. Kontrola probíhá v zařízení; snímky se neukládají ani neodesílají. Je nutné oprávnění ke kameře. Pokud kamera nebo kontrola nejsou dostupné, zamknutí se přeskočí.",
+  "MCP доступен в настольном приложении.": "MCP je dostupné v desktopové aplikaci.",
+  "MCP не запущен.": "MCP není spuštěné.",
+  "MCP работает: {url}": "MCP běží: {url}",
+  "Копировать подключение": "Kopírovat připojení",
+  "Локальный MCP": "Místní MCP",
+  "Настройки подключения": "Nastavení připojení",
+  "Настройки подключения скопированы.": "Nastavení připojení bylo zkopírováno.",
+  "Не удалось запустить MCP. Попробуйте выключить и включить его снова.": "MCP se nepodařilo spustit. Zkuste ho vypnout a znovu zapnout.",
+  "Не удалось получить состояние MCP.": "Nepodařilo se získat stav MCP.",
+  "Не удалось скопировать. Выделите настройки подключения ниже.": "Kopírování se nezdařilo. Označte nastavení připojení níže.",
+  "Подключение AI-клиентов": "Připojení AI klientů",
+  "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Umožňuje číst stav, nastavení a denní souhrny, spouštět přestávky a ovládat časovač. Přístup je možný pouze z tohoto počítače pomocí tokenu. Vypnutím se server zastaví.",
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Token umožňuje ovládat Blincho. Při opětovném zapnutí MCP se změní."
 }

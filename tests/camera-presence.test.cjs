@@ -62,39 +62,47 @@ test('cancellation closes resources and overlapping queries share one camera ses
 
 // App integration mocks only the camera boundary. It exercises timer state, lock
 // requests, cancellation and fallback through the existing renderer harness.
-test('camera absence at work expiry locks once, pauses timing and never credits a break', async () => {
+async function elapseScheduledBreak(h) {
+  await h.settle();
+  await h.advance(1000);
+  const elapsed = h.captured.BreakOverlay.onElapsed;
+  await h.advance(20_000);
+  await elapsed(h.monotonicNow);
+  await h.settle();
+}
+test('camera absence at timed break completion locks once, pauses timing and never credits a break', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true }); let locks = 0, cameras = 0;
   h.electronAPI.lockComputer = async () => { locks++; await h.power('lock-screen'); return true; };
   h.setCameraCheck(async () => { cameras++; return 'absent'; });
-  await h.settle(); await h.advance(1000); await h.advance(1000);
+  await elapseScheduledBreak(h);
   assert.equal(cameras, 1); assert.equal(locks, 1); assert.equal(h.active.has('BreakOverlay'), false); assert.equal(h.captured.TimerWidget.phase, 'locked'); assert.equal(h.stats().breaksCompleted, 0); h.destroy();
 });
-test('present/unavailable camera and disabled option preserve the ordinary break', async () => {
+test('present/unavailable camera and disabled option resume work after the timed break', async () => {
   for (const [enabled, result] of [[true, 'present'], [true, 'unavailable'], [false, 'absent']]) {
     const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: enabled }); let locks = 0, cameras = 0;
     h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(async () => { cameras++; return result; });
-    await h.settle(); await h.advance(1000); assert.equal(locks, 0); assert.equal(cameras, Number(enabled)); assert.equal(h.active.has('BreakOverlay'), true); h.destroy();
+    await elapseScheduledBreak(h); assert.equal(locks, 0); assert.equal(cameras, Number(enabled)); assert.equal(h.active.has('BreakOverlay'), false); assert.equal(h.captured.TimerWidget.phase, 'work'); h.destroy();
   }
 });
 test('manual pause or disabled setting invalidates an in-flight camera decision', async () => {
   for (const action of ['pause', 'disable']) {
     const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true }); let resolve, locks = 0;
     h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(() => new Promise(done => { resolve = done; }));
-    await h.settle(); await h.advance(1000); assert(resolve);
+    await elapseScheduledBreak(h); assert(resolve);
     if (action === 'pause') await h.call('TimerWidget', 'onTogglePlay');
     else { await h.call('Navbar', 'onOpenSettings'); await h.call('SettingsModal', 'onUpdateSettings', { ...h.settings, cameraLockEnabled: false }); }
     resolve('absent'); await h.settle(); assert.equal(locks, 0); h.destroy();
   }
 });
-test('lock failure proceeds to a regular break without claiming the screen is locked', async () => {
+test('lock failure leaves the completed break in work without claiming the screen is locked', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true }); h.electronAPI.lockComputer = async () => { throw Error('lock failed'); }; h.setCameraCheck(async () => 'absent');
-  await h.settle(); await h.advance(1000); assert.equal(h.active.has('BreakOverlay'), true); assert.equal(h.captured.TimerWidget.phase, 'break'); assert(h.warnings.some(args => args[0].includes('lock failed'))); h.destroy();
+  await elapseScheduledBreak(h); assert.equal(h.active.has('BreakOverlay'), false); assert.equal(h.captured.TimerWidget.phase, 'work'); assert(h.warnings.some(args => args[0].includes('lock failed'))); h.destroy();
 });
 test('disable then reenable during post-camera presence sampling cancels the old absence decision', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true }); let release, locks = 0;
   h.electronAPI.lockComputer = async () => { locks++; return true; };
   h.setCameraCheck(async () => { h.electronAPI.getPowerState = () => new Promise(resolve => { release = resolve; }); return 'absent'; });
-  await h.settle(); await h.advance(1000); assert(release);
+  await elapseScheduledBreak(h); assert(release);
   await h.call('Navbar', 'onOpenSettings');
   await h.call('SettingsModal', 'onUpdateSettings', { ...h.captured.SettingsModal.settings, cameraLockEnabled: false });
   await h.call('SettingsModal', 'onUpdateSettings', { ...h.captured.SettingsModal.settings, cameraLockEnabled: true });
@@ -105,7 +113,7 @@ test('disable then reenable during post-camera presence sampling cancels the old
 test('new input cancels an in-flight camera absence decision', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true }); let resolve, locks = 0;
   h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(() => new Promise(done => { resolve = done; }));
-  await h.settle(); await h.advance(1000); assert(resolve);
+  await elapseScheduledBreak(h); assert(resolve);
   await h.emit('mousemove'); resolve('absent'); await h.settle();
-  assert.equal(locks, 0); assert.equal(h.active.has('BreakOverlay'), true); h.destroy();
+  assert.equal(locks, 0); assert.equal(h.active.has('BreakOverlay'), false); h.destroy();
 });
