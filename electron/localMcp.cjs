@@ -49,7 +49,7 @@ function createLocalMcp({ preferredPort = 47831, now = Date.now } = {}) {
             (current.breakEventId !== null && typeof current.breakEventId !== 'string')) {
             result = toolResult({ error: 'App state is unavailable.' }, true); break;
           }
-          if (commands.length >= 16 || current.isIdlePaused || current.exercising ||
+          if (commands.length >= 16 || current.isIdlePaused || current.exercising || current.cameraChecking ||
             (name !== 'skip_break' && current.isBreakActive) ||
             (name === 'skip_break' && (!current.isBreakActive || current.cameraChecking || (current.strictMode && !current.breakElapsed)))) {
             result = toolResult({ error: 'Action is unavailable in the current app state.' }, true); break;
