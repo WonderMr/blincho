@@ -5,6 +5,7 @@
 #[cfg(any(target_os = "linux", test))]
 mod camera_permission;
 mod history;
+mod local_mcp;
 mod platform;
 mod startup;
 mod timer;
@@ -42,6 +43,34 @@ struct Runtime {
     meeting: platform::MeetingMonitor,
 }
 static HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
+#[tauri::command]
+fn local_mcp_configure(
+    enabled: bool,
+    server: tauri::State<local_mcp::LocalMcp>,
+) -> local_mcp::McpStatus {
+    server.configure(enabled)
+}
+#[tauri::command]
+fn local_mcp_status(server: tauri::State<local_mcp::LocalMcp>) -> local_mcp::McpStatus {
+    server.status()
+}
+#[tauri::command]
+fn local_mcp_publish(
+    snapshot: Value,
+    server: tauri::State<local_mcp::LocalMcp>,
+) -> Result<(), String> {
+    if snapshot.to_string().len() > 32_768 || !snapshot.is_object() {
+        return Err("Invalid MCP snapshot".into());
+    }
+    server.publish(snapshot);
+    Ok(())
+}
+#[tauri::command]
+fn local_mcp_take_commands(
+    server: tauri::State<local_mcp::LocalMcp>,
+) -> Vec<local_mcp::McpCommand> {
+    server.take_commands()
+}
 // Fixed stage names only, explicitly opted in by native prototype tests. Keep
 // this separate from runtime diagnostics so a blocked setup leaves evidence.
 fn startup_trace(stage: &'static str) {
@@ -896,6 +925,7 @@ fn main() {
             }
             let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             configure_timer,
+            local_mcp_configure, local_mcp_status, local_mcp_publish, local_mcp_take_commands,
             timer_snapshot,
             clear_meeting_history,
             desktop_command,
@@ -908,6 +938,7 @@ fn main() {
             handler(invoke)
         })
         .setup(move |app| {
+            app.manage(local_mcp::LocalMcp::default());
             startup_trace("setup-enter");
             ui::initialize_dock(app.handle(), !hidden);
             #[cfg(target_os = "macos")]
@@ -1229,6 +1260,9 @@ fn main() {
             startup_trace("event-loop-ready");
         }
         if let tauri::RunEvent::Exit = event {
+            if let Some(server) = app.try_state::<local_mcp::LocalMcp>() {
+                server.shutdown();
+            }
             if let Some(runtime) = app.try_state::<Runtime>() {
                 runtime.quitting.store(true, Ordering::SeqCst);
                 runtime.updates.dispose();

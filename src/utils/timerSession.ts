@@ -26,6 +26,7 @@ export function normalizeTimerSettings(settings: AppSettings): AppSettings {
     meetingDetectionEnabled: boolean(settings.meetingDetectionEnabled, true), strictMode: boolean(settings.strictMode, false),
     meetingHistoryEnabled: boolean(settings.meetingHistoryEnabled, false),
     cameraLockEnabled: boolean(settings.cameraLockEnabled, false),
+    localMcpEnabled: boolean(settings.localMcpEnabled, false),
     strictModeIgnoreIdle: false,
   };
 }

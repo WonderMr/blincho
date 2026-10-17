@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   meetingDetectionEnabled: true,
   meetingHistoryEnabled: false,
   cameraLockEnabled: false,
+  localMcpEnabled: false,
   strictMode: false,
 };
 

@@ -4,6 +4,8 @@ The release pipeline builds native macOS, Windows and Linux packages for x64 and
 
 The publication jobs also launch the exact Windows portable executable, Linux AppImage and extracted macOS archive in isolated profiles before uploading them. These checks verify real packaged WebView startup, history import, hidden timer progression, break expiry and persistence after restart. They still model idle and unlocked presence; physical lock/sleep and notification display remain separate checks.
 
+Native jobs also exercise the local MCP settings switch, authenticated initialization, public aggregate data, timer actions and immediate listener shutdown in an isolated profile. MCP remains off by default in user profiles.
+
 ## Publication
 
 After reviewing and merging the version and changelog, create and push its version tag or dispatch the release workflow on main with that tag. A retry accepts an existing immutable version tag. Never move or recreate an existing tag.

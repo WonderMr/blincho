@@ -58,7 +58,7 @@ test('default-off expiry skips camera detection and locking', async () => {
   } finally { h.destroy(); }
 });
 
-test('pending permission blocks expiry and persists off through concurrent changes until successful completion', async () => {
+test('pending permission blocks the timed-end camera check and persists off through concurrent changes until successful completion', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60 }); let checks = 0, locks = 0;
   try {
     h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(async () => { checks++; return 'absent'; });
@@ -69,7 +69,10 @@ test('pending permission blocks expiry and persists off through concurrent chang
     assert.equal(JSON.parse(h.store.get('myeyes_settings_v1')).cameraLockEnabled, false, 'temporary grant survives restart as off');
     await h.call('SettingsModal', 'onUpdateSettings', { ...h.captured.SettingsModal.settings, soundVolume: 35 });
     assert.equal(JSON.parse(h.store.get('myeyes_settings_v1')).cameraLockEnabled, false);
-    await h.advance(1000); assert.equal(checks, 0); assert.equal(locks, 0);
+    await h.advance(1000);
+    const elapsed = h.captured.BreakOverlay.onElapsed;
+    await h.advance(20_000); await elapsed(h.monotonicNow); await h.settle();
+    assert.equal(checks, 0); assert.equal(locks, 0);
     await h.call('SettingsModal', 'onCameraAccessPendingChange', false);
     const saved = JSON.parse(h.store.get('myeyes_settings_v1')); assert.equal(saved.cameraLockEnabled, true); assert.equal(saved.soundVolume, 35);
   } finally { h.destroy(); }
@@ -79,10 +82,12 @@ test('starting a permission prompt cancels an old absence decision even when it 
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true }); const camera = deferred(); let signal, locks = 0;
   try {
     h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(value => { signal = value; return camera.promise; });
-    await h.settle(); await h.advance(1000); assert(signal);
+    await h.settle(); await h.advance(1000);
+    const elapsed = h.captured.BreakOverlay.onElapsed;
+    await h.advance(20_000); await elapsed(h.monotonicNow); await h.settle(); assert(signal);
     await h.call('Navbar', 'onOpenSettings'); await h.call('SettingsModal', 'onCameraAccessPendingChange', true); assert.equal(signal.aborted, true);
     await h.call('SettingsModal', 'onCameraAccessPendingChange', false);
-    camera.resolve('absent'); await h.settle(); assert.equal(locks, 0); assert.equal(h.active.has('BreakOverlay'), true);
+    camera.resolve('absent'); await h.settle(); assert.equal(locks, 0); assert.equal(h.active.has('BreakOverlay'), false);
   } finally { h.destroy(); }
 });
 

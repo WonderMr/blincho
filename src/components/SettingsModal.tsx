@@ -1,6 +1,7 @@
 import { useI18n } from '../i18n/useI18n';
 import { LanguagePicker } from './LanguagePicker';
 import { UpdateSettings } from './UpdateSettings';
+import { LocalMcpSettings } from './LocalMcpSettings';
 import { MeetingHistoryControls } from './MeetingHistoryControls';
 import type { MeetingHistoryControlsProps } from './MeetingHistoryControls';
 import { UpdateControls } from '../utils/updates';
@@ -143,7 +144,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
         return;
       }
       if (event.key !== 'Tab') return;
-      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]');
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]');
       if (!focusable?.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -335,7 +336,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
               checked={meetingSupported && settings.meetingDetectionEnabled} disabled={!meetingSupported} onChange={value => handleChange('meetingDetectionEnabled', value)} />
             {meetingHistoryControls && <MeetingHistoryControls id="settings-meeting-history" {...meetingHistoryControls} />}
             <ToggleRow id="camera-lock-enabled" title={t("Блокировать компьютер, если никого нет")}
-              description={`${t("Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.")}${cameraLockSupported ? '' : ` ${t("Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.")}`}`}
+              description={`${t("В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.")}${cameraLockSupported ? '' : ` ${t("Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.")}`}`}
               checked={cameraLockSupported && settings.cameraLockEnabled} disabled={!cameraLockSupported} onChange={value => { void handleCameraChange(value); }} />
             {cameraLockSupported && <p className="settings-description">{t("При включении проверяется доступ к камере. Если нужно, система запросит разрешение.")}</p>}
             {(cameraPending || cameraFeedback) && <p className="settings-feedback" role="status">{cameraPending ? t("Запрашиваем доступ к камере…") : t(cameraFeedback)}</p>}
@@ -355,6 +356,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
             <ToggleRow id="strict-mode" title={t("Строгий режим")} description={isNative ? t("В течение перерыва окно остаётся поверх остальных, а пропуск недоступен.") : t("В течение перерыва пропуск недоступен. Браузер не блокирует другие приложения.")}
               checked={settings.strictMode} onChange={value => handleChange('strictMode', value)} />
           </section>
+          <LocalMcpSettings enabled={settings.localMcpEnabled} onChange={value => handleChange('localMcpEnabled', value)} />
           {updates && <UpdateSettings updates={updates} />}
         </div>
         <footer className="settings-dialog-footer"><span><Monitor size={14} aria-hidden="true" />{isNative ? t("Настольная версия") : t("Браузерная версия")}</span>

@@ -534,7 +534,6 @@
   "Статус звонка неизвестен": "Stan rozmowy nieznany",
   "Определение звонков отключено": "Wykrywanie rozmów wyłączone",
   "Блокировать компьютер, если никого нет": "Blokuj komputer, gdy nikogo nie ma",
-  "Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.": "Przed przerwą i po jej zakończeniu kamera sprawdza, czy ktoś jest obecny. Jeśli nikogo nie wykryje, komputer zostaje zablokowany. Sprawdzanie odbywa się na urządzeniu; obrazy nie są zapisywane ani wysyłane. Wymagane jest zezwolenie na użycie kamery. Jeśli kamera lub sprawdzanie są niedostępne, blokowanie jest pomijane. Po każdym sprawdzeniu kamera się wyłącza.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Dostępne w aplikacji komputerowej z obsługą kamery. Przeglądarka nie blokuje komputera.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "Kamera nie wykryła żadnej osoby. Komputer został zablokowany.",
   "Не удалось заблокировать компьютер.": "Nie udało się zablokować komputera.",
@@ -543,5 +542,19 @@
   "Доступ к камере разрешён.": "Dostęp do kamery jest dozwolony.",
   "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "Dostęp do kamery nie jest dozwolony. Zezwól na niego w ustawieniach systemowych, a następnie ponownie włącz tę opcję.",
   "Камера недоступна. Проверьте подключение и попробуйте снова.": "Kamera jest niedostępna. Sprawdź połączenie i spróbuj ponownie.",
-  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "W macOS: Ustawienia systemowe → Prywatność i ochrona → Kamera."
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "W macOS: Ustawienia systemowe → Prywatność i ochrona → Kamera.",
+  "В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Na koniec przerwy kamera sprawdza, czy ktoś jest obecny. Jeśli nikogo nie wykryje, komputer zostaje zablokowany. Sprawdzanie odbywa się na urządzeniu; obrazy nie są zapisywane ani wysyłane. Wymagane jest zezwolenie na użycie kamery. Jeśli kamera lub sprawdzanie są niedostępne, blokowanie jest pomijane.",
+  "MCP доступен в настольном приложении.": "MCP jest dostępny w aplikacji komputerowej.",
+  "MCP не запущен.": "MCP nie jest uruchomiony.",
+  "MCP работает: {url}": "MCP działa: {url}",
+  "Копировать подключение": "Kopiuj połączenie",
+  "Локальный MCP": "Lokalny MCP",
+  "Настройки подключения": "Ustawienia połączenia",
+  "Настройки подключения скопированы.": "Skopiowano ustawienia połączenia.",
+  "Не удалось запустить MCP. Попробуйте выключить и включить его снова.": "Nie udało się uruchomić MCP. Spróbuj go wyłączyć i ponownie włączyć.",
+  "Не удалось получить состояние MCP.": "Nie udało się pobrać stanu MCP.",
+  "Не удалось скопировать. Выделите настройки подключения ниже.": "Nie udało się skopiować. Zaznacz ustawienia połączenia poniżej.",
+  "Подключение AI-клиентов": "Łączenie klientów AI",
+  "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Umożliwia odczytywanie stanu, ustawień i podsumowań dnia, rozpoczynanie przerw oraz sterowanie minutnikiem. Dostęp jest możliwy tylko z tego komputera przy użyciu tokenu. Wyłączenie zatrzymuje serwer.",
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Token umożliwia sterowanie Blincho. Zmienia się po ponownym włączeniu MCP."
 }

@@ -48,6 +48,7 @@ export interface AppSettings {
   meetingDetectionEnabled: boolean;
   meetingHistoryEnabled: boolean;
   cameraLockEnabled: boolean;
+  localMcpEnabled: boolean;
   strictMode: boolean;
 }
 
