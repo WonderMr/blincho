@@ -21,6 +21,7 @@ const MAX_HEADERS: usize = 8192;
 const MAX_BODY: usize = 65_536;
 const MAX_QUEUE: usize = 16;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const READ_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const SNAPSHOT_MAX_AGE: Duration = Duration::from_secs(10);
 const COMMAND_MAX_AGE: Duration = Duration::from_secs(5);
 const PROTOCOLS: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
@@ -192,7 +193,8 @@ impl LocalMcp {
                                     Err(_) => continue,
                                 }
                             }
-                            let response = handle_http(&mut stream, port, &token, &shared);
+                            let response =
+                                handle_http(&mut stream, port, &token, &shared, &worker_stop);
                             if !worker_stop.load(Ordering::SeqCst) {
                                 let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
                                 let _ = stream.write_all(&response.bytes());
@@ -288,30 +290,40 @@ fn read_chunk(
     stream: &mut TcpStream,
     buffer: &mut Vec<u8>,
     deadline: Instant,
+    stop: &AtomicBool,
 ) -> Result<(), HttpResponse> {
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    if remaining.is_zero() {
-        return Err(HttpResponse::empty(408));
-    }
-    stream
-        .set_read_timeout(Some(remaining))
-        .map_err(|_| HttpResponse::empty(400))?;
-    let mut chunk = [0_u8; 1024];
-    match stream.read(&mut chunk) {
-        Ok(0) => Err(HttpResponse::empty(400)),
-        Ok(size) => {
-            buffer.extend_from_slice(&chunk[..size]);
-            Ok(())
+    loop {
+        if stop.load(Ordering::SeqCst) {
+            return Err(HttpResponse::empty(503));
         }
-        Err(error)
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-            ) =>
-        {
-            Err(HttpResponse::empty(408))
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(HttpResponse::empty(408));
         }
-        Err(_) => Err(HttpResponse::empty(400)),
+        // Winsock shutdown on a cloned socket need not wake a pending recv.
+        // Poll cancellation while retaining the overall request deadline.
+        stream
+            .set_read_timeout(Some(remaining.min(READ_POLL_INTERVAL)))
+            .map_err(|_| HttpResponse::empty(400))?;
+        let mut chunk = [0_u8; 1024];
+        match stream.read(&mut chunk) {
+            Ok(0) => return Err(HttpResponse::empty(400)),
+            Ok(size) => {
+                buffer.extend_from_slice(&chunk[..size]);
+                return Ok(());
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::WouldBlock
+                        | std::io::ErrorKind::Interrupted
+                ) =>
+            {
+                continue
+            }
+            Err(_) => return Err(HttpResponse::empty(400)),
+        }
     }
 }
 
@@ -320,6 +332,7 @@ fn handle_http(
     port: u16,
     token: &str,
     shared: &Mutex<Shared>,
+    stop: &AtomicBool,
 ) -> HttpResponse {
     let deadline = Instant::now() + REQUEST_TIMEOUT;
     let mut bytes = Vec::with_capacity(2048);
@@ -333,7 +346,7 @@ fn handle_http(
         if bytes.len() >= MAX_HEADERS {
             return HttpResponse::empty(431);
         }
-        if let Err(response) = read_chunk(stream, &mut bytes, deadline) {
+        if let Err(response) = read_chunk(stream, &mut bytes, deadline, stop) {
             return response;
         }
     };
@@ -437,7 +450,7 @@ fn handle_http(
         return HttpResponse::empty(413);
     }
     while bytes.len() - header_end < length {
-        if let Err(response) = read_chunk(stream, &mut bytes, deadline) {
+        if let Err(response) = read_chunk(stream, &mut bytes, deadline, stop) {
             return response;
         }
     }
@@ -950,6 +963,29 @@ mod tests {
             )
         )
         .starts_with("HTTP/1.1 431"));
+    }
+
+    #[test]
+    fn read_cancellation_does_not_depend_on_socket_shutdown() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut stream, _) = listener.accept().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let reader_stop = stop.clone();
+        let reader = thread::spawn(move || {
+            read_chunk(
+                &mut stream,
+                &mut vec![],
+                Instant::now() + REQUEST_TIMEOUT,
+                &reader_stop,
+            )
+        });
+        thread::sleep(Duration::from_millis(80));
+        let start = Instant::now();
+        stop.store(true, Ordering::SeqCst);
+        assert_eq!(reader.join().unwrap().unwrap_err().code, 503);
+        assert!(start.elapsed() < Duration::from_secs(1));
+        drop(client);
     }
 
     #[test]
