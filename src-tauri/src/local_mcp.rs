@@ -69,6 +69,28 @@ fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
     value.lock().unwrap_or_else(|error| error.into_inner())
 }
 
+fn transient_accept_error(error: &std::io::Error) -> bool {
+    if matches!(
+        error.kind(),
+        std::io::ErrorKind::WouldBlock
+            | std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+    ) {
+        return true;
+    }
+    #[cfg(unix)]
+    let resource_errors = [libc::EMFILE, libc::ENFILE, libc::ENOBUFS, libc::ENOMEM];
+    // Winsock WSAEMFILE and WSAENOBUFS, without adding a socket FFI dependency.
+    #[cfg(windows)]
+    let resource_errors = [10024, 10055];
+    #[cfg(not(any(unix, windows)))]
+    let resource_errors: [i32; 0] = [];
+    error
+        .raw_os_error()
+        .is_some_and(|code| resource_errors.contains(&code))
+}
+
 impl LocalMcp {
     pub fn status(&self) -> McpStatus {
         lock(&self.shared).status.clone()
@@ -202,7 +224,7 @@ impl LocalMcp {
                             let _ = stream.shutdown(Shutdown::Both);
                             *lock(&worker_active) = None;
                         }
-                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        Err(error) if transient_accept_error(&error) => {
                             thread::sleep(Duration::from_millis(20));
                         }
                         Err(error) => {
@@ -590,6 +612,9 @@ fn call_tool(name: &str, shared: &Mutex<Shared>) -> Option<Value> {
     if !shared.status.enabled || !shared.status.running {
         return Some(tool_error("Local MCP is disabled"));
     }
+    if snapshot["status"]["cameraChecking"] == true {
+        return Some(tool_error("A camera presence check is in progress"));
+    }
     if ["strictMode", "isBreakActive", "breakElapsed"]
         .iter()
         .any(|key| !snapshot["status"][*key].is_boolean())
@@ -806,6 +831,46 @@ mod tests {
                 .is_none());
         }
         assert_eq!(call_tool("pause_timer", &shared).unwrap()["isError"], true);
+    }
+
+    #[test]
+    fn recoverable_accept_errors_do_not_stop_the_listener() {
+        use std::io::{Error, ErrorKind};
+        for kind in [
+            ErrorKind::WouldBlock,
+            ErrorKind::Interrupted,
+            ErrorKind::ConnectionAborted,
+            ErrorKind::ConnectionReset,
+        ] {
+            assert!(transient_accept_error(&Error::from(kind)));
+        }
+        assert!(!transient_accept_error(&Error::from(
+            ErrorKind::PermissionDenied
+        )));
+        assert!(!transient_accept_error(&Error::from(
+            ErrorKind::InvalidInput
+        )));
+        #[cfg(unix)]
+        for code in [libc::EMFILE, libc::ENFILE, libc::ENOBUFS, libc::ENOMEM] {
+            assert!(transient_accept_error(&Error::from_raw_os_error(code)));
+        }
+        #[cfg(windows)]
+        for code in [10024, 10055] {
+            assert!(transient_accept_error(&Error::from_raw_os_error(code)));
+        }
+    }
+
+    #[test]
+    fn every_mutation_is_rejected_during_camera_check() {
+        let shared = test_shared();
+        let mut snapshot = app_snapshot(false);
+        snapshot["status"]["cameraChecking"] = json!(true);
+        lock(&shared).snapshot = Some((snapshot, Instant::now()));
+        for name in ["start_break", "pause_timer", "resume_timer", "skip_break"] {
+            assert_eq!(call_tool(name, &shared).unwrap()["isError"], true);
+        }
+        assert!(lock(&shared).commands.is_empty());
+        assert_ne!(call_tool("get_status", &shared).unwrap()["isError"], true);
     }
 
     #[test]

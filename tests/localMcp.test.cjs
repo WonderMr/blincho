@@ -80,6 +80,11 @@ test('commands are queued with freshness and strict mode, presence and camera ga
     now += 5001; assert.deepEqual(server.takeCommands(), []);
     now += 5000; assert.equal((await request(state, call('resume_timer'))).body.result.isError, true);
     server.publish(snapshot());
+    server.publish(snapshot({ cameraChecking: true }));
+    for (const name of ['start_break', 'pause_timer', 'resume_timer', 'skip_break']) {
+      assert.equal((await request(state, call(name))).body.result.isError, true);
+    }
+    server.publish(snapshot());
     for (let i = 0; i < 16; i++) assert.equal((await request(state, call('pause_timer'))).body.result.isError, undefined);
     assert.equal((await request(state, call('pause_timer'))).body.result.isError, true);
   } finally { await server.shutdown(); }
@@ -192,4 +197,26 @@ test('a queued skip cannot close a replacement break', async () => {
     assert.equal(h.active.has('BreakOverlay'), true);
     await h.advance(500); assert.equal(h.active.has('BreakOverlay'), true, 'replacement owns a different event and version');
   } finally { h.destroy(); }
+});
+
+test('MCP actions cannot cancel a pending end-of-break camera decision', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const h = createHarness({ cameraLockEnabled: true }); let queued = [], latest, resolveCamera, cameraSignal;
+  h.electronAPI.configureLocalMcp = async enabled => ({ enabled, running: enabled });
+  h.electronAPI.publishLocalMcp = async value => { latest = value; };
+  h.electronAPI.takeLocalMcpCommands = async () => { const next = queued; queued = []; return next; };
+  h.electronAPI.lockComputer = async () => false;
+  h.setCameraCheck(signal => { cameraSignal = signal; return new Promise(resolve => { resolveCamera = resolve; }); });
+  try {
+    await h.settle(); await h.call('Navbar', 'onOpenSettings');
+    await h.call('SettingsModal', 'onUpdateSettings', { ...h.captured.SettingsModal.settings, localMcpEnabled: true });
+    await h.call('TimerWidget', 'onTriggerInstantBreak');
+    h.setIdle(20); await h.advance(20000); await h.call('BreakOverlay', 'onElapsed', h.monotonicNow); await h.advance(500);
+    assert.equal(latest.status.cameraChecking, true);
+    queued = ['pause_timer', 'resume_timer', 'start_break', 'skip_break'].map(name => ({ name, timerVersion: latest.status.timerVersion, breakEventId: latest.status.breakEventId }));
+    await h.advance(500);
+    assert.equal(cameraSignal.aborted, false); assert.equal(h.captured.TimerWidget.phase, 'work');
+    assert.equal(h.active.has('BreakOverlay'), false);
+    resolveCamera('present'); await h.settle();
+  } finally { resolveCamera?.('unavailable'); h.destroy(); }
 });

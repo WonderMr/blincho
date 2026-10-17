@@ -655,7 +655,7 @@ export const App: React.FC = () => {
     todayStats: { date: todayStats.date, breaksCompleted: todayStats.breaksCompleted,
       exercisesCompleted: todayStats.exercisesCompleted, focusMinutes: todayStats.focusMinutes },
   }), async (command, isCurrent) => {
-    const currentCommand = () => mountedRef.current && isCurrent() && settingsRef.current.localMcpEnabled &&
+    const currentCommand = () => mountedRef.current && isCurrent() && settingsRef.current.localMcpEnabled && !cameraAbortRef.current &&
       command.timerVersion === session.version && command.breakEventId === breakIdRef.current;
     if (!currentCommand() || !await handlersRef.current.samplePresence() || !currentCommand() || !session.present || session.exercising) return;
     if (command.name === 'skip_break') {
