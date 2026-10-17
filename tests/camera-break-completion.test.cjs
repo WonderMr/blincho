@@ -31,21 +31,22 @@ test('leaving during a break checks camera at completion and locks exactly once'
   } finally { h.destroy(); }
 });
 
-test('scheduled break samples again when a person leaves after the initial camera check', async () => {
+test('scheduled break opens without camera access and samples only at its timed end', async () => {
   const h = createHarness({ cameraLockEnabled: true, timerPreset: 'custom', workMinutes: 1 / 60 });
   let checks = 0, locks = 0;
-  h.setCameraCheck(async () => ++checks === 1 ? 'present' : 'absent');
+  h.setCameraCheck(async () => { checks++; return 'absent'; });
   h.electronAPI.lockComputer = async () => { locks++; return true; };
   try {
     await h.settle();
     await h.advance(1000);
-    assert.equal(checks, 1);
+    assert.equal(checks, 0, 'work expiry cannot open the camera');
+    assert.equal(locks, 0);
     assert.equal(h.active.has('BreakOverlay'), true);
     const elapsed = h.captured.BreakOverlay.onElapsed;
     await h.advance(20_000);
     await elapsed(h.monotonicNow);
     await h.settle();
-    assert.equal(checks, 2);
+    assert.equal(checks, 1);
     assert.equal(locks, 1);
     assert.equal(h.captured.TimerWidget.phase, 'locked');
   } finally { h.destroy(); }

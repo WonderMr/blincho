@@ -534,7 +534,6 @@
   "Статус звонка неизвестен": "État de l’appel inconnu",
   "Определение звонков отключено": "Détection des appels désactivée",
   "Блокировать компьютер, если никого нет": "Verrouiller l’ordinateur si personne n’est présent",
-  "Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.": "Avant une pause et après sa fin, la caméra vérifie si une personne est présente. Si personne n’est détecté, l’ordinateur se verrouille. La vérification s’effectue sur l’appareil ; les images ne sont ni enregistrées ni envoyées. L’autorisation d’utiliser la caméra est requise. Si la caméra ou la vérification est indisponible, le verrouillage est ignoré. La caméra s’éteint après chaque vérification.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Disponible dans l’application de bureau avec prise en charge de la caméra. Le navigateur ne verrouille pas l’ordinateur.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "La caméra n’a détecté personne. L’ordinateur est verrouillé.",
   "Не удалось заблокировать компьютер.": "Impossible de verrouiller l’ordinateur.",
@@ -543,5 +542,19 @@
   "Доступ к камере разрешён.": "L’accès à la caméra est autorisé.",
   "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "L’accès à la caméra n’est pas autorisé. Autorisez-le dans les réglages du système, puis activez à nouveau cette option.",
   "Камера недоступна. Проверьте подключение и попробуйте снова.": "La caméra n’est pas disponible. Vérifiez sa connexion et réessayez.",
-  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Sur macOS : Réglages Système → Confidentialité et sécurité → Caméra."
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Sur macOS : Réglages Système → Confidentialité et sécurité → Caméra.",
+  "В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "À la fin d’une pause, la caméra vérifie si une personne est présente. Si personne n’est détecté, l’ordinateur se verrouille. La vérification s’effectue sur l’appareil ; les images ne sont ni enregistrées ni envoyées. L’autorisation d’utiliser la caméra est requise. Si la caméra ou la vérification est indisponible, le verrouillage est ignoré.",
+  "MCP доступен в настольном приложении.": "MCP est disponible dans l’application de bureau.",
+  "MCP не запущен.": "MCP n’est pas en cours d’exécution.",
+  "MCP работает: {url}": "MCP est en cours d’exécution : {url}",
+  "Копировать подключение": "Copier la connexion",
+  "Локальный MCP": "MCP local",
+  "Настройки подключения": "Paramètres de connexion",
+  "Настройки подключения скопированы.": "Paramètres de connexion copiés.",
+  "Не удалось запустить MCP. Попробуйте выключить и включить его снова.": "Impossible de démarrer MCP. Essayez de le désactiver puis de le réactiver.",
+  "Не удалось получить состояние MCP.": "Impossible de récupérer l’état de MCP.",
+  "Не удалось скопировать. Выделите настройки подключения ниже.": "Impossible de copier. Sélectionnez les paramètres de connexion ci-dessous.",
+  "Подключение AI-клиентов": "Connexion des clients IA",
+  "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Permet de consulter l’état, les paramètres et les bilans quotidiens, de démarrer une pause et de contrôler le minuteur. L’accès est limité à cet ordinateur et nécessite un jeton. La désactivation arrête le serveur.",
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Le jeton permet de contrôler Blincho. Il change à chaque réactivation de MCP."
 }

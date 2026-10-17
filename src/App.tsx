@@ -31,6 +31,7 @@ import { LanguageSuggestion } from './components/LanguageSuggestion';
 import { TransientNotice } from './components/TransientNotice';
 import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
+import { useLocalMcp } from './utils/localMcp';
 import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory } from './utils/tauriBridge';
 
 import {
@@ -98,7 +99,6 @@ export const App: React.FC = () => {
   const presenceInFlightRef = useRef<Promise<boolean> | null>(null);
   const presenceRefreshRef = useRef(false);
   const expiryInFlightRef = useRef(false);
-  const cameraCheckedVersionRef = useRef<number | null>(null);
   const cameraAbortRef = useRef<AbortController | null>(null);
   const cameraAccessPendingRef = useRef(false);
   const handleCameraAccessPendingChange = (pending: boolean) => {
@@ -427,10 +427,6 @@ export const App: React.FC = () => {
           return;
         }
       }
-      if (!cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled && window.electronAPI?.lockComputer && cameraCheckedVersionRef.current !== version) {
-        cameraCheckedVersionRef.current = version;
-        if (await checkCameraAndLock(version, true)) return;
-      }
       if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting) return;
       setInMeetingActive(false);
       if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"), t("Отведите взгляд от экрана и дайте глазам отдохнуть."));
@@ -649,6 +645,29 @@ export const App: React.FC = () => {
   };
   const handlersRef = useRef({ handleTriggerInstantBreak, handleTimerExpired, samplePresence, setPresenceReason, closeTechnique, handleCloseBreakOverlay, handleResetTimer, handleTogglePlay });
   handlersRef.current = { handleTriggerInstantBreak, handleTimerExpired, samplePresence, setPresenceReason, closeTechnique, handleCloseBreakOverlay, handleResetTimer, handleTogglePlay };
+
+  useLocalMcp(settings.localMcpEnabled, () => ({
+    status: { isRunning: session.counting, isBreakActive: session.breakActive, breakElapsed: false,
+      strictMode: settingsRef.current.strictMode, isIdlePaused: !session.present, exercising: session.exercising,
+      secondsRemaining: Math.ceil(session.remainingMs / 1000), presenceReasons: [...session.reasons],
+      cameraChecking: !!cameraAbortRef.current, timerVersion: session.version, breakEventId: breakIdRef.current },
+    settings: { ...settingsRef.current },
+    todayStats: { date: todayStats.date, breaksCompleted: todayStats.breaksCompleted,
+      exercisesCompleted: todayStats.exercisesCompleted, focusMinutes: todayStats.focusMinutes },
+  }), async (command, isCurrent) => {
+    const currentCommand = () => mountedRef.current && isCurrent() && settingsRef.current.localMcpEnabled && !cameraAbortRef.current &&
+      command.timerVersion === session.version && command.breakEventId === breakIdRef.current;
+    if (!currentCommand() || !await handlersRef.current.samplePresence() || !currentCommand() || !session.present || session.exercising) return;
+    if (command.name === 'skip_break') {
+      if (!settingsRef.current.strictMode && session.breakActive && !cameraAbortRef.current) {
+        await handlersRef.current.handleCloseBreakOverlay(command.breakEventId);
+      }
+      return;
+    }
+    if (session.breakActive) return;
+    if (command.name === 'start_break') beginBreak();
+    else if ((command.name === 'pause_timer' && !session.manualPaused) || (command.name === 'resume_timer' && session.manualPaused)) handlersRef.current.handleTogglePlay();
+  });
 
   useEffect(() => {
     soundSynth.enabled = settings.soundEnabled;

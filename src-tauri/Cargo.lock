@@ -312,11 +312,12 @@ dependencies = [
 
 [[package]]
 name = "blincho"
-version = "1.8.13"
+version = "1.8.14"
 dependencies = [
  "cc",
  "chrono",
  "dirs 6.0.0",
+ "getrandom 0.3.4",
  "leveldb-sys",
  "libc",
  "regex",

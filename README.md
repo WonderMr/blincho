@@ -10,7 +10,7 @@ Website: https://blincho.app
 
 - Reminds you to take short breaks and supports configurable work/break intervals.
 - Pauses timing when you are away, the screen locks or the computer sleeps.
-- Can check for a person with the camera before a break and after it finishes, locking the computer if no one is detected. Disabled by default. Enabling it in desktop Settings immediately checks camera access and requests permission when needed. Denied or unavailable access leaves the setting off. Frames are processed locally, never saved or uploaded. The camera turns off after each check. An unavailable check skips locking and preserves normal timer behavior.
+- Can check for a person with the camera after a timed break finishes, locking the computer if no one is detected. Disabled by default. Enabling it in desktop Settings immediately checks camera access and requests permission when needed. Denied or unavailable access leaves the setting off. Frames are processed locally, never saved or uploaded. The camera turns off after each check. An unavailable check skips locking and preserves normal timer behavior.
 - Keeps the desktop timer running in Rust when the window is hidden or minimized.
 - When call postponement is enabled, detected calls delay automatic breaks by five minutes, including in strict mode. Blincho checks again at the next deadline; strict break behavior resumes when the call is no longer detected.
 - Restores the window on its previous monitor after lock or sleep, keeping hidden and minimized windows in the background. If that monitor is disconnected, the window returns to an available screen.
@@ -40,6 +40,22 @@ npm start
 On macOS, run `npm run tauri:test` for Rust and history migration checks, `npm run tauri:build:mac` to build `release/tauri-macos/Blincho.app`, or `npm run tauri:test:mac` for an isolated native smoke test. Install Blincho in `/Applications` before using its login startup feature so the registered executable has a stable path. Windows and Linux builds use `npm run tauri:build:win` and `npm run tauri:build:linux`.
 
 Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at several window sizes, through resize/restore and across all five pages in all 30 languages at three widths. It verifies that Settings and sound share a row whenever they fit, translated controls remain unclipped, and statistics fit the content pane. It uses synthetic settings and a separate WebKit profile. The document and titlebar stay fixed; long page content and sidebar controls retain their own scrolling. AppKit can clamp requested dimensions to the screen's available work area. The reopen check reports a skip when macOS cannot confirm presence, while the viewport checks still run.
+
+## Local MCP
+
+Desktop settings include an optional **Local MCP** switch, off by default. Turn it on to connect a local AI client, then choose **Copy connection** for the server URL and Bearer token in MCP JSON format. The listener binds only to `127.0.0.1`, prefers port `47831`, and uses a free local port if that port is occupied. Disabling the switch closes the listener and discards pending commands. Re-enabling or restarting changes the token, so copy the connection again.
+
+The stateless Streamable HTTP endpoint supports `get_status`, `get_settings`, `get_today_stats`, `start_break`, `pause_timer`, `resume_timer` and `skip_break`. Actions are queued requests, then checked against the current app state. They respect presence checks, active exercises, pending camera checks and strict breaks. Poll `get_status` to observe the result. Only settings and today's aggregate totals are shared; activity/call history, journal answers and camera frames are excluded. Browser access is not supported.
+
+In Codex, use the copied URL in an HTTP MCP entry and provide the token through an environment variable:
+
+```toml
+[mcp_servers.blincho]
+url = "http://127.0.0.1:47831/mcp"
+bearer_token_env_var = "BLINCHO_MCP_TOKEN"
+```
+
+Use the actual URL shown by Blincho when its port differs. Keep the token private. See the [MCP transport specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) and [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
 ## Website
 

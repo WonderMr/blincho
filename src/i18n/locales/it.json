@@ -534,7 +534,6 @@
   "Статус звонка неизвестен": "Stato della chiamata sconosciuto",
   "Определение звонков отключено": "Rilevamento chiamate disattivato",
   "Блокировать компьютер, если никого нет": "Blocca il computer se non c’è nessuno",
-  "Перед перерывом и после его завершения камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается. После каждой проверки камера выключается.": "Prima di una pausa e al suo termine, la fotocamera verifica se è presente una persona. Se non rileva nessuno, il computer si blocca. La verifica avviene sul dispositivo; le immagini non vengono salvate né inviate. È necessaria l’autorizzazione per la fotocamera. Se la fotocamera o la verifica non sono disponibili, il blocco viene saltato. La fotocamera si spegne dopo ogni verifica.",
   "Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.": "Disponibile nell’app desktop con supporto per la fotocamera. Il browser non blocca il computer.",
   "Камера не обнаружила человека. Компьютер заблокирован.": "La fotocamera non ha rilevato nessuna persona. Il computer è bloccato.",
   "Не удалось заблокировать компьютер.": "Impossibile bloccare il computer.",
@@ -543,5 +542,19 @@
   "Доступ к камере разрешён.": "L’accesso alla fotocamera è consentito.",
   "Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.": "L’accesso alla fotocamera non è consentito. Consentilo nelle impostazioni di sistema, poi attiva di nuovo questa opzione.",
   "Камера недоступна. Проверьте подключение и попробуйте снова.": "La fotocamera non è disponibile. Controlla il collegamento e riprova.",
-  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Su macOS: Impostazioni di Sistema → Privacy e sicurezza → Fotocamera."
+  "На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.": "Su macOS: Impostazioni di Sistema → Privacy e sicurezza → Fotocamera.",
+  "В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.": "Al termine di una pausa, la fotocamera verifica se è presente una persona. Se non rileva nessuno, il computer si blocca. La verifica avviene sul dispositivo; le immagini non vengono salvate né inviate. È necessaria l’autorizzazione per la fotocamera. Se la fotocamera o la verifica non sono disponibili, il blocco viene saltato.",
+  "MCP доступен в настольном приложении.": "MCP è disponibile nell’app desktop.",
+  "MCP не запущен.": "MCP non è in esecuzione.",
+  "MCP работает: {url}": "MCP è in esecuzione: {url}",
+  "Копировать подключение": "Copia connessione",
+  "Локальный MCP": "MCP locale",
+  "Настройки подключения": "Impostazioni di connessione",
+  "Настройки подключения скопированы.": "Impostazioni di connessione copiate.",
+  "Не удалось запустить MCP. Попробуйте выключить и включить его снова.": "Impossibile avviare MCP. Prova a disattivarlo e riattivarlo.",
+  "Не удалось получить состояние MCP.": "Impossibile ottenere lo stato di MCP.",
+  "Не удалось скопировать. Выделите настройки подключения ниже.": "Impossibile copiare. Seleziona le impostazioni di connessione qui sotto.",
+  "Подключение AI-клиентов": "Connessione dei client IA",
+  "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Consente di leggere lo stato, le impostazioni e i riepiloghi giornalieri, avviare una pausa e controllare il timer. L’accesso è consentito solo da questo computer e richiede un token. La disattivazione arresta il server.",
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Il token consente di controllare Blincho. Cambia ogni volta che MCP viene riattivato."
 }

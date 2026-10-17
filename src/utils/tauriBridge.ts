@@ -118,6 +118,10 @@ async function installTauriBridge(): Promise<void> {
     isElectron: true, // Compatibility adapter for the existing shared UI and desktop detection.
     platform: info.platform,
     meetingDetectionSupported: info.meetingDetectionSupported,
+    configureLocalMcp: enabled => api.core.invoke('local_mcp_configure', { enabled }),
+    getLocalMcpState: () => api.core.invoke('local_mcp_status'),
+    publishLocalMcp: snapshot => api.core.invoke('local_mcp_publish', { snapshot }),
+    takeLocalMcpCommands: () => api.core.invoke('local_mcp_take_commands'),
     checkMeetingActive: () => api.core.invoke('check_meeting_active'),
     requestNotificationPermission: () => api.core.invoke<boolean>('notification_permission'),
     showNotification: (title, body) => { void api.core.invoke('notification_send', {title, body}).catch(error => console.warn('Blincho: Notification failed:', error)); },
