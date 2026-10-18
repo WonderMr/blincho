@@ -129,3 +129,12 @@ is needs_summary, complete it through write_repo_summary with the unchanged repo
 workspace_id after checking the sources, provided memory writes are permitted. Before replacing
 large historical memory, save a complete copy in the existing recovery directory. After writing,
 verify the up-to-date status and preservation of unmanaged sections.
+
+## Pull request workflow entry
+
+When asked to review or merge a pull request, discover the matching workflow with
+`list_flows(workspace=<absolute path>)` and call `run_flow` for `builtin:pr-review`
+with the target URL, current persona and user constraints before remote merge
+mutations. Apply the returned persona activation. If the flow is unavailable,
+report that limitation and perform the required checks directly without claiming
+that the flow ran.
