@@ -119,6 +119,26 @@ const samePosition = (value, expected) => Math.abs(value.position.x - expected.x
   };
   assert(originalFrame(placed), 'The baseline must be a normal, nonminimized frame');
 
+  const overhang = { x: target.workArea.position.x - 40, y: desired.y, scale: target.scaleFactor };
+  await control('move', overhang);
+  await until(value => value.visible && samePosition(value, overhang));
+  await sleep(600);
+  await control('power-event', { code: 3 });
+  await until(value => value.timer.locked && value.visible);
+  await control('power-event', { code: 4 });
+  await until(value => !value.timer.locked && value.visible);
+  const stableUntil = Date.now() + 1500;
+  while (Date.now() < stableUntil) {
+    const value = read();
+    assert(samePosition(value, overhang), 'An unchanged monitor must retain the partly offscreen frame after wake');
+    assert.deepEqual(value.size, originalSize);
+    await sleep(100);
+  }
+  await control('move', desired);
+  await until(value => value.visible && originalFrame(value));
+  await sleep(600);
+  console.log('PASS: a partly offscreen frame does not snap into the work area after modeled lock/unlock.');
+
   await control('hide');
   await until(value => !value.visible && !value.focused);
   await control('power-event', { code: 3 });
@@ -264,7 +284,7 @@ const samePosition = (value, expected) => Math.abs(value.position.x - expected.x
   console.log('PASS: a rejected tray break during an exercise cannot replace a later lock snapshot.');
 
   const result = { status: 'passed', platform: process.platform, monitors: initial.monitors.length,
-    checks: ['native error response correlation', 'tray visibility and focus', 'monitor placement and size', 'hidden overlapping lock and sleep', 'visible overlapping lock and sleep', 'visible resume', 'explicit hide during restoration', 'minimized resume and manual reopen', 'interrupted fullscreen restoration', 'hidden maximized window and normal frame', 'ignored tray break during exercise', 'bounded successful child exit'],
+    checks: ['native error response correlation', 'partly offscreen stable resume', 'tray visibility and focus', 'monitor placement and size', 'hidden overlapping lock and sleep', 'visible overlapping lock and sleep', 'visible resume', 'explicit hide during restoration', 'minimized resume and manual reopen', 'interrupted fullscreen restoration', 'hidden maximized window and normal frame', 'ignored tray break during exercise', 'bounded successful child exit'],
     profile: directory, presence: 'modeled power events; physical lock, sleep and cable disconnection are not tested' };
   try { await control('quit'); } catch (error) {
     // Some native loops exit before their response file can be written. Only

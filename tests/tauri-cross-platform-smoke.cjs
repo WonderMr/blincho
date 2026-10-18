@@ -89,6 +89,41 @@ async function until(predicate, timeout = 30_000) {
   }
   throw new Error(`Native smoke timed out: ${JSON.stringify(last)}`);
 }
+// Native diagnostics are sampled before window queries and published separately
+// from control responses. Require observed progress, not one fixed-delay read.
+async function hiddenTimerProgress(expectedVersion) {
+  const baseline = await until(value => value.visible === false && value.timer.version === expectedVersion);
+  const started = Date.now();
+  let last = baseline;
+  const assertRunning = value => {
+    assert.equal(value.visible, false, 'Timer observation remains hidden');
+    assert.equal(value.timer.version, expectedVersion, 'Timer generation remains unchanged');
+    assert.equal(value.timer.totalMs, baseline.timer.totalMs);
+    assert.equal(value.timer.manualPaused, false);
+    assert.equal(value.timer.breakActive, false);
+    assert.equal(value.timer.exercising, false);
+    assert.equal(value.timer.locked, false);
+    assert.equal(value.timer.suspended, false);
+    assert.deepEqual(value.timer.reasons, []);
+  };
+  try {
+    assertRunning(baseline);
+    return await until(value => {
+      last = value;
+      assertRunning(value);
+      return value.timer.tickCount > baseline.timer.tickCount &&
+        baseline.timer.remainingMs - value.timer.remainingMs >= 1000;
+    }, 5000);
+  } catch (error) {
+    error.message += '\nHidden timer observation: ' + JSON.stringify({
+      baseline: { visible: baseline.visible, timer: baseline.timer },
+      last: { visible: last.visible, timer: last.timer },
+      tickDelta: last.timer.tickCount - baseline.timer.tickCount,
+      elapsedMs: Date.now() - started,
+    });
+    throw error;
+  }
+}
 async function control(operation, args = {}) {
   const id = ++sequence;
   const response = path.join(directory, 'response.json');
@@ -144,11 +179,7 @@ async function stop() {
   const input = { totalMs: 10_000, remainingMs: 10_000, manualPaused: false, breakActive: false, exercising: false, expiryPending: false, version: read().timer.version + 1, breakSeconds, strictMode: false, idleEnabled: false, idleThresholdSeconds: 60, autoTakeover: true };
   await control('configure', { input });
   await control('hide');
-  const hidden = await until(value => value.visible === false);
-  await sleep(1500);
-  const progressed = read();
-  assert.equal(progressed.visible, false);
-  assert.ok(hidden.timer.remainingMs - progressed.timer.remainingMs >= 1000);
+  await hiddenTimerProgress(input.version);
   await until(value => value.visible && value.timer.breakActive, 15_000);
   const overlay = await inspectRenderer();
   assert.equal(overlay.renderer.dialog, true);
@@ -176,10 +207,7 @@ async function stop() {
     assert.equal(restart.focused, false);
     assert.deepEqual(restart.position, initial.position, 'hidden WebView warmup restores the window position');
   }
-  await sleep(1500);
-  const loginProgress = read();
-  assert.equal(loginProgress.visible, false);
-  assert.ok(restart.timer.remainingMs - loginProgress.timer.remainingMs >= 1000);
+  await hiddenTimerProgress(restart.timer.version);
   const persisted = await inspectRenderer();
   assert.equal(persisted.renderer.stats.find(day => day.date === '2026-10-11').breaksCompleted, 7);
   await control('show');
