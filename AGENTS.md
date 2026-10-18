@@ -4,7 +4,7 @@ Blincho is a free, open-source screen-break reminder for macOS, Windows and Linu
 presence and lock/sleep detection, call postponement, exercises, a comfort journal and local
 statistics in 30 languages. Desktop apps use Tauri 2 with Rust and the system WebView; the same
 React + TypeScript UI also builds as a browser app, and `site/` generates the website
-https://blincho.app. Version 1.8.14, under active development.
+https://blincho.app. Version 1.8.15, under active development.
 User-facing overview: `README.md`; release pipeline: `RELEASE.md`.
 
 ## User-facing text style
