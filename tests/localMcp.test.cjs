@@ -30,7 +30,7 @@ test('local MCP is off by default, initializes and lists only bounded app tools'
     assert.deepEqual(initialized.body.result.capabilities, { tools: {} });
     assert.equal((await request(state, { jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
     const list = (await request(state, rpc('tools/list'))).body.result.tools;
-    assert.deepEqual(list.map(tool => tool.name), ['get_status', 'get_settings', 'get_today_stats', 'start_break', 'pause_timer', 'resume_timer', 'skip_break']);
+    assert.deepEqual(list.map(tool => tool.name), ['get_status', 'get_settings', 'get_today_stats', 'get_data_range', 'get_stats', 'start_break', 'pause_timer', 'resume_timer', 'skip_break']);
     assert(list.every(tool => tool.inputSchema.additionalProperties === false));
     server.publish(snapshot());
     const stats = (await request(state, call('get_today_stats'))).body.result;
@@ -57,6 +57,40 @@ test('auth, origin, host, protocol and HTTP boundaries reject unwanted access', 
     assert.equal((await request(state, rpc('tools/call', { name: 'start_break', arguments: { shell: 'command' } }))).body.error.code, -32602);
     const huge = await request(state, null, {}, 'POST', JSON.stringify({ padding: 'x'.repeat(70000) }));
     assert.equal(huge.status, 413);
+  } finally { await server.shutdown(); }
+});
+
+test('historical MCP tools validate range arguments, paginate aggregates and keep large histories available', async () => {
+  let now = 1000;
+  const server = createLocalMcp({ preferredPort: 0, now: () => now });
+  const days = Array.from({ length: 1000 }, (_, index) => ({ date: new Date(Date.UTC(2020, 0, index + 1)).toISOString().slice(0, 10),
+    breaksCompleted: 1, exercisesCompleted: 0, focusMinutes: 30, workMinutes: 20,
+    awayMinutes: 5, pauseMinutes: 0, restMinutes: 1, recordedMinutes: 26 }));
+  const value = { ...snapshot(), stats: { timeZone: 'Europe/Madrid', activityStartDate: days[20].date, days } };
+  const read = async (state, name, args = {}) => (await request(state, rpc('tools/call', { name, arguments: args }))).body;
+  try {
+    const state = await server.configure(true);
+    assert.equal((await read(state, 'get_stats')).result.isError, true);
+    server.publish(snapshot());
+    assert.equal((await read(state, 'get_data_range')).result.isError, true, 'Missing aggregate history is unavailable');
+    assert(Buffer.byteLength(JSON.stringify(value)) > 32768);
+    server.publish(value);
+    const range = JSON.parse((await read(state, 'get_data_range')).result.content[0].text);
+    assert.equal(range.dataStartDate, '2020-01-01'); assert.equal(range.recordedDays, 1000);
+    assert.equal(range.activityStartDate, days[20].date);
+    const result = JSON.parse((await read(state, 'get_stats', { startDate: '2020-01-01', endDate: '2020-01-14', groupBy: 'week', limit: 1 })).result.content[0].text);
+    assert.equal(result.totals.focusMinutes, 420); assert.equal(result.recordedDays, 14);
+    assert.equal(result.totalPeriods, 3); assert.equal(result.hasMore, true);
+    assert.equal(result.periods[0].endDate, '2020-01-05');
+    for (const args of [null, { startDate: '2020-02-30' }, { groupBy: 'month' }, { limit: 0 },
+      { startDate: '2021-01-02', endDate: '2020-01-01' }, { startDate: '2029-01-01' }, { activity: true }])
+      assert.equal((await read(state, 'get_stats', args)).error.code, -32602);
+    assert.equal((await read(state, 'get_data_range', { startDate: '2020-01-01' })).error.code, -32602);
+    assert.equal(server.takeCommands().length, 0);
+    assert.equal((await read(state, 'get_status')).result.isError, undefined, 'Large history must not stop timer snapshots');
+    now += 10001;
+    assert.equal((await read(state, 'get_stats')).result.isError, true);
+    assert.equal((await read(state, 'get_data_range')).result.isError, true);
   } finally { await server.shutdown(); }
 });
 
@@ -121,6 +155,8 @@ test('MCP app bridge preserves work deadline and routes commands through normal 
     queued = [command('resume_timer')]; await h.advance(1000); assert.equal(h.captured.TimerWidget.phase, 'work');
     queued = [command('start_break')]; await h.advance(1000); assert.equal(h.active.has('BreakOverlay'), true);
     assert.equal(latest.todayStats.meetings, undefined); assert.equal(latest.todayStats.activity, undefined);
+    assert(latest.stats.days.length > 0);
+    assert(latest.stats.days.every(day => day.activity === undefined && day.meetings === undefined && day.completedEventIds === undefined));
     queued = [command('skip_break')]; await h.advance(1000); assert.equal(h.active.has('BreakOverlay'), false);
     await h.call('SettingsModal', 'onUpdateSettings', { ...h.captured.SettingsModal.settings, localMcpEnabled: false });
     assert.equal(enabled, false); assert.equal(configurations.at(-1), false);

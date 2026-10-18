@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Manager, PhysicalPosition, PhysicalSize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Display {
     name: Option<String>,
     position: PhysicalPosition<i32>,
@@ -93,6 +93,11 @@ impl Placement {
 
     fn restored_bounds(&self, displays: &[Display]) -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
         let matched = self.matching_display(displays);
+        if matched.is_some() && matched == self.display.as_ref() {
+            // A user can deliberately leave part of the frame offscreen or
+            // across displays. Only a changed desktop needs recovery clamping.
+            return (self.position, self.inner_size);
+        }
         let Some(target) = self.target_display(displays) else {
             return (self.position, self.inner_size);
         };
@@ -718,6 +723,40 @@ mod tests {
         assert_eq!(
             saved.restored_bounds(&[display("main", 0, 1.), display("external", -1920, 1.)]),
             (saved.position, saved.inner_size)
+        );
+    }
+    #[test]
+    fn unchanged_display_preserves_partly_offscreen_and_spanning_placement() {
+        for x in [-2000, -800] {
+            let mut saved = placement();
+            saved.position.x = x;
+            assert_eq!(
+                saved.restored_bounds(&[display("external", -1920, 1.), display("main", 0, 1.)]),
+                (saved.position, saved.inner_size),
+                "An unchanged desktop must preserve the user's chosen frame"
+            );
+        }
+    }
+    #[test]
+    fn unchanged_display_preserves_a_window_larger_than_its_work_area() {
+        let mut saved = placement();
+        saved.inner_size.width = 2200;
+        saved.outer_size.width = 2200;
+        assert_eq!(
+            saved.restored_bounds(&[display("external", -1920, 1.)]),
+            (saved.position, saved.inner_size)
+        );
+    }
+    #[test]
+    fn smaller_display_still_moves_the_saved_title_bar_into_reach() {
+        let mut saved = placement();
+        saved.position.x = -800;
+        let mut smaller = display("external", -1920, 1.);
+        smaller.size.width = 1280;
+        smaller.work_size.width = 1280;
+        assert_eq!(
+            saved.restored_bounds(&[smaller]),
+            (PhysicalPosition::new(-1680, 100), saved.inner_size)
         );
     }
     #[test]

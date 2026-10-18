@@ -2,6 +2,18 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.8.15]
+
+### Added
+
+- Query local MCP statistics for individual days, calendar weeks or inclusive date ranges. Paginated daily and weekly summaries include focus, breaks, exercises and observed work, absence, pause and rest time.
+- Read the first and last saved statistics dates, the device time zone and the start of detailed activity observations. Missing dates remain visible as gaps, and totals cover the full requested range.
+
+### Fixed
+
+- Preserve the exact window position and size after a lock, sleep or break when the display is unchanged, including windows placed partly outside the work area or across screens.
+- Keep local MCP snapshots available for long daily histories while retaining bounded HTTP requests and excluding detailed activity, call names, journal answers and camera frames.
+
 ## [1.8.14]
 
 ### Added

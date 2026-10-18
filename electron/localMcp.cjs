@@ -1,20 +1,24 @@
 const http = require('node:http');
 const { randomBytes, timingSafeEqual } = require('node:crypto');
+const { statsInputSchema, validStatsArguments, dataRange, queryStats } = require('./mcpStats.cjs');
 
 const PROTOCOLS = ['2025-03-26', '2025-06-18', '2025-11-25'];
 const READ_TOOLS = { get_status: 'status', get_settings: 'settings', get_today_stats: 'todayStats' };
+const isReadTool = name => Object.hasOwn(READ_TOOLS, name) || name === 'get_stats' || name === 'get_data_range';
 const descriptions = {
   get_status: 'Read the current Blincho timer and presence state.',
   get_settings: 'Read Blincho settings. Does not expose credentials.',
   get_today_stats: 'Read aggregate totals for today, without activity or call history.',
+  get_data_range: 'Read the first and last saved local dates and the first date of detailed activity observations.',
+  get_stats: 'Read daily or Monday-based weekly aggregates for an inclusive local date range. Missing dates have no records. Totals cover the full range; periods are paginated.',
   start_break: 'Request a break using the normal app controls.',
   pause_timer: 'Request pausing the work timer. Not available during a break or exercise.',
   resume_timer: 'Request resuming the work timer. Presence checks still apply.',
   skip_break: 'Request closing a break. Cannot bypass strict mode or a pending presence check.',
 };
 const tools = Object.entries(descriptions).map(([name, description]) => ({ name, description,
-  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  annotations: { readOnlyHint: name in READ_TOOLS, destructiveHint: false, idempotentHint: name in READ_TOOLS, openWorldHint: false } }));
+  inputSchema: name === 'get_stats' ? statsInputSchema : { type: 'object', properties: {}, additionalProperties: false },
+  annotations: { readOnlyHint: isReadTool(name), destructiveHint: false, idempotentHint: isReadTool(name), openWorldHint: false } }));
 const toolResult = (value, isError = false) => ({ content: [{ type: 'text', text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) });
 
 function createLocalMcp({ preferredPort = 47831, now = Date.now } = {}) {
@@ -38,11 +42,16 @@ function createLocalMcp({ preferredPort = 47831, now = Date.now } = {}) {
       case 'ping': result = {}; break;
       case 'tools/list': result = { tools }; break;
       case 'tools/call': {
-        const name = message.params?.name, args = message.params?.arguments;
+        const name = message.params?.name, args = message.params?.arguments === undefined ? {} : message.params.arguments;
         if (!Object.hasOwn(descriptions, name)) return fail(-32602, 'Unknown tool');
-        if (args !== undefined && (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).length)) return fail(-32602, 'Tool accepts no arguments');
+        if (name === 'get_stats' ? !validStatsArguments(args) : (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).length)) return fail(-32602, 'Invalid tool arguments');
         if (!snapshot || now() - publishedAt > 10000) { result = toolResult({ error: 'App state is unavailable. Open Blincho and retry.' }, true); break; }
-        if (Object.hasOwn(READ_TOOLS, name)) result = toolResult(snapshot[READ_TOOLS[name]] ?? {});
+        if (name === 'get_data_range' || name === 'get_stats') {
+          const range = dataRange(snapshot.stats);
+          const value = range ? (name === 'get_data_range' ? range : queryStats(snapshot.stats, args, range)) : { error: 'Statistics are not available yet.' };
+          if (value.invalidArguments) return fail(-32602, 'startDate must not be after endDate');
+          result = toolResult(value, !!value.error);
+        } else if (Object.hasOwn(READ_TOOLS, name)) result = toolResult(snapshot[READ_TOOLS[name]] ?? {});
         else {
           const current = snapshot.status ?? {};
           if (!Number.isSafeInteger(current.timerVersion) || current.timerVersion < 0 ||
@@ -129,7 +138,7 @@ function createLocalMcp({ preferredPort = 47831, now = Date.now } = {}) {
   }
   return { configure, state, publish(value) {
     if (!enabled || !server?.listening) return;
-    if (!value || typeof value !== 'object' || JSON.stringify(value).length > 32768) throw new TypeError('Invalid MCP snapshot');
+    if (!value || typeof value !== 'object' || Buffer.byteLength(JSON.stringify(value)) > 4 * 1024 * 1024) throw new TypeError('Invalid MCP snapshot');
     snapshot = JSON.parse(JSON.stringify(value)); publishedAt = now();
   }, takeCommands() {
     const result = enabled && server?.listening ? commands.filter(command => now() - command.at <= 5000)

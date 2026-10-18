@@ -11,6 +11,14 @@ fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date
   myeyes_settings_v1: JSON.stringify({ localMcpEnabled: false, cameraLockEnabled: false, idleDetectionEnabled: false,
     meetingDetectionEnabled: false, soundEnabled: false, notificationsEnabled: false, strictMode: false }),
   'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
+  myeyes_stats_v1: JSON.stringify([
+    { date: '2020-01-01', breaksCompleted: 1, exercisesCompleted: 0, focusMinutes: 60 },
+    { date: '2020-01-06', breaksCompleted: 2, exercisesCompleted: 1, focusMinutes: 30,
+      activity: [{ start: new Date('2020-01-06T09:00:00').getTime(), end: new Date('2020-01-06T10:00:00').getTime(), state: 'work' }],
+      meetings: [{ start: new Date('2020-01-06T09:00:00').getTime(), end: new Date('2020-01-06T09:30:00').getTime(), app: 'private-call' }] },
+    { date: '2020-01-08', breaksCompleted: 0, exercisesCompleted: 0, focusMinutes: 45 },
+    { date: '2020-01-13', breaksCompleted: 0, exercisesCompleted: 0, focusMinutes: 15 },
+  ]),
 } }));
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.resolve(__dirname, '../src-tauri/target',
   ...(process.env.RUST_TARGET ? [process.env.RUST_TARGET] : []), 'debug', process.platform === 'win32' ? 'blincho.exe' : 'blincho');
@@ -66,6 +74,27 @@ async function main() {
     assert.equal(typeof JSON.parse(ready.result.content[0].text).secondsRemaining, 'number');
     const totals = await rpc(state, 'tools/call', { name: 'get_today_stats', arguments: {} });
     assert.deepEqual(Object.keys(JSON.parse(totals.result.content[0].text)).sort(), ['breaksCompleted', 'date', 'exercisesCompleted', 'focusMinutes']);
+    const query = async (name, args = {}) => {
+      const value = await rpc(state, 'tools/call', { name, arguments: args });
+      assert.equal(value.result?.isError, undefined, JSON.stringify(value));
+      return JSON.parse(value.result.content[0].text);
+    };
+    const range = await query('get_data_range');
+    assert.equal(range.dataStartDate, '2020-01-01'); assert.equal(range.activityStartDate, '2020-01-06');
+    assert.equal(typeof range.timeZone, 'string');
+    const historical = { startDate: '2020-01-01', endDate: '2020-01-13' };
+    const days = await query('get_stats', historical);
+    assert.equal(days.recordedDays, 4); assert.equal(days.calendarDays, 13);
+    assert.equal(days.totals.focusMinutes, 150); assert.equal(days.totals.workMinutes, 60);
+    assert.equal(JSON.stringify(days).includes('private-call'), false);
+    assert.deepEqual(days.periods.map(period => period.startDate), ['2020-01-01', '2020-01-06', '2020-01-08', '2020-01-13']);
+    const weeks = await query('get_stats', { ...historical, groupBy: 'week', offset: 1, limit: 1 });
+    assert.equal(weeks.totalPeriods, 3); assert.equal(weeks.hasMore, true);
+    assert.equal(weeks.periods[0].startDate, '2020-01-06'); assert.equal(weeks.periods[0].endDate, '2020-01-12');
+    assert.equal(weeks.totals.focusMinutes, 150);
+    const single = await query('get_stats', { startDate: '2020-01-08', endDate: '2020-01-08' });
+    assert.equal(single.totals.focusMinutes, 45);
+    assert.equal((await rpc(state, 'tools/call', { name: 'get_stats', arguments: { startDate: '2020-02-30' } })).error.code, -32602);
     const readStatus = async () => {
       const value = await rpc(state, 'tools/call', { name: 'get_status', arguments: {} });
       assert.equal(value.result.isError, undefined); return JSON.parse(value.result.content[0].text);
@@ -82,7 +111,7 @@ async function main() {
     await evaluate(`new Promise(resolve=>{const check=async()=>{const state=await window.electronAPI.getLocalMcpState();if(!state.running)resolve(true);else setTimeout(check,50);};check();})`);
     await assert.rejects(rpc(state, 'ping', {}), /ECONNREFUSED|socket hang up/);
     assert.equal(await evaluate(`JSON.parse(localStorage.getItem('myeyes_settings_v1')).localMcpEnabled`), false);
-    console.log('PASS: native settings toggle, local MCP initialize/status/totals/actions, credential bridge, unclipped section, persisted disable and closed listener.');
+    console.log('PASS: native settings toggle, MCP date boundaries/day/week/range/pagination/privacy, timer actions, credential bridge, unclipped section, persisted disable and closed listener.');
   } finally {
     if (child.exitCode === null) { try { await control('quit'); } catch { child.kill('SIGTERM'); } }
     await Promise.race([new Promise(resolve => child.once('exit', resolve)), sleep(1000)]);

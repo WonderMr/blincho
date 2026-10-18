@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { AppSettings, DayStats } from '../types';
+import type { McpStats } from './mcpStats';
 
 export interface LocalMcpState {
   enabled: boolean;
@@ -14,6 +15,7 @@ export interface LocalMcpSnapshot {
     timerVersion: number; breakEventId: string | null };
   settings: AppSettings;
   todayStats: Pick<DayStats, 'date' | 'breaksCompleted' | 'exercisesCompleted' | 'focusMinutes'>;
+  stats: McpStats;
 }
 export interface LocalMcpCommand { name: string; timerVersion: number; breakEventId: string | null }
 export interface LocalMcpBridge {

@@ -1,7 +1,7 @@
 import { useI18n } from './i18n/useI18n';
 import { watchAppearance } from './utils/appearance';
 import { t, getLocale, formatNumber } from './i18n/runtime';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   AppSettings, DayStats, ExerciseTechnique, CVSSurveyResult, TimerPreset, ActivitySpan, MeetingSpan
 } from './types';
@@ -32,6 +32,7 @@ import { TransientNotice } from './components/TransientNotice';
 import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
 import { useLocalMcp } from './utils/localMcp';
+import { buildMcpStats } from './utils/mcpStats';
 import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory } from './utils/tauriBridge';
 
 import {
@@ -45,6 +46,7 @@ export const App: React.FC = () => {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const [allStats, setAllStats] = useState<DayStats[]>(loadAllStats);
+  const mcpStats = useMemo(() => settings.localMcpEnabled ? buildMcpStats(allStats) : null, [allStats, settings.localMcpEnabled]);
   const [todayStats, setTodayStats] = useState<DayStats>(() => loadTodayStats(allStats));
   const [cvsResult, setCvsResult] = useState<CVSSurveyResult | null>(loadCVSResult);
   const [activeTab, setActiveTab] = useState<ActiveTab>('timer');
@@ -654,6 +656,7 @@ export const App: React.FC = () => {
     settings: { ...settingsRef.current },
     todayStats: { date: todayStats.date, breaksCompleted: todayStats.breaksCompleted,
       exercisesCompleted: todayStats.exercisesCompleted, focusMinutes: todayStats.focusMinutes },
+    stats: mcpStats!,
   }), async (command, isCurrent) => {
     const currentCommand = () => mountedRef.current && isCurrent() && settingsRef.current.localMcpEnabled && !cameraAbortRef.current &&
       command.timerVersion === session.version && command.breakEventId === breakIdRef.current;
