@@ -156,8 +156,14 @@ h1 { margin-block: 24px; font-size: clamp(55px, 5.8vw, 82px); line-height: 1.035
 .rhythm-steps h3 { font-size: 18px; padding-block-start: 4px; }
 .rhythm-steps p { color: var(--muted); font-size: 13px; line-height: 1.8; margin-block-start: 10px; }
 .features-section { background: var(--surface-soft); border-block: 1px solid var(--line); }
-.features-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; margin-block-start: 52px; }
+.features-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 44px 28px; margin-block-start: 52px; }
 .feature { min-width: 0; }
+.feature-symbol { display: grid; place-items: center; height: 176px; border-radius: 12px; }
+.feature-symbol svg { width: 78px; height: 78px; stroke-width: 1.5; }
+.calls-art { background: #f2dfcf; color: #815b40; }
+.tray-art { background: #d6eae1; color: #337457; }
+.camera-art { background: #e4e1ef; color: #74658f; }
+.mcp-art { background: #dbe7ec; color: #416777; }
 .feature-copy { padding-block-start: 23px; }
 .feature h3 { font-size: 19px; }
 .feature p { color: var(--muted); font-size: 13px; line-height: 1.8; margin-block-start: 11px; }
@@ -286,7 +292,7 @@ h1 { margin-block: 24px; font-size: clamp(55px, 5.8vw, 82px); line-height: 1.035
   .rhythm-steps p { font-size: 12px; }
   .features-grid { grid-template-columns: repeat(2, 1fr); gap: 35px 26px; }
   .feature h3 { font-size: 20px; }
-  .landscape-art, .bars-art, .theme-art, .language-art { height: 190px; }
+  .landscape-art, .bars-art, .theme-art, .language-art, .feature-symbol { height: 190px; }
   .bars-art { gap: 15px; }
   .theme-disc { width: 100px; height: 100px; }
   .downloads-grid { gap: 13px; }
@@ -340,8 +346,8 @@ h1 { margin-block: 24px; font-size: clamp(55px, 5.8vw, 82px); line-height: 1.035
   .rhythm-steps li:not(:last-child)::after { display: block; inset-inline-start: 24px; inset-block-start: 59px; }
   .rhythm-steps h3 { font-size: 17px; }
   .rhythm-steps p { font-size: 13px; }
-  .features-grid { margin-block-start: 35px; gap: 32px 18px; }
-  .landscape-art, .bars-art, .theme-art, .language-art { height: 150px; }
+  .features-grid { grid-template-columns: 1fr; margin-block-start: 35px; gap: 32px; }
+  .landscape-art, .bars-art, .theme-art, .language-art, .feature-symbol { height: 150px; }
   .feature-copy { padding-block-start: 18px; }
   .feature h3 { font-size: 17px; line-height: 1.35; }
   .feature p { font-size: 12px; margin-block-start: 8px; }
