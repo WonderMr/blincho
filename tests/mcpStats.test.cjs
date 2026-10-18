@@ -110,3 +110,24 @@ test('overflowing aggregates fail explicitly instead of returning rounded counte
     assert.equal(typeof queryStats(stats, {}).error, 'string');
   }
 });
+
+
+test('malformed saved records do not poison the public projection or mutate history', () => {
+  const saved = [day('2020-02-30'), day('0000-01-01'), day('2020-01-06', {
+    breaksCompleted: 2.9, exercisesCompleted: 1.9, focusMinutes: 30,
+  }), day('2020-01-06', { breaksCompleted: 50, focusMinutes: 999 }),
+  day('2020-01-08', { breaksCompleted: -1, exercisesCompleted: Infinity, focusMinutes: NaN })];
+  const before = structuredClone(saved), stats = buildMcpStats(saved);
+  assert.deepEqual(saved, before, 'Only the MCP projection is normalized');
+  assert.deepEqual(stats.days.map(day => day.date), ['2020-01-06', '2020-01-08']);
+  assert.equal(dataRange(stats).recordedDays, 2);
+  assert.equal(queryStats(stats, {}).totals.focusMinutes, 30);
+  assert.equal(queryStats(stats, {}).totals.breaksCompleted, 2);
+  assert.equal(stats.days[0].exercisesCompleted, 1);
+  assert.equal(stats.days[1].breaksCompleted, 0);
+  assert.equal(stats.days[1].exercisesCompleted, 0);
+  assert.equal(stats.days[1].focusMinutes, 0);
+  const capped = buildMcpStats([day('2020-01-01', { breaksCompleted: Number.MAX_VALUE })]);
+  assert.equal(capped.days[0].breaksCompleted, Number.MAX_SAFE_INTEGER);
+  assert.notEqual(dataRange(capped), null);
+});

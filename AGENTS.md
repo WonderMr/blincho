@@ -91,7 +91,8 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
 - Privacy guarantees are product requirements: settings, journal and statistics stay on the
   device; camera frames are processed locally and never stored or uploaded; call history keeps
   only times and normalized app names. Local MCP is off by default, binds `127.0.0.1` (port 47831
-  preferred), uses a rotating bearer token and must not expose history, journal answers or frames.
+  preferred), uses a rotating bearer token and may expose daily aggregate totals. It must not expose
+  detailed activity spans, call history or names, event IDs, journal answers or frames.
 - Blincho is a general wellness tool; do not add text that claims diagnosis or treatment.
 - System-wide activity, lock and sleep detection exist only in desktop builds; the browser build
   sees only its own page. CI simulates presence, so physical lock and sleep need manual checks.
