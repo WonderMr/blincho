@@ -4,7 +4,7 @@ Blincho is a free, open-source screen-break reminder for macOS, Windows and Linu
 presence and lock/sleep detection, call postponement, exercises, a comfort journal and local
 statistics in 30 languages. Desktop apps use Tauri 2 with Rust and the system WebView; the same
 React + TypeScript UI also builds as a browser app, and `site/` generates the website
-https://blincho.app. Version 1.8.14, under active development.
+https://blincho.app. Version 1.8.15, under active development.
 User-facing overview: `README.md`; release pipeline: `RELEASE.md`.
 
 ## User-facing text style
@@ -91,7 +91,8 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
 - Privacy guarantees are product requirements: settings, journal and statistics stay on the
   device; camera frames are processed locally and never stored or uploaded; call history keeps
   only times and normalized app names. Local MCP is off by default, binds `127.0.0.1` (port 47831
-  preferred), uses a rotating bearer token and must not expose history, journal answers or frames.
+  preferred), uses a rotating bearer token and may expose daily aggregate totals. It must not expose
+  detailed activity spans, call history or names, event IDs, journal answers or frames.
 - Blincho is a general wellness tool; do not add text that claims diagnosis or treatment.
 - System-wide activity, lock and sleep detection exist only in desktop builds; the browser build
   sees only its own page. CI simulates presence, so physical lock and sleep need manual checks.

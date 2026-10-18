@@ -59,7 +59,7 @@ fn local_mcp_publish(
     snapshot: Value,
     server: tauri::State<local_mcp::LocalMcp>,
 ) -> Result<(), String> {
-    if snapshot.to_string().len() > 32_768 || !snapshot.is_object() {
+    if snapshot.to_string().len() > local_mcp::MAX_SNAPSHOT_BYTES || !snapshot.is_object() {
         return Err("Invalid MCP snapshot".into());
     }
     server.publish(snapshot);

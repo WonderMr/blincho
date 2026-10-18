@@ -4,6 +4,8 @@
 //! and queues a small, expiring set of requests for the renderer to validate.
 use serde::Serialize;
 use serde_json::{json, Value};
+#[path = "local_mcp_stats.rs"]
+mod stats;
 use std::{
     collections::{HashMap, VecDeque},
     io::{Read, Write},
@@ -19,6 +21,7 @@ use std::{
 const PREFERRED_PORT: u16 = 47831;
 const MAX_HEADERS: usize = 8192;
 const MAX_BODY: usize = 65_536;
+pub const MAX_SNAPSHOT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_QUEUE: usize = 16;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const READ_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -39,7 +42,7 @@ pub struct McpStatus {
 #[derive(Default)]
 struct Shared {
     status: McpStatus,
-    snapshot: Option<(Value, Instant)>,
+    snapshot: Option<(Arc<Value>, Instant)>,
     commands: VecDeque<(McpCommand, Instant)>,
 }
 
@@ -136,10 +139,10 @@ impl LocalMcp {
 
     pub fn publish(&self, snapshot: Value) {
         // The caller supplies the public projection, never its raw app state.
-        if snapshot.is_object() && snapshot.to_string().len() <= MAX_BODY {
+        if snapshot.is_object() && snapshot.to_string().len() <= MAX_SNAPSHOT_BYTES {
             let mut shared = lock(&self.shared);
             if shared.status.enabled && shared.status.running {
-                shared.snapshot = Some((snapshot, Instant::now()));
+                shared.snapshot = Some((Arc::new(snapshot), Instant::now()));
             }
         }
     }
@@ -546,6 +549,20 @@ fn dispatch(request: Value, shared: &Mutex<Shared>) -> HttpResponse {
             let Some(name) = params["name"].as_str() else {
                 return HttpResponse::json(200, rpc_error(id, -32602, "Tool name is required"));
             };
+            if name == "get_stats" {
+                let arguments = params
+                    .get("arguments")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                let result = stats::parse_query(&arguments)
+                    .and_then(|query| call_stats_tool(Some(&query), shared));
+                return match result {
+                    Ok(result) => {
+                        HttpResponse::json(200, json!({"jsonrpc":"2.0","id":id,"result":result}))
+                    }
+                    Err(message) => HttpResponse::json(200, rpc_error(id, -32602, message)),
+                };
+            }
             if params.get("arguments").is_some_and(|arguments| {
                 !arguments.is_object()
                     || arguments
@@ -572,6 +589,8 @@ fn tools() -> Value {
         ("get_status", "Read the current timer and break status.", true),
         ("get_settings", "Read the app's public settings.", true),
         ("get_today_stats", "Read today's aggregated timer statistics.", true),
+        ("get_data_range", "Read saved statistics date boundaries and recorded day count.", true),
+        ("get_stats", "Read daily aggregates over an inclusive calendar range, grouped by day or Monday to Sunday week. Missing days are omitted. Totals cover the full range before pagination.", true),
         ("start_break", "Request a break through the app. Returns queued, not completed.", false),
         ("pause_timer", "Request pausing the work timer. Returns queued, not completed.", false),
         ("resume_timer", "Request resuming the work timer. Returns queued, not completed.", false),
@@ -579,12 +598,59 @@ fn tools() -> Value {
     ];
     json!({"tools":definitions.into_iter().map(|(name,description,read_only)| json!({
         "name":name,"description":description,
-        "inputSchema":{"type":"object","properties":{},"additionalProperties":false},
+        "inputSchema":if name == "get_stats" { json!({
+            "type":"object",
+            "properties":{
+                "startDate":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}$","description":"Inclusive real calendar date, year 0001 to 9999. Defaults to the first saved day."},
+                "endDate":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}$","description":"Inclusive real calendar date, year 0001 to 9999. Defaults to the last saved day."},
+                "groupBy":{"type":"string","enum":["day","week"],"default":"day"},
+                "offset":{"type":"integer","minimum":0,"maximum":9007199254740991_u64,"default":0},
+                "limit":{"type":"integer","minimum":1,"maximum":366,"default":100}
+            },"additionalProperties":false
+        }) } else { json!({"type":"object","properties":{},"additionalProperties":false}) },
         "annotations":{"readOnlyHint":read_only,"destructiveHint":false,"openWorldHint":false}
     })).collect::<Vec<_>>()})
 }
 
+fn stats_snapshot(shared: &Mutex<Shared>) -> Result<Arc<Value>, &'static str> {
+    let shared = lock(shared);
+    let Some((snapshot, published)) = shared.snapshot.as_ref() else {
+        return Err("App statistics are not available yet");
+    };
+    if published.elapsed() > SNAPSHOT_MAX_AGE {
+        return Err("App state is out of date");
+    }
+    Ok(Arc::clone(snapshot))
+}
+
+fn call_stats_tool(
+    query: Option<&stats::Query>,
+    shared: &Mutex<Shared>,
+) -> Result<Value, &'static str> {
+    // Keep parsing and aggregation outside the renderer's synchronization lock.
+    let snapshot = match stats_snapshot(shared) {
+        Ok(snapshot) => snapshot,
+        Err(message) => return Ok(tool_error(message)),
+    };
+    let Some(stats) = snapshot.get("stats").and_then(stats::Snapshot::parse) else {
+        return Ok(tool_error("App statistics are not available yet"));
+    };
+    match query {
+        None => Ok(tool_result(stats.data_range())),
+        Some(query) => match stats.stats(query) {
+            Ok(value) => Ok(tool_result(value)),
+            Err(stats::QueryError::InvalidRange) => Err("startDate must not be after endDate"),
+            Err(stats::QueryError::InvalidData) => {
+                Ok(tool_error("App statistics are not available yet"))
+            }
+        },
+    }
+}
+
 fn call_tool(name: &str, shared: &Mutex<Shared>) -> Option<Value> {
+    if name == "get_data_range" {
+        return call_stats_tool(None, shared).ok();
+    }
     let key = match name {
         "get_status" => Some("status"),
         "get_settings" => Some("settings"),
@@ -605,7 +671,14 @@ fn call_tool(name: &str, shared: &Mutex<Shared>) -> Option<Value> {
                 .get(key)
                 .filter(|value| value.is_object())
                 .cloned()
-                .map(tool_result)
+                .map(|mut value| {
+                    if key == "status" {
+                        if let Some(status) = value.as_object_mut() {
+                            status.remove("breakEventId");
+                        }
+                    }
+                    tool_result(value)
+                })
                 .unwrap_or_else(|| tool_error("App state is not available yet")),
         );
     }
@@ -669,7 +742,7 @@ mod tests {
                 running: true,
                 ..McpStatus::default()
             },
-            snapshot: Some((app_snapshot(false), Instant::now())),
+            snapshot: Some((Arc::new(app_snapshot(false)), Instant::now())),
             ..Shared::default()
         })
     }
@@ -723,6 +796,27 @@ mod tests {
     }
 
     #[test]
+    fn statistics_snapshot_releases_renderer_lock_and_retains_published_generation() {
+        let shared = test_shared();
+        let snapshot = stats_snapshot(&shared).unwrap();
+        {
+            let mut current = shared
+                .try_lock()
+                .expect("Statistics readers must release the renderer lock");
+            assert!(Arc::ptr_eq(
+                &snapshot,
+                &current.snapshot.as_ref().unwrap().0
+            ));
+            current.snapshot = Some((Arc::new(app_snapshot(true)), Instant::now()));
+        }
+        assert_eq!(snapshot["status"]["strictMode"], false);
+        assert_eq!(
+            stats_snapshot(&shared).unwrap()["status"]["strictMode"],
+            true
+        );
+    }
+
+    #[test]
     fn initialize_tools_and_queued_actions() {
         let shared = test_shared();
         let initialize = dispatch(
@@ -739,7 +833,7 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .len(),
-            7
+            9
         );
         let read = dispatch(
             rpc("tools/call", json!({"name":"get_today_stats"})),
@@ -748,6 +842,12 @@ mod tests {
         assert_eq!(
             read.body.as_ref().unwrap()["result"]["structuredContent"]["breaks"],
             2
+        );
+        let status = call_tool("get_status", &shared).unwrap();
+        assert!(status["structuredContent"].get("breakEventId").is_none());
+        assert_eq!(
+            lock(&shared).snapshot.as_ref().unwrap().0["status"]["breakEventId"],
+            "break-1"
         );
         let action = dispatch(
             rpc("tools/call", json!({"name":"start_break","arguments":{}})),
@@ -812,18 +912,157 @@ mod tests {
         );
     }
 
+    fn aggregate_day(date: &str) -> Value {
+        json!({"date":date,"breaksCompleted":2,"exercisesCompleted":1,
+            "focusMinutes":10.5,"workMinutes":20.0,"awayMinutes":5.0,
+            "pauseMinutes":2.0,"restMinutes":3.0,"recordedMinutes":30.0})
+    }
+
+    fn stats_call(shared: &Mutex<Shared>, name: &str, arguments: Value) -> Value {
+        dispatch(
+            rpc("tools/call", json!({"name":name,"arguments":arguments})),
+            shared,
+        )
+        .body
+        .unwrap()
+    }
+
+    #[test]
+    fn aggregate_tools_validate_arguments_schema_and_snapshot_freshness() {
+        let shared = test_shared();
+        let listing = tools();
+        let definitions = listing["tools"].as_array().unwrap();
+        let definition = definitions
+            .iter()
+            .find(|tool| tool["name"] == "get_stats")
+            .unwrap();
+        assert_eq!(definition["annotations"]["readOnlyHint"], true);
+        assert_eq!(definition["inputSchema"]["additionalProperties"], false);
+        assert_eq!(
+            definition["inputSchema"]["properties"]["limit"]["maximum"],
+            366
+        );
+        assert_eq!(
+            stats_call(&shared, "get_stats", json!({}))["result"]["isError"],
+            true
+        );
+        assert_eq!(
+            stats_call(&shared, "get_data_range", json!({}))["result"]["isError"],
+            true
+        );
+        for arguments in [
+            json!({"startDate":"2023-02-29"}),
+            json!({"limit":0}),
+            json!({"unknown":1}),
+        ] {
+            assert_eq!(
+                stats_call(&shared, "get_stats", arguments)["error"]["code"],
+                -32602
+            );
+        }
+        assert_eq!(
+            stats_call(&shared, "get_data_range", json!({"limit":1}))["error"]["code"],
+            -32602
+        );
+        let mut snapshot = app_snapshot(false);
+        snapshot["stats"] = json!({"timeZone":"UTC","activityStartDate":"2024-03-01","days":[aggregate_day("2024-02-28"),aggregate_day("2024-03-01")]});
+        lock(&shared).snapshot = Some((Arc::new(snapshot.clone()), Instant::now()));
+        let range = stats_call(&shared, "get_data_range", json!({}));
+        assert_eq!(
+            range["result"]["structuredContent"],
+            json!({
+                "timeZone":"UTC","dataStartDate":"2024-02-28","dataEndDate":"2024-03-01",
+                "activityStartDate":"2024-03-01","recordedDays":2
+            })
+        );
+        let result = stats_call(&shared, "get_stats", json!({}));
+        assert_eq!(
+            result["result"]["structuredContent"]["totals"]["focusMinutes"],
+            21.0
+        );
+        assert_eq!(result["result"]["structuredContent"]["calendarDays"], 3);
+        assert_eq!(
+            stats_call(&shared, "get_stats", json!({"startDate":"2024-03-02"}))["error"]["code"],
+            -32602
+        );
+        assert!(lock(&shared).commands.is_empty());
+        lock(&shared).snapshot = Some((
+            Arc::new(snapshot.clone()),
+            Instant::now() - SNAPSHOT_MAX_AGE - Duration::from_secs(1),
+        ));
+        for name in ["get_data_range", "get_stats"] {
+            assert_eq!(
+                stats_call(&shared, name, json!({}))["result"]["isError"],
+                true
+            );
+        }
+        snapshot["stats"]["days"][0]["activity"] = json!([{"start":1,"end":2,"state":"work"}]);
+        lock(&shared).snapshot = Some((Arc::new(snapshot), Instant::now()));
+        for name in ["get_data_range", "get_stats"] {
+            let result = stats_call(&shared, name, json!({}));
+            assert_eq!(result["result"]["isError"], true);
+            assert!(!result.to_string().contains("activity\""));
+        }
+    }
+
+    #[test]
+    fn internal_daily_history_can_exceed_the_http_request_body_limit() {
+        let app = LocalMcp::default();
+        {
+            let mut shared = lock(&app.shared);
+            shared.status.enabled = true;
+            shared.status.running = true;
+        }
+        let first = chrono::NaiveDate::from_ymd_opt(2010, 1, 1).unwrap();
+        let days: Vec<_> = (0..5000)
+            .map(|index| {
+                aggregate_day(
+                    &(first + chrono::Duration::days(index))
+                        .format("%Y-%m-%d")
+                        .to_string(),
+                )
+            })
+            .collect();
+        let mut snapshot = app_snapshot(false);
+        snapshot["stats"] = json!({"timeZone":"UTC","activityStartDate":"2010-01-01","days":days});
+        let size = snapshot.to_string().len();
+        assert!(size > MAX_BODY && size < MAX_SNAPSHOT_BYTES);
+        app.publish(snapshot);
+        assert_eq!(
+            call_tool("get_status", &app.shared).unwrap()["structuredContent"]["isRunning"],
+            true
+        );
+        let range = stats_call(&app.shared, "get_data_range", json!({}));
+        assert_eq!(range["result"]["structuredContent"]["recordedDays"], 5000);
+        let result = stats_call(&app.shared, "get_stats", json!({"offset":4999,"limit":1}));
+        assert_eq!(result["result"]["structuredContent"]["recordedDays"], 5000);
+        assert_eq!(
+            result["result"]["structuredContent"]["totals"]["breaksCompleted"],
+            10000
+        );
+        assert_eq!(
+            result["result"]["structuredContent"]["periods"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(result["result"]["structuredContent"]["hasMore"], false);
+        assert!(lock(&app.shared).commands.is_empty());
+    }
+
     #[test]
     fn strict_break_stale_state_and_queue_limit_reject_actions() {
         let shared = test_shared();
-        lock(&shared).snapshot = Some((app_snapshot(true), Instant::now()));
+        lock(&shared).snapshot = Some((Arc::new(app_snapshot(true)), Instant::now()));
         assert_eq!(call_tool("skip_break", &shared).unwrap()["isError"], true);
         assert!(lock(&shared).commands.is_empty());
         lock(&shared).snapshot = Some((
-            app_snapshot(false),
+            Arc::new(app_snapshot(false)),
             Instant::now() - SNAPSHOT_MAX_AGE - Duration::from_secs(1),
         ));
         assert_eq!(call_tool("start_break", &shared).unwrap()["isError"], true);
-        lock(&shared).snapshot = Some((app_snapshot(false), Instant::now()));
+        lock(&shared).snapshot = Some((Arc::new(app_snapshot(false)), Instant::now()));
         for _ in 0..MAX_QUEUE {
             assert!(call_tool("pause_timer", &shared)
                 .unwrap()
@@ -865,7 +1104,7 @@ mod tests {
         let shared = test_shared();
         let mut snapshot = app_snapshot(false);
         snapshot["status"]["cameraChecking"] = json!(true);
-        lock(&shared).snapshot = Some((snapshot, Instant::now()));
+        lock(&shared).snapshot = Some((Arc::new(snapshot), Instant::now()));
         for name in ["start_break", "pause_timer", "resume_timer", "skip_break"] {
             assert_eq!(call_tool(name, &shared).unwrap()["isError"], true);
         }
