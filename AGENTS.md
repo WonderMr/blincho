@@ -129,3 +129,16 @@ is needs_summary, complete it through write_repo_summary with the unchanged repo
 workspace_id after checking the sources, provided memory writes are permitted. Before replacing
 large historical memory, save a complete copy in the existing recovery directory. After writing,
 verify the up-to-date status and preservation of unmanaged sections.
+
+## Pull request workflow entry
+
+When asked to review or merge a pull request, discover the matching workflow with
+`list_flows(workspace=<absolute path>)` and call `run_flow` for `builtin:pr-review`
+with the target URL, current persona and user constraints before remote merge
+mutations. Apply the returned persona activation. If the flow is unavailable,
+report that limitation without claiming that the flow ran. Before any merge,
+directly verify the repository-required tests and builds (including `npm test`
+and `npm run build`), current-head CI, completed required reviews, required
+approvals, resolved actionable review findings and threads, mergeability, and
+the user's merge authorization. Block the merge if any required gate fails or
+cannot be verified.
