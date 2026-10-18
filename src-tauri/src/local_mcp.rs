@@ -671,7 +671,14 @@ fn call_tool(name: &str, shared: &Mutex<Shared>) -> Option<Value> {
                 .get(key)
                 .filter(|value| value.is_object())
                 .cloned()
-                .map(tool_result)
+                .map(|mut value| {
+                    if key == "status" {
+                        if let Some(status) = value.as_object_mut() {
+                            status.remove("breakEventId");
+                        }
+                    }
+                    tool_result(value)
+                })
                 .unwrap_or_else(|| tool_error("App state is not available yet")),
         );
     }
@@ -835,6 +842,12 @@ mod tests {
         assert_eq!(
             read.body.as_ref().unwrap()["result"]["structuredContent"]["breaks"],
             2
+        );
+        let status = call_tool("get_status", &shared).unwrap();
+        assert!(status["structuredContent"].get("breakEventId").is_none());
+        assert_eq!(
+            lock(&shared).snapshot.as_ref().unwrap().0["status"]["breakEventId"],
+            "break-1"
         );
         let action = dispatch(
             rpc("tools/call", json!({"name":"start_break","arguments":{}})),

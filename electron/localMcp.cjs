@@ -51,7 +51,11 @@ function createLocalMcp({ preferredPort = 47831, now = Date.now } = {}) {
           const value = range ? (name === 'get_data_range' ? range : queryStats(snapshot.stats, args, range)) : { error: 'Statistics are not available yet.' };
           if (value.invalidArguments) return fail(-32602, 'startDate must not be after endDate');
           result = toolResult(value, !!value.error);
-        } else if (Object.hasOwn(READ_TOOLS, name)) result = toolResult(snapshot[READ_TOOLS[name]] ?? {});
+        } else if (Object.hasOwn(READ_TOOLS, name)) {
+          const value = { ...(snapshot[READ_TOOLS[name]] ?? {}) };
+          if (name === 'get_status') delete value.breakEventId;
+          result = toolResult(value);
+        }
         else {
           const current = snapshot.status ?? {};
           if (!Number.isSafeInteger(current.timerVersion) || current.timerVersion < 0 ||

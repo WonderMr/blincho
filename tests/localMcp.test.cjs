@@ -256,3 +256,19 @@ test('MCP actions cannot cancel a pending end-of-break camera decision', async (
     resolveCamera('present'); await h.settle();
   } finally { resolveCamera?.('unavailable'); h.destroy(); }
 });
+
+
+test('public status omits internal break identifiers while queued commands retain them', async () => {
+  const server = createLocalMcp({ preferredPort: 0 });
+  try {
+    const state = await server.configure(true);
+    server.publish(snapshot({ isBreakActive: true, breakEventId: 'private-break-event' }));
+    const response = (await request(state, call('get_status'))).body.result;
+    const status = JSON.parse(response.content[0].text);
+    assert.equal(Object.hasOwn(status, 'breakEventId'), false);
+    assert.equal(status.isBreakActive, true);
+    assert.equal(JSON.stringify(response).includes('private-break-event'), false);
+    assert.equal((await request(state, call('skip_break'))).body.result.isError, undefined);
+    assert.equal(server.takeCommands()[0].breakEventId, 'private-break-event');
+  } finally { await server.shutdown(); }
+});
