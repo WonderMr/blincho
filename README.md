@@ -53,7 +53,7 @@ The stateless Streamable HTTP endpoint supports `get_status`, `get_settings`, `g
 
 `get_stats` accepts inclusive local calendar dates `startDate` and `endDate` (`YYYY-MM-DD`) and `groupBy: "day"` (default) or `"week"` (Monday through Sunday). Omitted bounds use the first and last saved dates. For one day, set both dates to that day. Each result includes focus minutes, completed breaks/exercises and observed work, away, manual pause, rest and recorded minutes. Observed work is separate from older focus counters. Missing dates have no period record; `recordedDays` and `calendarDays` make gaps visible. Weekly bounds are clipped to the requested range. `totals` always covers the entire range; paginate `periods` with `offset` (default 0) and `limit` (default 100, maximum 366), following `hasMore`. Empty history has `null` data boundaries and zero totals.
 
-For example, call `get_stats` with `{"startDate":"2026-10-01","endDate":"2026-10-18","groupBy":"week"}` to compare calendar weeks in that range. Neither tool returns individual activity intervals or call names.
+For example, call `get_stats` with `{"startDate":"2026-10-01","endDate":"2026-10-18","groupBy":"week"}` to compare calendar weeks in that range. Neither tool returns individual activity intervals or call names. The MCP projection omits invalid calendar dates and keeps the first saved record for a duplicate date. Completion counts are rounded down to nonnegative safe integers and invalid numeric totals become zero; these rules do not modify saved history.
 
 In Codex, use the copied URL in an HTTP MCP entry and provide the token through an environment variable:
 

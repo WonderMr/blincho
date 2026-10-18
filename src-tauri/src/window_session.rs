@@ -93,9 +93,19 @@ impl Placement {
 
     fn restored_bounds(&self, displays: &[Display]) -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
         let matched = self.matching_display(displays);
-        if matched.is_some() && matched == self.display.as_ref() {
-            // A user can deliberately leave part of the frame offscreen or
-            // across displays. Only a changed desktop needs recovery clamping.
+        if matched.is_some()
+            && matched == self.display.as_ref()
+            && displays.iter().any(|display| {
+                overlap(
+                    self.position,
+                    self.outer_size,
+                    display.work_position,
+                    display.work_size,
+                ) > 0
+            })
+        {
+            // Preserve deliberate partly offscreen or spanning frames while
+            // recovering hidden-startup coordinates outside every work area.
             return (self.position, self.inner_size);
         }
         let Some(target) = self.target_display(displays) else {
@@ -736,6 +746,48 @@ mod tests {
                 "An unchanged desktop must preserve the user's chosen frame"
             );
         }
+    }
+    #[test]
+    fn unchanged_display_recovers_a_frame_outside_every_work_area() {
+        for position in [
+            PhysicalPosition::new(-32000, -32000),
+            PhysicalPosition::new(1920, 100),
+            PhysicalPosition::new(-1800, -766),
+        ] {
+            let mut saved = placement();
+            saved.position = position;
+            let displays = [display("external", -1920, 1.), display("main", 0, 1.)];
+            let (position, size) = saved.restored_bounds(&displays);
+            let target = &displays[0];
+            assert!(
+                overlap(
+                    position,
+                    saved.outer_size,
+                    target.work_position,
+                    target.work_size
+                ) > 0,
+                "A frame outside every work area must recover to its saved display"
+            );
+            assert_eq!(size, saved.inner_size);
+        }
+    }
+    #[test]
+    fn unchanged_display_preserves_a_frame_visible_only_on_another_monitor() {
+        let mut saved = placement();
+        saved.position = PhysicalPosition::new(100, 100);
+        assert_eq!(
+            saved.restored_bounds(&[display("external", -1920, 1.), display("main", 0, 1.)]),
+            (saved.position, saved.inner_size)
+        );
+    }
+    #[test]
+    fn unchanged_display_counts_the_outer_frame_for_work_area_visibility() {
+        let mut saved = placement();
+        saved.position.y = -765;
+        assert_eq!(
+            saved.restored_bounds(&[display("external", -1920, 1.)]),
+            (saved.position, saved.inner_size)
+        );
     }
     #[test]
     fn unchanged_display_preserves_a_window_larger_than_its_work_area() {

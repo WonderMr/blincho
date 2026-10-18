@@ -42,7 +42,7 @@ pub struct McpStatus {
 #[derive(Default)]
 struct Shared {
     status: McpStatus,
-    snapshot: Option<(Value, Instant)>,
+    snapshot: Option<(Arc<Value>, Instant)>,
     commands: VecDeque<(McpCommand, Instant)>,
 }
 
@@ -142,7 +142,7 @@ impl LocalMcp {
         if snapshot.is_object() && snapshot.to_string().len() <= MAX_SNAPSHOT_BYTES {
             let mut shared = lock(&self.shared);
             if shared.status.enabled && shared.status.running {
-                shared.snapshot = Some((snapshot, Instant::now()));
+                shared.snapshot = Some((Arc::new(snapshot), Instant::now()));
             }
         }
     }
@@ -612,17 +612,26 @@ fn tools() -> Value {
     })).collect::<Vec<_>>()})
 }
 
+fn stats_snapshot(shared: &Mutex<Shared>) -> Result<Arc<Value>, &'static str> {
+    let shared = lock(shared);
+    let Some((snapshot, published)) = shared.snapshot.as_ref() else {
+        return Err("App statistics are not available yet");
+    };
+    if published.elapsed() > SNAPSHOT_MAX_AGE {
+        return Err("App state is out of date");
+    }
+    Ok(Arc::clone(snapshot))
+}
+
 fn call_stats_tool(
     query: Option<&stats::Query>,
     shared: &Mutex<Shared>,
 ) -> Result<Value, &'static str> {
-    let shared = lock(shared);
-    let Some((snapshot, published)) = shared.snapshot.as_ref() else {
-        return Ok(tool_error("App statistics are not available yet"));
+    // Keep parsing and aggregation outside the renderer's synchronization lock.
+    let snapshot = match stats_snapshot(shared) {
+        Ok(snapshot) => snapshot,
+        Err(message) => return Ok(tool_error(message)),
     };
-    if published.elapsed() > SNAPSHOT_MAX_AGE {
-        return Ok(tool_error("App state is out of date"));
-    }
     let Some(stats) = snapshot.get("stats").and_then(stats::Snapshot::parse) else {
         return Ok(tool_error("App statistics are not available yet"));
     };
@@ -726,7 +735,7 @@ mod tests {
                 running: true,
                 ..McpStatus::default()
             },
-            snapshot: Some((app_snapshot(false), Instant::now())),
+            snapshot: Some((Arc::new(app_snapshot(false)), Instant::now())),
             ..Shared::default()
         })
     }
@@ -777,6 +786,27 @@ mod tests {
             );
         }
         response
+    }
+
+    #[test]
+    fn statistics_snapshot_releases_renderer_lock_and_retains_published_generation() {
+        let shared = test_shared();
+        let snapshot = stats_snapshot(&shared).unwrap();
+        {
+            let mut current = shared
+                .try_lock()
+                .expect("Statistics readers must release the renderer lock");
+            assert!(Arc::ptr_eq(
+                &snapshot,
+                &current.snapshot.as_ref().unwrap().0
+            ));
+            current.snapshot = Some((Arc::new(app_snapshot(true)), Instant::now()));
+        }
+        assert_eq!(snapshot["status"]["strictMode"], false);
+        assert_eq!(
+            stats_snapshot(&shared).unwrap()["status"]["strictMode"],
+            true
+        );
     }
 
     #[test]
@@ -923,7 +953,7 @@ mod tests {
         );
         let mut snapshot = app_snapshot(false);
         snapshot["stats"] = json!({"timeZone":"UTC","activityStartDate":"2024-03-01","days":[aggregate_day("2024-02-28"),aggregate_day("2024-03-01")]});
-        lock(&shared).snapshot = Some((snapshot.clone(), Instant::now()));
+        lock(&shared).snapshot = Some((Arc::new(snapshot.clone()), Instant::now()));
         let range = stats_call(&shared, "get_data_range", json!({}));
         assert_eq!(
             range["result"]["structuredContent"],
@@ -944,7 +974,7 @@ mod tests {
         );
         assert!(lock(&shared).commands.is_empty());
         lock(&shared).snapshot = Some((
-            snapshot.clone(),
+            Arc::new(snapshot.clone()),
             Instant::now() - SNAPSHOT_MAX_AGE - Duration::from_secs(1),
         ));
         for name in ["get_data_range", "get_stats"] {
@@ -954,7 +984,7 @@ mod tests {
             );
         }
         snapshot["stats"]["days"][0]["activity"] = json!([{"start":1,"end":2,"state":"work"}]);
-        lock(&shared).snapshot = Some((snapshot, Instant::now()));
+        lock(&shared).snapshot = Some((Arc::new(snapshot), Instant::now()));
         for name in ["get_data_range", "get_stats"] {
             let result = stats_call(&shared, name, json!({}));
             assert_eq!(result["result"]["isError"], true);
@@ -1011,15 +1041,15 @@ mod tests {
     #[test]
     fn strict_break_stale_state_and_queue_limit_reject_actions() {
         let shared = test_shared();
-        lock(&shared).snapshot = Some((app_snapshot(true), Instant::now()));
+        lock(&shared).snapshot = Some((Arc::new(app_snapshot(true)), Instant::now()));
         assert_eq!(call_tool("skip_break", &shared).unwrap()["isError"], true);
         assert!(lock(&shared).commands.is_empty());
         lock(&shared).snapshot = Some((
-            app_snapshot(false),
+            Arc::new(app_snapshot(false)),
             Instant::now() - SNAPSHOT_MAX_AGE - Duration::from_secs(1),
         ));
         assert_eq!(call_tool("start_break", &shared).unwrap()["isError"], true);
-        lock(&shared).snapshot = Some((app_snapshot(false), Instant::now()));
+        lock(&shared).snapshot = Some((Arc::new(app_snapshot(false)), Instant::now()));
         for _ in 0..MAX_QUEUE {
             assert!(call_tool("pause_timer", &shared)
                 .unwrap()
@@ -1061,7 +1091,7 @@ mod tests {
         let shared = test_shared();
         let mut snapshot = app_snapshot(false);
         snapshot["status"]["cameraChecking"] = json!(true);
-        lock(&shared).snapshot = Some((snapshot, Instant::now()));
+        lock(&shared).snapshot = Some((Arc::new(snapshot), Instant::now()));
         for name in ["start_break", "pause_timer", "resume_timer", "skip_break"] {
             assert_eq!(call_tool(name, &shared).unwrap()["isError"], true);
         }
