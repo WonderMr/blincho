@@ -72,6 +72,7 @@ async function main() {
     assert.equal((await rpc(state, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'native-smoke', version: '1' } })).result.protocolVersion, '2025-11-25');
     const ready = await until(async () => rpc(state, 'tools/call', { name: 'get_status', arguments: {} }), value => !value.result?.isError);
     assert.equal(typeof JSON.parse(ready.result.content[0].text).secondsRemaining, 'number');
+    assert.equal(Object.hasOwn(JSON.parse(ready.result.content[0].text), 'breakEventId'), false);
     const totals = await rpc(state, 'tools/call', { name: 'get_today_stats', arguments: {} });
     assert.deepEqual(Object.keys(JSON.parse(totals.result.content[0].text)).sort(), ['breaksCompleted', 'date', 'exercisesCompleted', 'focusMinutes']);
     const query = async (name, args = {}) => {
@@ -103,7 +104,8 @@ async function main() {
       ['start_break', value => value.isBreakActive], ['skip_break', value => !value.isBreakActive]]) {
       const result = await rpc(state, 'tools/call', { name, arguments: {} });
       assert.equal(result.result.isError, undefined, name);
-      await until(readStatus, expected);
+      const observed = await until(readStatus, expected);
+      assert.equal(Object.hasOwn(observed, 'breakEventId'), false, name);
     }
     const ui = await evaluate(`(()=>{const section=document.querySelector('#local-mcp-title').closest('section');return {checked:document.querySelector('#local-mcp-enabled').checked, text:section.textContent, clipped:section.scrollWidth>section.clientWidth};})()`);
     assert.equal(ui.checked, true); assert.equal(ui.clipped, false); assert.match(ui.text, /MCP/);
