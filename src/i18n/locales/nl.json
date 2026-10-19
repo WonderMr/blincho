@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Kopiëren is mislukt. Selecteer de verbindingsinstellingen hieronder.",
   "Подключение AI-клиентов": "AI-clients verbinden",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Hiermee kunnen status, instellingen en dagoverzichten worden gelezen, pauzes worden gestart en de timer worden bediend. Toegang is alleen mogelijk vanaf deze computer en vereist een token. Uitschakelen stopt de server.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Het token geeft toegang tot de bediening van Blincho. Het verandert wanneer MCP opnieuw wordt ingeschakeld."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Het token geeft toegang tot de bediening van Blincho. Het verandert wanneer MCP opnieuw wordt ingeschakeld.",
+  "Уточнять присутствие камерой": "Aanwezigheid met de camera controleren",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "Na één minuut zonder invoer controleert de camera of u aanwezig bent, mits er geen gesprek actief is. Lezen telt als werk. Beelden worden alleen op uw apparaat verwerkt.",
+  "Блокировать при подтверждённом отсутствии": "Vergrendelen bij bevestigde afwezigheid",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Vergrendelen gebeurt alleen na een cameracontrole en een tweede controle op invoer en een actief gesprek. Bij een camerafout wordt de vergrendeling overgeslagen.",
+  "Собирать счётчики ввода": "Invoergebeurtenissen tellen",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Alleen lokale aantallen gebeurtenissen per vijf minuten. Geen tekst, apps of coördinaten. De frequentie van gebeurtenissen verschilt per apparaat. Deze gegevens leveren geen diagnose op.",
+  "Нажатия клавиш": "Toetsaanslagen",
+  "Клики": "Klikken",
+  "Прокрутки": "Scrollbewegingen",
+  "Движения мыши": "Muisbewegingen",
+  "Профиль активности ввода": "Profiel van invoeractiviteit",
+  "Скачать CSV": "CSV downloaden",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Sta invoerbewaking toe in de systeeminstellingen en schakel de verzameling opnieuw in.",
+  "Системный сбор ввода недоступен в этой среде.": "Systeembrede verzameling van invoergebeurtenissen is in deze omgeving niet beschikbaar.",
+  "Удалить статистику ввода": "Invoerstatistieken verwijderen",
+  "Не удалось удалить статистику ввода.": "De invoerstatistieken konden niet worden verwijderd."
 }

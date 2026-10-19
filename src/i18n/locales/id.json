@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Tidak dapat menyalin. Pilih teks pengaturan koneksi di bawah.",
   "Подключение AI-клиентов": "Koneksi klien AI",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Memungkinkan pembacaan status, pengaturan dan ringkasan harian, memulai jeda serta mengontrol pengatur waktu. Akses hanya tersedia dari komputer ini dengan token. Menonaktifkannya akan menghentikan server.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Token memberikan akses untuk mengontrol Blincho. Token berubah saat MCP diaktifkan kembali."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Token memberikan akses untuk mengontrol Blincho. Token berubah saat MCP diaktifkan kembali.",
+  "Уточнять присутствие камерой": "Periksa keberadaan dengan kamera",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "Setelah satu menit tanpa input dan saat tidak ada panggilan, kamera memeriksa keberadaan Anda. Membaca dihitung sebagai waktu kerja. Bingkai kamera hanya diproses di perangkat.",
+  "Блокировать при подтверждённом отсутствии": "Kunci saat ketidakhadiran terkonfirmasi",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Perangkat hanya dikunci setelah pemeriksaan kamera serta pemeriksaan ulang input dan panggilan. Jika kamera mengalami kesalahan, penguncian dilewati.",
+  "Собирать счётчики ввода": "Kumpulkan hitungan input",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Hanya hitungan peristiwa lokal dalam kelompok 5 menit. Tanpa teks, aplikasi, atau koordinat. Frekuensi peristiwa bergantung pada perangkat. Data ini tidak digunakan untuk menetapkan diagnosis.",
+  "Нажатия клавиш": "Penekanan tombol",
+  "Клики": "Klik",
+  "Прокрутки": "Gulir",
+  "Движения мыши": "Gerakan mouse",
+  "Профиль активности ввода": "Profil aktivitas input",
+  "Скачать CSV": "Unduh CSV",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Izinkan pemantauan input di pengaturan sistem, lalu aktifkan pengumpulan lagi.",
+  "Системный сбор ввода недоступен в этой среде.": "Pengumpulan input di seluruh sistem tidak tersedia di lingkungan ini.",
+  "Удалить статистику ввода": "Hapus statistik input",
+  "Не удалось удалить статистику ввода.": "Gagal menghapus statistik input."
 }

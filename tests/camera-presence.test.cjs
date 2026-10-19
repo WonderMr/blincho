@@ -18,7 +18,7 @@ function cameraHarness({ results = [[], [], []], black = false, cameraError, mod
   const stream = { getTracks: () => [track], getVideoTracks: () => [track] };
   const pixels = Uint8ClampedArray.from(black ? [0, 0, 0, 255, 0, 0, 0, 255] : [20, 40, 60, 255, 90, 120, 140, 255]);
   const check = module.exports.createCameraPresenceChecker({
-    mediaDevices: () => missing ? undefined : { async getUserMedia(constraints) { acquisitions++; assert.equal(constraints.audio, false); if (cameraError) throw cameraError; if (late) await new Promise(resolve => { release = resolve; }); return stream; } },
+    mediaDevices: () => missing ? undefined : { async getUserMedia(constraints) { acquisitions++; assert.equal(constraints.audio, false); if (cameraError) throw cameraError; if (late) await new Promise(resolve => { release = resolve; }); track.readyState = 'live'; return stream; } },
     createVideo: () => ({ readyState: 4, videoWidth: 640, videoHeight: 480, get currentTime() { if (!frozen) time++; return time; }, async play() {}, pause() {} }),
     createCanvas: () => ({ getContext: () => ({ drawImage() { if (!black && !repeatedPixels) pixels[0]++; }, getImageData: () => ({ data: pixels }) }) }),
     async loadDetector() { if (modelError) throw modelError; return { detect() { const categories = results[detections++] ?? []; return { detections: categories.length ? [{ categories }] : [] }; }, close() { closed++; } }; },
@@ -58,6 +58,18 @@ test('timeout stops a camera stream that arrives after the check has already end
 test('cancellation closes resources and overlapping queries share one camera session', async () => {
   const h = cameraHarness(); const abort = new AbortController(); const pending = h.check(abort.signal); assert.equal(h.check(), pending);
   await h.settle(); abort.abort(); assert.equal(await pending, 'unavailable'); assert(h.stopped > 0); assert.equal(h.closed, 1); assert.equal(h.acquisitions, 1);
+});
+test('a replacement after cancellation waits for cleanup and starts a fresh observation', async () => {
+  const h = cameraHarness();
+  const abort = new AbortController(); const pending = h.check(abort.signal);
+  await h.settle(); abort.abort();
+  const replacement = h.check(new AbortController().signal);
+  assert.notEqual(replacement, pending);
+  assert.equal(await pending, 'unavailable');
+  // The cancelled capture may still own its already scheduled frame delay.
+  for (let frame = 0; frame < 4 && h.detections < 3; frame++) await h.frame();
+  assert.equal(await replacement, 'absent');
+  assert.equal(h.acquisitions, 2); assert.equal(h.closed, 2);
 });
 
 // App integration mocks only the camera boundary. It exercises timer state, lock
