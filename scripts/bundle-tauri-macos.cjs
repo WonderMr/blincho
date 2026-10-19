@@ -45,6 +45,20 @@ fs.writeFileSync(path.join(contents, 'Info.plist'), `<?xml version="1.0" encodin
 <key>CFBundleIconFile</key><string>icon.icns</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>CFBundleDocumentTypes</key><array><dict>
+<key>CFBundleTypeName</key><string>Blincho Shortcut</string>
+<key>CFBundleTypeRole</key><string>Viewer</string>
+<key>LSHandlerRank</key><string>Owner</string>
+<key>LSItemContentTypes</key><array><string>com.myeyes.blincho-shortcut</string></array>
+<key>CFBundleTypeExtensions</key><array><string>blincho</string></array>
+<key>CFBundleTypeIconFile</key><string>icon.icns</string>
+</dict></array>
+<key>UTExportedTypeDeclarations</key><array><dict>
+<key>UTTypeIdentifier</key><string>com.myeyes.blincho-shortcut</string>
+<key>UTTypeDescription</key><string>Blincho Shortcut</string>
+<key>UTTypeConformsTo</key><array><string>public.data</string></array>
+<key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>blincho</string></array></dict>
+</dict></array>
 <key>NSCameraUsageDescription</key><string>Blincho checks presence after input inactivity or a timed break when you enable the corresponding option. It can lock the computer after confirmed absence. Camera frames stay on this device and are not saved.</string>
 </dict></plist>`);
 fs.writeFileSync(path.join(contents, 'Resources/blincho-runtime.json'), JSON.stringify({schemaVersion:1,runtime:'tauri',platform:'darwin',arch:process.arch,version,identifier:'com.myeyes.app',packageType:'manual',signed:false,notarized:false,updaterConfig:false}));

@@ -50,6 +50,8 @@ function worker() {
   const w = worker(); await w.lifecycle('install');
   const [current] = await w.caches.keys(), cached = w.cacheData.get(current);
   for (const name of ['index.html', 'manifest.webmanifest', 'icon.png', 'favicon.png', ...Object.keys(bundle)]) assert(cached.has('https://example.test/myeyes/' + name), `${name} precached under deployment scope`);
+  assert(cached.has('https://example.test/myeyes/symbiote/install.png'));
+  for (let mask = 0; mask < 64; mask++) assert(cached.has(`https://example.test/myeyes/symbiote/${mask.toString(16).padStart(2, '0')}.png`));
   assert(current.startsWith('myeyes-shell-')); results.push('precache includes HTML, built chunks, manifest and icons once under deployment scope');
   await w.caches.open('myeyes-shell-old'); await w.caches.open('other-app-cache'); await w.lifecycle('activate');
   assert.equal(w.cacheData.has('myeyes-shell-old'), false); assert(w.cacheData.has('other-app-cache')); assert(w.cacheData.has(current)); assert.equal(w.claimed, 1); results.push('activation removes only previous MyEyes caches and claims clients');
@@ -57,14 +59,15 @@ function worker() {
   w.online = false;
   assert.equal((await w.request('https://example.test/myeyes/deep-link', 'GET', 'navigate')).url, 'https://example.test/myeyes/index.html');
   const fetches = w.fetches; assert.equal((await w.request('https://example.test/myeyes/assets/index-test.js')).cached, true); assert.equal(w.fetches, fetches); results.push('offline navigation and built assets use the installed shell');
+  for (let mask = 0; mask < 64; mask++) assert.equal((await w.request(`https://example.test/myeyes/symbiote/${mask.toString(16).padStart(2, '0')}.png`)).cached, true);
   assert.equal(await w.request('https://external.test/font.woff2'), undefined);
   assert.equal(await w.request('https://example.test/another-app/file.js'), undefined);
   assert.equal(await w.request('https://example.test/myeyes/action', 'POST'), undefined); results.push('external origins, out-of-scope URLs and non-GET requests bypass worker');
 
   const manifest = JSON.parse(fs.readFileSync(path.join(repo, 'public/manifest.webmanifest'), 'utf8'));
-  const png = fs.readFileSync(path.join(repo, 'public/icon.png'));
+  const png = fs.readFileSync(path.join(repo, 'public/symbiote/install.png'));
   assert.equal(png.readUInt32BE(16), 512); assert.equal(png.readUInt32BE(20), 512);
-  assert(manifest.icons.some(icon => icon.src === './icon.png' && icon.sizes === '512x512'));
+  assert(manifest.icons.some(icon => icon.src === './symbiote/install.png' && icon.sizes === '512x512'));
   for (const icon of manifest.icons) assert(fs.existsSync(path.resolve(repo, 'public', icon.src))); results.push('manifest icon paths exist and PNG dimensions match 512x512 declaration');
 
   const mainFile = path.join(repo, 'src/main.tsx');

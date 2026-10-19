@@ -48,6 +48,10 @@ pub struct Summary {
     theme: String,
     #[serde(default)]
     color_palette: String,
+    #[serde(default)]
+    symbiote_mask: u8,
+    #[serde(default)]
+    build_name: String,
 }
 
 fn default_meeting_label() -> String {
@@ -78,6 +82,7 @@ impl Summary {
             || self.date.len() != 10
             || self.locale.is_empty()
             || self.locale.len() > 32
+            || self.symbiote_mask > 63
         {
             return Err("Invalid tray summary".into());
         }
@@ -103,6 +108,7 @@ impl Summary {
             &self.unknown_meeting_app_label,
             &self.theme,
             &self.color_palette,
+            &self.build_name,
         ] {
             if value.len() > 512 || value.contains('\0') {
                 return Err("Invalid tray summary text".into());
@@ -167,12 +173,18 @@ pub fn set_tooltip(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
 #[derive(Default)]
 struct CallIndicator {
     active: bool,
+    mask: u8,
+    applied_mask: u8,
     updates: u64,
     attempts: u64,
     applying: bool,
-    retry: Option<(bool, Instant)>,
+    retry: Option<((u8, bool), Instant)>,
     last_error: Option<String>,
-    images: Option<(tauri::image::Image<'static>, tauri::image::Image<'static>)>,
+    images: Option<(
+        u8,
+        tauri::image::Image<'static>,
+        tauri::image::Image<'static>,
+    )>,
 }
 
 impl CallIndicator {
@@ -181,46 +193,58 @@ impl CallIndicator {
     }
 
     fn needs_update_at(&self, active: bool, now: Instant) -> bool {
-        self.active != active
+        (self.active != active || self.applied_mask != self.mask)
             && !self.applying
             && self
                 .retry
                 .as_ref()
-                .is_none_or(|(wanted, deadline)| *wanted != active || now >= *deadline)
+                .is_none_or(|(wanted, deadline)| *wanted != (self.mask, active) || now >= *deadline)
     }
 
-    fn failed(&mut self, active: bool, now: Instant, error: String) {
+    fn failed(&mut self, mask: u8, active: bool, now: Instant, error: String) {
         self.applying = false;
-        self.retry = Some((active, now + Duration::from_secs(3)));
+        self.retry = Some(((mask, active), now + Duration::from_secs(3)));
         self.last_error = Some(error);
     }
 
     fn clear_obsolete_error(&mut self, active: bool) {
-        if self.active == active {
+        if self.active == active && self.applied_mask == self.mask {
             self.retry = None;
             self.last_error = None;
         }
     }
 
-    fn applied(&mut self, active: bool) {
+    fn applied(&mut self, mask: u8, active: bool) {
         self.active = active;
+        self.applied_mask = mask;
         self.updates += 1;
         self.applying = false;
         self.retry = None;
         self.last_error = None;
     }
 
-    fn image(&mut self, active: bool) -> tauri::Result<tauri::image::Image<'static>> {
-        if self.images.is_none() {
-            let original = tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
-                include_bytes!("../../assets/trayTemplate.png")
-            } else {
-                include_bytes!("../../assets/icon.png")
-            })?;
-            let calling = call_icon::with_call_badge(&original, cfg!(target_os = "macos"));
-            self.images = Some((original, calling));
+    fn call_error(&self, desired_active: bool) -> Option<&str> {
+        // A rejected portrait is separate from a failed call badge. A badge
+        // that was applied still requires a successful native restoration.
+        let failed_active = self.retry.as_ref().is_some_and(|((_, active), _)| *active);
+        if self.active || (desired_active && failed_active) {
+            self.last_error.as_deref()
+        } else {
+            None
         }
-        let (original, calling) = self.images.as_ref().unwrap();
+    }
+
+    fn image(&mut self, active: bool) -> tauri::Result<tauri::image::Image<'static>> {
+        if self
+            .images
+            .as_ref()
+            .is_none_or(|(mask, _, _)| *mask != self.mask)
+        {
+            let original = crate::symbiote_icons::image(self.mask)?;
+            let calling = call_icon::with_call_badge(&original, false);
+            self.images = Some((self.mask, original, calling));
+        }
+        let (_, original, calling) = self.images.as_ref().unwrap();
         Ok(if active { calling } else { original }.clone())
     }
 }
@@ -360,13 +384,27 @@ pub fn hide(app: &tauri::AppHandle) {
 }
 
 pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
+    let desired_active = app
+        .state::<Runtime>()
+        .timer
+        .lock()
+        .map(|timer| call_active(&timer.snapshot))
+        .unwrap_or(false);
     let state = app.state::<Preview>();
     let native_tooltip = state
         .native_tooltip
         .lock()
         .map(|value| value.clone())
         .unwrap_or_default();
-    let (indicator_active, indicator_updates, indicator_attempts, indicator_error) = state
+    let (
+        indicator_active,
+        indicator_updates,
+        indicator_attempts,
+        indicator_error,
+        icon_error,
+        requested_mask,
+        applied_mask,
+    ) = state
         .call_indicator
         .lock()
         .map(|indicator| {
@@ -374,7 +412,10 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
                 Some(indicator.active),
                 Some(indicator.updates),
                 Some(indicator.attempts),
+                indicator.call_error(desired_active).map(str::to_owned),
                 indicator.last_error.clone(),
+                Some(indicator.mask),
+                Some(indicator.applied_mask),
             )
         })
         .unwrap_or_default();
@@ -424,9 +465,11 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
         "dockVisible": dock_visible,
         "fallbackRows": fallback_rows,
         "callIndicatorActive": indicator_active,
+        "requestedBuildMask": requested_mask, "appliedBuildMask": applied_mask,
         "callIndicatorUpdates": indicator_updates,
         "callIndicatorAttempts": indicator_attempts,
         "callIndicatorError": indicator_error,
+        "trayIconError": icon_error,
         "tooltip": state.tooltip.lock().ok().map(|tooltip| tooltip.text.clone()),
         "nativeTooltip": native_tooltip.text,
         "nativeTooltipApplied": native_tooltip.applied,
@@ -679,7 +722,7 @@ fn update_call_indicator(app: &tauri::AppHandle, snapshot: &Snapshot, state: &Pr
     let Some(tray) = app.tray_by_id("blincho") else {
         return;
     };
-    let image = {
+    let (mask, image) = {
         let Ok(mut indicator) = state.call_indicator.lock() else {
             return;
         };
@@ -688,30 +731,52 @@ fn update_call_indicator(app: &tauri::AppHandle, snapshot: &Snapshot, state: &Pr
             return;
         }
         indicator.attempts += 1;
+        let mask = indicator.mask;
         match indicator.image(active) {
             Ok(image) => {
                 indicator.applying = true;
-                image
+                (mask, image)
             }
             Err(error) => {
-                indicator.failed(active, Instant::now(), error.to_string());
+                indicator.failed(mask, active, Instant::now(), error.to_string());
                 eprintln!("Tray call indicator: {error}");
                 return;
             }
         }
     };
     // Never hold a state mutex while dispatching synchronously to the UI thread.
-    // This atomic operation also keeps macOS template tinting without a second render.
-    let result = tray.set_icon_with_as_template(Some(image), cfg!(target_os = "macos"));
+    // The approved raster remains full-color on every desktop backend.
+    let result = tray.set_icon_with_as_template(Some(image), false);
     if let Ok(mut indicator) = state.call_indicator.lock() {
         match result {
-            Ok(()) => indicator.applied(active),
+            Ok(()) => indicator.applied(mask, active),
             Err(error) => {
-                indicator.failed(active, Instant::now(), error.to_string());
+                indicator.failed(mask, active, Instant::now(), error.to_string());
                 eprintln!("Tray call indicator: {error}");
             }
         }
     }
+}
+
+pub fn set_symbiote_mask(app: &tauri::AppHandle, mask: u8) -> Result<(), String> {
+    if mask > 63 {
+        return Err("Invalid build mask".into());
+    }
+    let state = app.state::<Preview>();
+    state
+        .call_indicator
+        .lock()
+        .map_err(|error| error.to_string())?
+        .mask = mask;
+    let snapshot = app
+        .state::<Runtime>()
+        .timer
+        .lock()
+        .map_err(|error| error.to_string())?
+        .snapshot
+        .clone();
+    update_call_indicator(app, &snapshot, &state);
+    Ok(())
 }
 
 pub fn update(app: &tauri::AppHandle, snapshot: &Snapshot, strict: bool) {
@@ -952,20 +1017,15 @@ mod tests {
         assert!(!indicator.needs_update(true));
         indicator.applying = false;
         assert!(indicator.needs_update(true));
-        indicator.applied(true);
+        indicator.applied(0, true);
         assert!(!indicator.needs_update(true));
         assert_eq!(indicator.updates, 1);
         let original = indicator.image(false).unwrap();
-        let expected = tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
-            include_bytes!("../../assets/trayTemplate.png")
-        } else {
-            include_bytes!("../../assets/icon.png")
-        })
-        .unwrap();
+        let expected = crate::symbiote_icons::image(0).unwrap();
         assert_ne!(active.rgba(), original.rgba());
         assert_eq!(original.rgba(), expected.rgba());
         assert!(indicator.needs_update(false));
-        indicator.applied(false);
+        indicator.applied(0, false);
         assert!(!indicator.needs_update(false));
         assert_eq!(indicator.updates, 2);
     }
@@ -975,7 +1035,7 @@ mod tests {
         let mut indicator = CallIndicator::default();
         indicator.applying = true;
         indicator.attempts = 1;
-        indicator.failed(true, now, "backend unavailable".into());
+        indicator.failed(0, true, now, "backend unavailable".into());
         assert!(!indicator.active);
         assert_eq!(indicator.updates, 0);
         assert_eq!(indicator.last_error.as_deref(), Some("backend unavailable"));
@@ -985,19 +1045,101 @@ mod tests {
         indicator.clear_obsolete_error(false);
         assert!(indicator.last_error.is_none());
         assert!(indicator.needs_update_at(true, now));
-        indicator.applied(true);
+        indicator.applied(0, true);
         assert!(indicator.last_error.is_none());
         assert_eq!(indicator.updates, 1);
-        indicator.failed(false, now, "temporary restore failure".into());
+        indicator.failed(0, false, now, "temporary restore failure".into());
         assert!(
             indicator.active,
             "A failed restore cannot be reported as successful"
         );
         assert!(!indicator.needs_update_at(false, now + Duration::from_secs(1)));
-        indicator.applied(false);
+        indicator.applied(0, false);
         assert!(!indicator.active);
         assert!(indicator.last_error.is_none());
         assert_eq!(indicator.updates, 2);
+    }
+
+    #[test]
+    fn inactive_portrait_rejection_is_not_a_failed_call_restore() {
+        let now = Instant::now();
+        let mut indicator = CallIndicator::default();
+        indicator.mask = 16;
+        indicator.attempts = 1;
+        indicator.failed(16, false, now, "portrait unavailable".into());
+        assert!(indicator.call_error(false).is_none());
+        assert_eq!(
+            indicator.last_error.as_deref(),
+            Some("portrait unavailable")
+        );
+        assert_eq!(indicator.applied_mask, 0);
+        assert_eq!(indicator.updates, 0);
+        assert_eq!(indicator.attempts, 1);
+        assert!(!indicator.needs_update_at(false, now + Duration::from_secs(1)));
+        assert!(indicator.needs_update_at(true, now));
+        assert!(
+            indicator.call_error(true).is_none(),
+            "A portrait failure is not evidence of a failed active-call attempt"
+        );
+        indicator.attempts += 1;
+        indicator.failed(16, true, now, "call unavailable".into());
+        assert_eq!(indicator.call_error(true), Some("call unavailable"));
+        assert!(indicator.call_error(false).is_none());
+        indicator.clear_obsolete_error(false);
+        assert_eq!(indicator.last_error.as_deref(), Some("call unavailable"));
+        assert_eq!(indicator.updates, 0);
+        assert_eq!(indicator.attempts, 2);
+        indicator.applied(16, true);
+        indicator.mask = 32;
+        indicator.failed(32, false, now, "restore unavailable".into());
+        assert_eq!(indicator.call_error(false), Some("restore unavailable"));
+        assert!(
+            indicator.active,
+            "A failed restore must remain an applied call badge"
+        );
+        assert_eq!(indicator.applied_mask, 16);
+        assert_eq!(indicator.updates, 1);
+        indicator.applied(32, false);
+        assert!(indicator.call_error(false).is_none());
+        assert!(indicator.last_error.is_none());
+        assert_eq!(indicator.applied_mask, 32);
+        assert_eq!(indicator.updates, 2);
+    }
+
+    #[test]
+    fn build_changes_during_calls_restore_the_latest_portrait_and_retry_identity() {
+        let now = Instant::now();
+        let mut indicator = CallIndicator::default();
+        indicator.applied(0, true);
+        indicator.mask = 32;
+        assert!(indicator.needs_update(true));
+        let calling = indicator.image(true).unwrap();
+        let expected = crate::symbiote_icons::image(32).unwrap();
+        assert_ne!(calling.rgba(), expected.rgba());
+        indicator.applying = true;
+        indicator.mask = 63;
+        assert!(!indicator.needs_update(true));
+        indicator.applied(32, true);
+        assert!(
+            indicator.needs_update(true),
+            "An old completion cannot acknowledge the newest mask"
+        );
+        indicator.failed(63, true, now, "temporary failure".into());
+        assert!(!indicator.needs_update_at(true, now));
+        indicator.mask = 16;
+        assert!(
+            indicator.needs_update_at(true, now),
+            "A new build bypasses an unrelated retry delay"
+        );
+        indicator.applied(16, true);
+        assert!(indicator.needs_update(false));
+        let restored = indicator.image(false).unwrap();
+        assert_eq!(
+            restored.rgba(),
+            crate::symbiote_icons::image(16).unwrap().rgba()
+        );
+        indicator.applied(16, false);
+        assert!(!indicator.needs_update(false));
     }
 
     #[test]
@@ -1021,6 +1163,7 @@ mod tests {
         for command in [
             "configure_timer",
             "tray_preview_summary",
+            "set_symbiote_build",
             "set_locale",
             "desktop_command",
             "legacy_history",

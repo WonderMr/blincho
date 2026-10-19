@@ -10,6 +10,7 @@ import './styles/compact-layout.css';
 import './styles/compact-timer.css';
 import './styles/notice.css';
 import './styles/statistics-detail.css';
+import './styles/symbiote.css';
 import { initializeLanguage } from './i18n/runtime';
 import { loadSettings } from './utils/storage';
 import { applyAppearance } from './utils/appearance';

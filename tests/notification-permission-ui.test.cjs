@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const { React, ReactDOMClient, ReactDOM, doc, DOMNode, transformer } = require('./support/syntheticDom.cjs');
+global.IS_REACT_ACT_ENVIRONMENT = true;
 const repo = path.resolve(__dirname, '..');
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
@@ -32,19 +33,19 @@ function harness({ permission = 'default', enabled = false, request = async () =
   }
   const { SettingsModal } = load('src/components/SettingsModal.tsx'); settings = { ...load('src/utils/storage.ts').DEFAULT_SETTINGS, notificationsEnabled: enabled };
   const host = doc.createElement('div'); doc.body.appendChild(host); const root = ReactDOMClient.createRoot(host);
-  const render = element => ReactDOM.flushSync(() => root.render(element));
+  const render = element => React.act(() => ReactDOM.flushSync(() => root.render(element)));
   const element = () => React.createElement(SettingsModal, { settings, onUpdateSettings(value) { settings = value; updates++; render(element()); }, onClose() { render(null); } });
   const props = node => node[Object.keys(node).find(key => key.startsWith('__reactProps'))];
   const find = id => host.querySelector(`[id="${id}"]`);
-  const invoke = callback => { gesture = true; try { ReactDOM.flushSync(callback); } finally { gesture = false; } };
+  const invoke = callback => { gesture = true; try { React.act(() => { ReactDOM.flushSync(callback); }); } finally { gesture = false; } };
   render(element());
   return { host, find, props, get settings() { return settings; }, get updates() { return updates; }, get requests() { return requests; }, get delivered() { return delivered; },
     get checked() { return props(find('notifications-enabled')).checked; }, setPermission(value) { BrowserNotification.permission = value; },
     change(id, value) { invoke(() => props(find(id)).onChange({ target: { checked: value, value } })); },
     test() { invoke(() => props(host.querySelectorAll('button').find(node => node.textContent === 'Проверить')).onClick()); },
     close() { invoke(() => props(host.querySelectorAll('button')[0]).onClick()); },
-    async settle() { for (let i = 0; i < 12; i++) { await Promise.resolve(); ReactDOM.flushSync(() => {}); } await new Promise(resolve => setImmediate(resolve)); ReactDOM.flushSync(() => {}); },
-    destroy() { render(null); ReactDOM.flushSync(() => root.unmount()); doc.body.removeChild(host); delete window.Notification; } };
+    async settle() { await React.act(async () => { await new Promise(resolve => setImmediate(resolve)); }); },
+    destroy() { render(null); React.act(() => root.unmount()); doc.body.removeChild(host); delete window.Notification; } };
 }
 
 test('browser enabling requests permission from its gesture, persists only a grant and preserves concurrent edits', async () => {

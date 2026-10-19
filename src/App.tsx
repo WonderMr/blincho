@@ -35,6 +35,8 @@ import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
 import { useLocalMcp } from './utils/localMcp';
 import { buildMcpStats } from './utils/mcpStats';
+import { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities } from './utils/symbiote';
+import { updateDocumentSymbioteIcon } from './utils/symbioteIcons';
 import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory } from './utils/tauriBridge';
 
 import {
@@ -106,8 +108,10 @@ export const App: React.FC = () => {
   const expiryInFlightRef = useRef(false);
   const cameraAbortRef = useRef<AbortController | null>(null);
   const cameraAccessPendingRef = useRef(false);
+  const [cameraAccessPending, setCameraAccessPending] = useState(false);
   const handleCameraAccessPendingChange = (pending: boolean) => {
     cameraAccessPendingRef.current = pending;
+    if (mountedRef.current) setCameraAccessPending(pending);
     if (pending) cameraAbortRef.current?.abort();
     // A crash during a system prompt must not turn a temporary grant into opt-in.
     saveSettings(pending ? { ...settingsRef.current, cameraLockEnabled: false, enhancedPresenceEnabled: false } : settingsRef.current);
@@ -130,6 +134,27 @@ export const App: React.FC = () => {
       (session.reasons.has('unconfirmed') ? t("Пауза: присутствие не подтверждено") : t("Пауза: нет активности")) :
       phase === 'break' ? t("Перерыв для глаз") : phase === 'exercise' ? t("Выполняется упражнение") :
         phase === 'manual' ? t("Таймер на ручной паузе") : inMeetingActive ? t("Перерыв отложен: встреча") : t("Рабочий цикл");
+
+  const symbioteBuild = getSymbioteBuild(settings, readSymbioteCapabilities(inputStatus === 'active'), cameraAccessPending);
+  const symbioteName = getSymbioteName(symbioteBuild.mask, t);
+
+  useEffect(() => {
+    updateDocumentSymbioteIcon(symbioteBuild.mask);
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const apply = async () => {
+      try {
+        await window.electronAPI?.setSymbioteBuild?.(symbioteBuild.mask);
+        if (!cancelled) await window.electronAPI?.syncSymbioteShortcut?.(symbioteBuild.mask, symbioteName);
+      }
+      catch (error) {
+        console.warn('Blincho: Build icon update failed:', error);
+        if (!cancelled) retry = setTimeout(() => { void apply(); }, 3000);
+      }
+    };
+    void apply();
+    return () => { cancelled = true; clearTimeout(retry); };
+  }, [symbioteBuild.mask, symbioteName]);
 
   const refreshStats = () => {
     const stats = loadAllStats();
@@ -763,10 +788,11 @@ export const App: React.FC = () => {
       focusValue: t("{value0} мин", { value0: Math.floor(todayStats.focusMinutes) }),
       breaksValue: formatNumber(todayStats.breaksCompleted), todayLabel: t("Сегодня"),
       theme: settings.theme, colorPalette: settings.colorPalette,
+      symbioteMask: symbioteBuild.mask, buildName: getSymbioteName(symbioteBuild.mask, t),
     };
     void window.__TAURI__!.core.invoke('tray_preview_summary', { summary })
       .catch(error => console.warn('Blincho: Tray summary failed:', error));
-  }, [todayStats.date, Math.floor(todayStats.focusMinutes), todayStats.breaksCompleted, statusLabel, getLocale(), settings.theme, settings.colorPalette]);
+  }, [todayStats.date, Math.floor(todayStats.focusMinutes), todayStats.breaksCompleted, statusLabel, getLocale(), settings.theme, settings.colorPalette, symbioteBuild.mask]);
   useEffect(() => {
     mountedRef.current = true;
     markPageActivity();
@@ -950,6 +976,7 @@ export const App: React.FC = () => {
       <div className="app-workspace">
         {/* Navigation */}
         <Navbar
+          symbioteBuild={symbioteBuild}
           activeTab={activeTab}
           onSelectTab={setActiveTab}
           onOpenSettings={() => setIsSettingsOpen(true)}
@@ -1001,10 +1028,10 @@ export const App: React.FC = () => {
                 <BookOpen size={20} aria-hidden="true" />
                 <div className="recommended-exercise-copy">
                   <span>{t("Рекомендация дня")}</span>
-                  <h2 id="recommended-exercise-title">{t("Осознанное моргание")}</h2>
+                  <h2 id="recommended-exercise-title" title={t("Осознанное моргание")}>{t("Осознанное моргание")}</h2>
                 </div>
-                <button type="button" className="btn btn-secondary" onClick={() => startTechnique(MEDICAL_TECHNIQUES[1])}>
-                  <Play size={15} aria-hidden="true" />{t("Выполнить сейчас")}
+                <button type="button" className="btn btn-secondary" aria-label={t("Выполнить сейчас")} title={t("Выполнить сейчас")} onClick={() => startTechnique(MEDICAL_TECHNIQUES[1])}>
+                  <Play size={15} aria-hidden="true" /><span className="recommended-action-label">{t("Выполнить сейчас")}</span>
                 </button>
               </section>
           <div className="feature-status-list">
@@ -1101,6 +1128,7 @@ export const App: React.FC = () => {
       {/* Settings Modal */}
       {isSettingsOpen && (
         <SettingsModal
+          symbioteBuild={symbioteBuild}
           updates={updates}
           settings={settings}
           onUpdateSettings={handleUpdateSettings}

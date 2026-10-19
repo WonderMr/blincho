@@ -196,7 +196,7 @@ async function nativeHarness(languages = ['unsupported', 'es-MX']) {
   function Tray() { this.setToolTip = value => calls.push(['tooltip', value]); this.setContextMenu = value => { trayMenu = value; }; }
   const electron = { app, BrowserWindow, Tray, ipcMain: { on: (key, fn) => { handlers[key] = fn; }, handle: (key, fn) => { handlers[key] = fn; } },
     Menu: { buildFromTemplate: value => value, setApplicationMenu: value => { applicationMenu = value; } },
-    nativeImage: { createFromPath: () => ({ isEmpty: () => false, setTemplateImage() {} }) }, powerMonitor: new EventEmitter(), Notification: { isSupported: () => false } };
+    nativeImage: { createFromPath: () => ({ isEmpty: () => false, resize() { return this; }, setTemplateImage() {} }) }, powerMonitor: new EventEmitter(), Notification: { isSupported: () => false } };
   vm.runInNewContext(fs.readFileSync(path.join(repo, 'electron/main.cjs'), 'utf8'), {
     require: name => name === 'electron' ? electron : name === 'fs' ? { mkdirSync() {}, writeFileSync() {}, renameSync() {} } :
       name.startsWith('./') ? require(path.join(repo, 'electron', name)) : require(name),

@@ -2,6 +2,19 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.10.0]
+
+### Added
+
+- Blinchiborg grows with six optional features, with 64 portraits and compact build names in all 30 interface languages. The same selected character appears in the app, tray preview, supported desktop surfaces and browser tab.
+- Create an optional desktop shortcut from the build card in Settings. Its localized name and icon follow the enabled features on macOS, Windows and Linux. macOS uses a separate .blincho document and preserves the signed application bundle.
+- Safely recover interrupted shortcut updates, preserve unrelated files and respect shortcut deletion. Windows portable shortcuts target the stable outer executable.
+
+### Changed
+
+- Place the daily tip and its action in one compact row, with translated text adapting to the available width.
+- Open .blincho documents from Finder in an existing window or after a cold start, including documents delivered before the interface is ready.
+
 ## [1.9.0]
 
 ### Added
