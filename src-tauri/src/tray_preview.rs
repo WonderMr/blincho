@@ -223,6 +223,17 @@ impl CallIndicator {
         self.last_error = None;
     }
 
+    fn call_error(&self, desired_active: bool) -> Option<&str> {
+        // A rejected portrait is separate from a failed call badge. A badge
+        // that was applied still requires a successful native restoration.
+        let failed_active = self.retry.as_ref().is_some_and(|((_, active), _)| *active);
+        if self.active || (desired_active && failed_active) {
+            self.last_error.as_deref()
+        } else {
+            None
+        }
+    }
+
     fn image(&mut self, active: bool) -> tauri::Result<tauri::image::Image<'static>> {
         if self
             .images
@@ -373,6 +384,12 @@ pub fn hide(app: &tauri::AppHandle) {
 }
 
 pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
+    let desired_active = app
+        .state::<Runtime>()
+        .timer
+        .lock()
+        .map(|timer| call_active(&timer.snapshot))
+        .unwrap_or(false);
     let state = app.state::<Preview>();
     let native_tooltip = state
         .native_tooltip
@@ -384,6 +401,7 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
         indicator_updates,
         indicator_attempts,
         indicator_error,
+        icon_error,
         requested_mask,
         applied_mask,
     ) = state
@@ -394,6 +412,7 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
                 Some(indicator.active),
                 Some(indicator.updates),
                 Some(indicator.attempts),
+                indicator.call_error(desired_active).map(str::to_owned),
                 indicator.last_error.clone(),
                 Some(indicator.mask),
                 Some(indicator.applied_mask),
@@ -450,6 +469,7 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
         "callIndicatorUpdates": indicator_updates,
         "callIndicatorAttempts": indicator_attempts,
         "callIndicatorError": indicator_error,
+        "trayIconError": icon_error,
         "tooltip": state.tooltip.lock().ok().map(|tooltip| tooltip.text.clone()),
         "nativeTooltip": native_tooltip.text,
         "nativeTooltipApplied": native_tooltip.applied,
@@ -1037,6 +1057,52 @@ mod tests {
         indicator.applied(0, false);
         assert!(!indicator.active);
         assert!(indicator.last_error.is_none());
+        assert_eq!(indicator.updates, 2);
+    }
+
+    #[test]
+    fn inactive_portrait_rejection_is_not_a_failed_call_restore() {
+        let now = Instant::now();
+        let mut indicator = CallIndicator::default();
+        indicator.mask = 16;
+        indicator.attempts = 1;
+        indicator.failed(16, false, now, "portrait unavailable".into());
+        assert!(indicator.call_error(false).is_none());
+        assert_eq!(
+            indicator.last_error.as_deref(),
+            Some("portrait unavailable")
+        );
+        assert_eq!(indicator.applied_mask, 0);
+        assert_eq!(indicator.updates, 0);
+        assert_eq!(indicator.attempts, 1);
+        assert!(!indicator.needs_update_at(false, now + Duration::from_secs(1)));
+        assert!(indicator.needs_update_at(true, now));
+        assert!(
+            indicator.call_error(true).is_none(),
+            "A portrait failure is not evidence of a failed active-call attempt"
+        );
+        indicator.attempts += 1;
+        indicator.failed(16, true, now, "call unavailable".into());
+        assert_eq!(indicator.call_error(true), Some("call unavailable"));
+        assert!(indicator.call_error(false).is_none());
+        indicator.clear_obsolete_error(false);
+        assert_eq!(indicator.last_error.as_deref(), Some("call unavailable"));
+        assert_eq!(indicator.updates, 0);
+        assert_eq!(indicator.attempts, 2);
+        indicator.applied(16, true);
+        indicator.mask = 32;
+        indicator.failed(32, false, now, "restore unavailable".into());
+        assert_eq!(indicator.call_error(false), Some("restore unavailable"));
+        assert!(
+            indicator.active,
+            "A failed restore must remain an applied call badge"
+        );
+        assert_eq!(indicator.applied_mask, 16);
+        assert_eq!(indicator.updates, 1);
+        indicator.applied(32, false);
+        assert!(indicator.call_error(false).is_none());
+        assert!(indicator.last_error.is_none());
+        assert_eq!(indicator.applied_mask, 32);
         assert_eq!(indicator.updates, 2);
     }
 
