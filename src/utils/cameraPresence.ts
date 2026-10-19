@@ -34,8 +34,14 @@ export function isUsableCameraFrame(pixels: Uint8ClampedArray): boolean {
 
 export function createCameraPresenceChecker(environment: CameraEnvironment = defaultEnvironment) {
   let inFlight: Promise<CameraPresence> | undefined;
-  return (signal?: AbortSignal): Promise<CameraPresence> => {
-    if (inFlight) return inFlight;
+  let inFlightSignal: AbortSignal | undefined;
+  return function checkPresence(signal?: AbortSignal): Promise<CameraPresence> {
+    if (inFlight) {
+      // A new purpose must not inherit an aborted observation, for example
+      // when break completion replaces an enhanced-presence check.
+      if (inFlightSignal?.aborted && !signal?.aborted) return inFlight.then(() => checkPresence(signal));
+      return inFlight;
+    }
     const media = environment.mediaDevices();
     if (!media?.getUserMedia || signal?.aborted) return Promise.resolve('unavailable');
     const check = async (): Promise<CameraPresence> => {
@@ -103,8 +109,9 @@ export function createCameraPresenceChecker(environment: CameraEnvironment = def
         detector?.close(); detector = undefined;
       }
     };
-    const pending = check().finally(() => { if (inFlight === pending) inFlight = undefined; });
+    const pending = check().finally(() => { if (inFlight === pending) { inFlight = undefined; inFlightSignal = undefined; } });
     inFlight = pending;
+    inFlightSignal = signal;
     return pending;
   };
 }

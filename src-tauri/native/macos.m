@@ -3,6 +3,56 @@
 #include <stdatomic.h>
 
 static _Atomic int strictShieldCount;
+// A passive tap counts categories only. It never reads text, key codes,
+// coordinates, target processes or other event fields.
+bool blincho_input_permission(bool prompt) {
+    return CGPreflightListenEventAccess() || (prompt && CGRequestListenEventAccess());
+}
+typedef bool (*BlinchoInputCallback)(void *, int);
+typedef struct { void *context; BlinchoInputCallback callback; bool failed; CFMachPortRef tap; } BlinchoInputContext;
+static CGEventRef blincho_input_event(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *data) {
+    (void)proxy;
+    BlinchoInputContext *context = data;
+    int kind = -1;
+    switch (type) {
+        case kCGEventKeyDown: kind = 0; break;
+        case kCGEventLeftMouseDown: case kCGEventRightMouseDown: case kCGEventOtherMouseDown: kind = 1; break;
+        case kCGEventScrollWheel: kind = 2; break;
+        case kCGEventMouseMoved: case kCGEventLeftMouseDragged: case kCGEventRightMouseDragged: case kCGEventOtherMouseDragged: kind = 3; break;
+        case kCGEventTapDisabledByTimeout: case kCGEventTapDisabledByUserInput:
+            if (context->tap && CGPreflightListenEventAccess() && context->callback(context->context, -1)) {
+                CGEventTapEnable(context->tap, true);
+            } else {
+                context->failed = true; context->callback(context->context, 5);
+            }
+            break;
+        default: break;
+    }
+    if (kind >= 0) context->callback(context->context, kind);
+    return event;
+}
+void blincho_input_run(void *data, BlinchoInputCallback callback) {
+    @autoreleasepool {
+        BlinchoInputContext context = {data, callback, false, NULL};
+        CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventLeftMouseDown) |
+            CGEventMaskBit(kCGEventRightMouseDown) | CGEventMaskBit(kCGEventOtherMouseDown) |
+            CGEventMaskBit(kCGEventScrollWheel) | CGEventMaskBit(kCGEventMouseMoved) |
+            CGEventMaskBit(kCGEventLeftMouseDragged) | CGEventMaskBit(kCGEventRightMouseDragged) | CGEventMaskBit(kCGEventOtherMouseDragged);
+        CFMachPortRef tap = CGEventTapCreate(kCGSessionEventTap, kCGTailAppendEventTap, kCGEventTapOptionListenOnly, mask, blincho_input_event, &context);
+        if (!tap) return;
+        context.tap = tap;
+        CFRunLoopSourceRef source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0);
+        if (!source) { CFRelease(tap); return; }
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopCommonModes);
+        callback(data, 4);
+        while (callback(data, -1) && !context.failed && CGPreflightListenEventAccess()) {
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.25, false);
+        }
+        CGEventTapEnable(tap, false);
+        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, kCFRunLoopCommonModes);
+        CFRelease(source); CFRelease(tap);
+    }
+}
 int blincho_strict_shield_count(void) { return atomic_load(&strictShieldCount); }
 
 @interface BlinchoFocusTarget : NSObject

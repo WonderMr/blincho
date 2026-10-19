@@ -23,6 +23,10 @@ pub struct TimerInput {
     // Older or incomplete renderer commands must not grant camera access.
     #[serde(default)]
     pub camera_lock_enabled: bool,
+    #[serde(default)]
+    pub enhanced_presence_enabled: bool,
+    #[serde(default)]
+    pub absence_lock_enabled: bool,
     #[serde(default = "default_takeover")]
     pub auto_takeover: bool,
 }
@@ -72,6 +76,7 @@ pub struct Snapshot {
     pub meeting_history_epoch: u64,
     pub tick_count: u64,
     pub meeting_postponed_epoch: u64,
+    pub presence_epoch: u64,
 }
 pub struct Timer {
     pub input: Option<TimerInput>,
@@ -83,13 +88,17 @@ pub struct Timer {
     last_meeting_at: Option<i64>,
     meeting_epoch: u64,
     meeting_clock_floor: i64,
+    camera_presence: Option<(i64, Option<bool>)>,
+    camera_check_deadline: Option<i64>,
+    presence_lock_attempted: bool,
+    last_call_at: Option<i64>,
 }
 impl Timer {
     #[cfg(any(target_os = "linux", test))]
     pub fn camera_lock_enabled(&self) -> bool {
         self.input
             .as_ref()
-            .is_some_and(|input| input.camera_lock_enabled)
+            .is_some_and(|input| input.camera_lock_enabled || input.enhanced_presence_enabled)
     }
     pub fn new(now: i64) -> Self {
         Self {
@@ -101,6 +110,10 @@ impl Timer {
             last_meeting_at: None,
             meeting_epoch: 0,
             meeting_clock_floor: now,
+            camera_presence: None,
+            camera_check_deadline: None,
+            presence_lock_attempted: false,
+            last_call_at: None,
             snapshot: Snapshot {
                 total_ms: 0.,
                 remaining_ms: 0.,
@@ -126,6 +139,7 @@ impl Timer {
                 meeting_history_epoch: 0,
                 tick_count: 0,
                 meeting_postponed_epoch: 0,
+                presence_epoch: 0,
             },
         }
     }
@@ -145,6 +159,15 @@ impl Timer {
             return Err("Stale timer command".into());
         }
         self.observe_activity(self.last_at, now, self.activity_state());
+        if self.input.as_ref().is_none_or(|old| {
+            old.enhanced_presence_enabled != input.enhanced_presence_enabled
+                || old.absence_lock_enabled != input.absence_lock_enabled
+        }) {
+            self.invalidate_camera_presence();
+            self.snapshot.live_meeting_status = None;
+            self.last_call_at = None;
+            self.meeting_epoch = self.meeting_epoch.wrapping_add(1);
+        }
         if self
             .input
             .as_ref()
@@ -192,7 +215,9 @@ impl Timer {
         self.snapshot.manual_paused = input.manual_paused;
         self.snapshot.break_active = input.break_active && self.snapshot.reasons.is_empty();
         self.snapshot.exercising = input.exercising && self.snapshot.reasons.is_empty();
-        self.snapshot.live_meeting_enabled = input.meeting_enabled || input.meeting_history_enabled;
+        self.snapshot.live_meeting_enabled = input.meeting_enabled
+            || input.meeting_history_enabled
+            || input.enhanced_presence_enabled;
         self.input = Some(input);
         self.last_at = now;
         Ok(())
@@ -255,6 +280,7 @@ impl Timer {
         self.snapshot.break_elapsed = false;
     }
     pub fn power(&mut self, code: i32, now: i64) {
+        self.invalidate_camera_presence();
         self.observe_activity(self.last_at, now, self.activity_state());
         if (1..=4).contains(&code) {
             self.end_meeting_observation(now, code == 1 || code == 3);
@@ -291,6 +317,14 @@ impl Timer {
         let previous_state = self.activity_state();
         let elapsed = (now - self.last_at).max(0) as f64;
         let was_present = self.snapshot.reasons.is_empty();
+        if now < start
+            || elapsed > 5000.
+            || idle.is_none()
+            || locked.is_none()
+            || idle.is_some_and(|value| value + 0.5 < self.snapshot.idle_seconds)
+        {
+            self.invalidate_camera_presence();
+        }
         self.last_at = now;
         self.snapshot.tick_count += 1;
         if let Some(locked) = locked {
@@ -316,7 +350,12 @@ impl Timer {
             reasons.push("unconfirmed".into());
         }
         if let Some(input) = &self.input {
-            if input.idle_enabled && self.snapshot.idle_seconds >= input.idle_threshold_seconds {
+            let idle = if input.enhanced_presence_enabled {
+                self.snapshot.idle_seconds >= 60. && !self.enhanced_presence_confirmed(now)
+            } else {
+                input.idle_enabled && self.snapshot.idle_seconds >= input.idle_threshold_seconds
+            };
+            if idle {
                 reasons.push("idle".into());
             }
         }
@@ -362,6 +401,93 @@ impl Timer {
             }
         }
         false
+    }
+
+    fn invalidate_camera_presence(&mut self) {
+        self.camera_presence = None;
+        self.camera_check_deadline = None;
+        self.presence_lock_attempted = false;
+        self.snapshot.presence_epoch = self.snapshot.presence_epoch.wrapping_add(1);
+    }
+
+    fn enhanced_presence_confirmed(&self, now: i64) -> bool {
+        (self.camera_presence.is_none() && self.snapshot.idle_seconds < 75.)
+            || self.camera_presence.is_some_and(|(at, present)| {
+                present == Some(true) && (0..=35_000).contains(&(now - at))
+            })
+            || self.camera_check_deadline.is_some_and(|until| now <= until)
+            || (self
+                .snapshot
+                .live_meeting_status
+                .as_ref()
+                .is_some_and(|status| status.supported && status.in_meeting)
+                && self
+                    .last_call_at
+                    .is_some_and(|at| (0..=6_000).contains(&(now - at))))
+    }
+
+    pub fn presence_check_allowed(&self) -> bool {
+        self.input
+            .as_ref()
+            .is_some_and(|input| input.enhanced_presence_enabled)
+            && !self.snapshot.locked
+            && !self.snapshot.suspended
+            && !self.unconfirmed
+            && self.snapshot.idle_seconds >= 60.
+    }
+
+    pub fn presence_check_may_start(&self) -> bool {
+        self.presence_check_allowed()
+            && !self
+                .camera_presence
+                .is_some_and(|(_, present)| present == Some(false))
+    }
+
+    pub fn begin_camera_check(&mut self, now: i64) {
+        if self.camera_presence.is_none()
+            || self
+                .camera_presence
+                .is_some_and(|(_, present)| present == Some(true))
+        {
+            self.camera_check_deadline = Some(now + 15_000);
+        }
+    }
+
+    pub fn claim_presence_lock(&mut self) -> bool {
+        if self.presence_lock_attempted
+            || self
+                .input
+                .as_ref()
+                .is_none_or(|input| !input.absence_lock_enabled)
+        {
+            return false;
+        }
+        self.presence_lock_attempted = true;
+        true
+    }
+
+    pub fn observe_camera_presence(
+        &mut self,
+        epoch: u64,
+        started_at: i64,
+        present: Option<bool>,
+        now: i64,
+    ) -> bool {
+        if epoch != self.snapshot.presence_epoch
+            || !self.presence_check_allowed()
+            || !(0..=15_000).contains(&(now - started_at))
+            || now - (self.snapshot.idle_seconds * 1000.) as i64 + 1000 > started_at
+            || self
+                .snapshot
+                .live_meeting_status
+                .as_ref()
+                .is_none_or(|status| !status.supported || status.in_meeting)
+        {
+            return false;
+        }
+        self.camera_check_deadline = None;
+        self.camera_presence = Some((now, present));
+        true
     }
 
     pub fn meeting_sample_allowed(&self) -> bool {
@@ -435,6 +561,10 @@ impl Timer {
             supported: status.supported,
             applications: applications.clone(),
         });
+        self.last_call_at = status.supported.then_some(now);
+        if status.in_meeting || !status.supported {
+            self.invalidate_camera_presence();
+        }
         // Tray state is transient. Recording still requires its own opt-in,
         // even when postponement keeps the background detector enabled.
         if !self.meeting_sample_allowed() {
@@ -1287,6 +1417,159 @@ mod tests {
             Some(&0.0005)
         );
     }
+    fn enhanced_timer() -> Timer {
+        let mut timer = Timer::new(0);
+        let mut config = input();
+        config.total_ms = 1_000_000.;
+        config.remaining_ms = 1_000_000.;
+        config.enhanced_presence_enabled = true;
+        config.camera_lock_enabled = false;
+        config.absence_lock_enabled = true;
+        config.idle_enabled = false;
+        timer.configure(config, 0).unwrap();
+        timer.tick(1000, Some(61.), Some(false));
+        timer.observe_meeting(1000, &meeting_status(&[]));
+        timer
+    }
+    #[test]
+    fn enhanced_reading_continues_during_a_check_and_a_bounded_positive_lease() {
+        let mut timer = enhanced_timer();
+        assert!(timer.camera_lock_enabled());
+        assert!(timer.snapshot.reasons.is_empty());
+        let epoch = timer.snapshot.presence_epoch;
+        timer.begin_camera_check(1000);
+        assert!(timer.observe_camera_presence(epoch, 1000, Some(true), 1500));
+        for second in 2..=36 {
+            timer.tick(second * 1000, Some(60. + second as f64), Some(false));
+        }
+        assert!(timer.snapshot.reasons.is_empty());
+        timer.tick(37000, Some(97.), Some(false));
+        assert_eq!(timer.snapshot.reasons, ["idle"]);
+        assert!(timer.snapshot.focus_by_date.values().sum::<f64>() > 30.);
+    }
+    #[test]
+    fn camera_absence_and_unknown_stop_work_without_backdating_reading() {
+        for result in [Some(false), None] {
+            let mut timer = enhanced_timer();
+            let epoch = timer.snapshot.presence_epoch;
+            timer.begin_camera_check(1000);
+            assert!(timer.observe_camera_presence(epoch, 1000, result, 1500));
+            timer.tick(2000, Some(62.), Some(false));
+            assert_eq!(timer.snapshot.reasons, ["idle"]);
+            assert!(timer
+                .snapshot
+                .activity_spans
+                .iter()
+                .all(|span| span.start >= 0));
+        }
+        let mut timer = enhanced_timer();
+        timer.begin_camera_check(1000);
+        for second in 2..=17 {
+            timer.tick(second * 1000, Some(60. + second as f64), Some(false));
+        }
+        assert_eq!(
+            timer.snapshot.reasons,
+            ["idle"],
+            "an unfinished check cannot preserve work indefinitely"
+        );
+    }
+    #[test]
+    fn confirmed_absence_stops_camera_retries_until_new_input() {
+        let mut timer = enhanced_timer();
+        let epoch = timer.snapshot.presence_epoch;
+        assert!(timer.presence_check_may_start());
+        timer.begin_camera_check(1000);
+        assert!(timer.observe_camera_presence(epoch, 1000, None, 1500));
+        assert!(
+            timer.presence_check_may_start(),
+            "unknown results may retry"
+        );
+        timer.begin_camera_check(2000);
+        assert!(timer.observe_camera_presence(epoch, 2000, Some(false), 2500));
+        assert!(!timer.presence_check_may_start());
+        assert!(
+            timer.presence_check_allowed(),
+            "the result may still request a lock"
+        );
+        assert!(timer.claim_presence_lock());
+        timer.tick(3000, Some(0.), Some(false));
+        for second in 4..=64 {
+            timer.tick(second * 1000, Some((second - 3) as f64), Some(false));
+        }
+        assert!(timer.presence_check_may_start(), "new input resets absence");
+    }
+    #[test]
+    fn input_calls_power_and_policy_changes_reject_stale_camera_results() {
+        for cause in 0..5 {
+            let mut timer = enhanced_timer();
+            let epoch = timer.snapshot.presence_epoch;
+            timer.begin_camera_check(1000);
+            match cause {
+                0 => {
+                    timer.tick(2000, Some(0.), Some(false));
+                }
+                1 => timer.observe_meeting(2000, &meeting_status(&["Zoom"])),
+                2 => timer.power(1, 2000),
+                3 => {
+                    let mut config = timer.input.clone().unwrap();
+                    config.enhanced_presence_enabled = false;
+                    timer.configure(config, 2000).unwrap();
+                }
+                _ => timer.observe_meeting(2000, &crate::platform::MeetingStatus::inactive(false)),
+            }
+            assert!(
+                !timer.observe_camera_presence(epoch, 1000, Some(false), 2500),
+                "cause {cause}"
+            );
+        }
+    }
+    #[test]
+    fn enhanced_camera_leases_can_refresh_during_breaks_and_exercises() {
+        for exercise in [false, true] {
+            let mut timer = enhanced_timer();
+            let epoch = timer.snapshot.presence_epoch;
+            timer.begin_camera_check(1000);
+            assert!(timer.observe_camera_presence(epoch, 1000, Some(true), 1500));
+            let mut config = timer.input.clone().unwrap();
+            config.break_active = !exercise;
+            config.exercising = exercise;
+            config.break_seconds = 120.;
+            config.version += 1;
+            timer.configure(config, 2000).unwrap();
+            for second in 3..=30 {
+                timer.tick(second * 1000, Some(60. + second as f64), Some(false));
+            }
+            assert!(timer.presence_check_allowed());
+            timer.observe_meeting(30000, &meeting_status(&[]));
+            timer.begin_camera_check(30000);
+            assert!(timer.observe_camera_presence(epoch, 30000, Some(true), 30500));
+            for second in 31..=40 {
+                timer.tick(second * 1000, Some(60. + second as f64), Some(false));
+            }
+            assert!(timer.snapshot.reasons.is_empty());
+            assert_eq!(timer.snapshot.break_active, !exercise);
+            assert_eq!(timer.snapshot.exercising, exercise);
+        }
+    }
+    #[test]
+    fn active_call_preserves_reading_and_lock_attempts_are_bounded_per_input_episode() {
+        let mut timer = enhanced_timer();
+        timer.observe_meeting(2000, &meeting_status(&["Zoom"]));
+        timer.tick(3000, Some(100.), Some(false));
+        assert!(timer.snapshot.reasons.is_empty());
+        timer.observe_meeting(3500, &meeting_status(&[]));
+        let epoch = timer.snapshot.presence_epoch;
+        timer.begin_camera_check(3500);
+        assert!(timer.observe_camera_presence(epoch, 3500, Some(false), 4000));
+        assert!(timer.claim_presence_lock());
+        assert!(!timer.claim_presence_lock());
+        timer.tick(4500, Some(0.), Some(false));
+        assert!(timer.claim_presence_lock());
+        let mut config = timer.input.clone().unwrap();
+        config.absence_lock_enabled = false;
+        timer.configure(config, 5000).unwrap();
+        assert!(!timer.claim_presence_lock());
+    }
     fn input() -> TimerInput {
         TimerInput {
             total_ms: 2000.,
@@ -1303,6 +1586,8 @@ mod tests {
             meeting_enabled: false,
             meeting_history_enabled: false,
             camera_lock_enabled: true,
+            enhanced_presence_enabled: false,
+            absence_lock_enabled: false,
             auto_takeover: true,
         }
     }

@@ -6,6 +6,7 @@ import { analyzeDayActivity, summarizeWeek } from '../utils/activity';
 import { analyzeDayMeetings, summarizeWeekMeetings } from '../utils/meetings';
 import { MeetingHistoryControls } from './MeetingHistoryControls';
 import { HistoryDatePicker } from './HistoryDatePicker';
+import { InputActivityView } from './InputActivityView';
 import type { MeetingHistoryControlsProps } from './MeetingHistoryControls';
 import { Trophy, Flame, CheckCircle2, Clock, Calendar, Zap, LockKeyhole, Activity, Monitor, Coffee, Pause, ChevronDown, Phone } from 'lucide-react';
 
@@ -195,6 +196,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({ todayStats, allS
               </tr>)}</tbody>
             </table></div>
           </details>}
+          <InputActivityView day={selectedDay} />
           <section className="statistics-meetings" aria-labelledby="daily-meetings-title">
             {meetingHistoryControls && <MeetingHistoryControls id="statistics-meeting-history" {...meetingHistoryControls} />}
             <div className="statistics-meetings-heading">

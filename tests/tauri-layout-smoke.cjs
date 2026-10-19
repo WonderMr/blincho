@@ -14,7 +14,8 @@ fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date
   myeyes_settings_v1: JSON.stringify({ cameraLockEnabled: false, idleDetectionEnabled: true, meetingDetectionEnabled: true, strictMode: true,
     workMinutes: 20, breakSeconds: 20, soundEnabled: false, notificationsEnabled: false }),
   'blincho-language-v1': '{"preference":"en","acknowledged":true}',
-  myeyes_stats_v1: JSON.stringify([{ date, breaksCompleted: 11, exercisesCompleted: 4, focusMinutes: 656 },
+  myeyes_stats_v1: JSON.stringify([{ date, breaksCompleted: 11, exercisesCompleted: 4, focusMinutes: 656,
+    inputActivity: [9, 12, 15].map(hour => ({ start: new Date(`${date}T${String(hour).padStart(2, '0')}:00:00`).getTime(), keyPresses: 1234, clicks: 567, scrolls: 89, mouseMoves: 12345 })) },
     { date: '2025-05-01', breaksCompleted: 2, exercisesCompleted: 0, focusMinutes: 45 }]),
 } }));
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.resolve(__dirname, '../src-tauri/target/debug/blincho');
@@ -205,25 +206,47 @@ function checkShell(layout) {
     assert.equal(drag.selectedAfterText,6,'Pressing selected text preserves text interaction');
     assert.equal(drag.selectionPreserved,true,'Dragging free space retains the selected text');
     results.push({scope:'real-dom-drag-routing',...drag});
-    const dateMarker = ++sequence;
-    await control('eval', { script: `(() => {
-      const trigger=document.querySelector('.statistics-date-trigger'); trigger.click();
-      requestAnimationFrame(() => {
-        const panel=document.querySelector('.statistics-date-choices');
-        const choices=[...panel.querySelectorAll('button')];
-        const older=choices.find(button=>button.dataset.date==='2025-05-01');
-        const rect=panel.getBoundingClientRect();
-        window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${dateMarker},dateChoices:{
-          open:trigger.getAttribute('aria-expanded'),count:choices.length,visible:rect.width>0&&rect.height>0,
-          focus:document.activeElement?.dataset.date,olderLabel:older.textContent}}});
-      });
-    })()` });
-    const dateChoices=(await until(value=>value.renderer?.marker===dateMarker)).renderer.dateChoices;
+    // Poll actual DOM state from Node: animation frames may stop while this
+    // native test window is backgrounded. Every sample reports a fresh marker.
+    const sampleDate = async (script, ready) => {
+      const deadline = Date.now() + 10000;
+      let state;
+      do {
+        const marker = ++sequence;
+        await control('eval', { script: `(() => {
+          let state;
+          try { state = (() => { ${script} })(); }
+          catch (error) { state = { error: String(error) }; }
+          window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${marker},dateState:state}});
+        })()` });
+        state = (await until(value => value.renderer?.marker === marker)).renderer.dateState;
+        assert(!state.error, state.error);
+        if (ready(state)) return state;
+        await sleep(100);
+      } while (Date.now() < deadline);
+      throw Error('Date picker did not settle: ' + JSON.stringify(state));
+    };
+    await control('eval', { script: "document.querySelector('.statistics-date-trigger').click();" });
+    const dateChoices = await sampleDate(`
+      const trigger=document.querySelector('.statistics-date-trigger');
+      const panel=document.querySelector('.statistics-date-choices');
+      const choices=[...(panel?.querySelectorAll('button') ?? [])];
+      const older=choices.find(button=>button.dataset.date==='2025-05-01');
+      const rect=panel?.getBoundingClientRect();
+      return {open:trigger.getAttribute('aria-expanded'),count:choices.length,
+        visible:!!rect&&rect.width>0&&rect.height>0,
+        focus:document.activeElement?.dataset.date,olderLabel:older?.textContent};
+    `, state => state.open === 'true' && state.focus === date);
     assert.equal(dateChoices.open,'true');assert(dateChoices.visible);assert.equal(dateChoices.count,8);
     assert.equal(dateChoices.focus,date,'Opening the list focuses the selected day');
-    const selectedDateMarker=++sequence;
-    await control('eval',{script:`document.querySelector('.statistics-date-choices button[data-date="2025-05-01"]').click();requestAnimationFrame(()=>window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,marker:${selectedDateMarker},dateSelection:{label:document.querySelector('.statistics-date-trigger span').textContent,closed:!document.querySelector('.statistics-date-choices'),recentSelected:document.querySelectorAll('.statistics-day-button[aria-pressed="true"]').length,focused:document.activeElement===document.querySelector('.statistics-date-trigger')}}}));`});
-    const dateSelection=(await until(value=>value.renderer?.marker===selectedDateMarker)).renderer.dateSelection;
+    assert(dateChoices.olderLabel, 'Saved historical date is present');
+    await control('eval',{script:`document.querySelector('.statistics-date-choices button[data-date="2025-05-01"]').click();`});
+    const dateSelection = await sampleDate(`
+      const trigger=document.querySelector('.statistics-date-trigger');
+      return {label:trigger.querySelector('span').textContent,closed:!document.querySelector('.statistics-date-choices'),
+        recentSelected:document.querySelectorAll('.statistics-day-button[aria-pressed="true"]').length,
+        focused:document.activeElement===trigger};
+    `, state => state.closed && state.focused && state.label === dateChoices.olderLabel);
     assert.equal(dateSelection.label,dateChoices.olderLabel);assert(dateSelection.closed&&dateSelection.focused);
     assert.equal(dateSelection.recentSelected,0,'An older saved date does not select a recent-day button');
     results.push({scope:'in-app-date-choices',...dateChoices,...dateSelection});

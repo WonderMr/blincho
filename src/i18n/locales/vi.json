@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Không thể sao chép. Hãy chọn văn bản cài đặt kết nối bên dưới.",
   "Подключение AI-клиентов": "Kết nối ứng dụng khách AI",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Cho phép đọc trạng thái, cài đặt và tổng kết hằng ngày, bắt đầu giờ nghỉ và điều khiển bộ hẹn giờ. Chỉ có thể truy cập từ máy tính này bằng mã truy cập. Tắt tính năng sẽ dừng máy chủ.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Mã truy cập cho phép điều khiển Blincho. Mã sẽ thay đổi khi bật lại MCP."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Mã truy cập cho phép điều khiển Blincho. Mã sẽ thay đổi khi bật lại MCP.",
+  "Уточнять присутствие камерой": "Xác nhận sự hiện diện bằng camera",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "Sau một phút không có thao tác nhập và khi không có cuộc gọi, camera sẽ kiểm tra xem bạn có mặt hay không. Đọc cũng được tính là làm việc. Khung hình chỉ được xử lý trên thiết bị.",
+  "Блокировать при подтверждённом отсутствии": "Khóa khi đã xác nhận bạn vắng mặt",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Chỉ khóa sau khi kiểm tra bằng camera và kiểm tra lại thao tác nhập cùng trạng thái cuộc gọi. Nếu camera gặp lỗi, thiết bị sẽ không bị khóa.",
+  "Собирать счётчики ввода": "Thu thập số đếm thao tác nhập",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Chỉ lưu cục bộ số lượng sự kiện theo từng khoảng 5 phút. Không thu thập văn bản, ứng dụng hay tọa độ. Tần suất sự kiện tùy thuộc vào thiết bị. Dữ liệu này không dùng để chẩn đoán.",
+  "Нажатия клавиш": "Lần nhấn phím",
+  "Клики": "Lần nhấp chuột",
+  "Прокрутки": "Lần cuộn",
+  "Движения мыши": "Chuyển động chuột",
+  "Профиль активности ввода": "Hồ sơ hoạt động nhập",
+  "Скачать CSV": "Tải CSV",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Cho phép giám sát thao tác nhập trong cài đặt hệ thống, rồi bật lại việc thu thập.",
+  "Системный сбор ввода недоступен в этой среде.": "Không thể thu thập thao tác nhập trên toàn hệ thống trong môi trường này.",
+  "Удалить статистику ввода": "Xóa thống kê thao tác nhập",
+  "Не удалось удалить статистику ввода.": "Không thể xóa thống kê thao tác nhập."
 }

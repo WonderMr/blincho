@@ -2,6 +2,8 @@ import { AppSettings, DayStats, CVSSurveyResult, ActivitySpan, MeetingSpan } fro
 import { normalizeActivity, splitActivityByDay } from './activity';
 import { normalizeMeetings, splitMeetingsByDay } from './meetings';
 import { normalizeTimerSettings } from './timerSession';
+import { mergeInputActivity, normalizeInputActivity } from './inputActivity';
+import type { InputActivitySnapshot } from './inputActivity';
 import { CVS_SURVEY_QUESTIONS } from '../data/cvsQuestions';
 
 const STORAGE_KEYS = {
@@ -27,6 +29,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   meetingDetectionEnabled: true,
   meetingHistoryEnabled: false,
   cameraLockEnabled: false,
+  enhancedPresenceEnabled: false,
+  absenceLockEnabled: false,
+  inputActivityEnabled: false,
   localMcpEnabled: false,
   strictMode: false,
 };
@@ -72,6 +77,11 @@ export function loadAllStats(): DayStats[] {
       .map(stat => ({ ...stat,
         ...(stat.activity !== undefined ? { activity: normalizeActivity(stat.activity, stat.date) } : {}),
         ...(stat.meetings !== undefined ? { meetings: normalizeMeetings(stat.meetings, stat.date) } : {}),
+        ...(stat.inputActivity !== undefined ? { inputActivity: normalizeInputActivity(stat.inputActivity, stat.date) } : {}),
+        ...(stat.inputActivityCursor ? { inputActivityCursor: {
+          source: typeof stat.inputActivityCursor.source === 'string' ? stat.inputActivityCursor.source.slice(0, 100) : '',
+          buckets: normalizeInputActivity(stat.inputActivityCursor.buckets, stat.date),
+        } } : {}),
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
   } catch {
@@ -140,6 +150,39 @@ export function recordFocusSeconds(seconds: number, date = getTodayDateString())
 
 export function recordActivitySpans(spans: ActivitySpan[]): void {
   recordTimerProgress([], spans);
+}
+
+export function recordInputActivity(snapshot: InputActivitySnapshot): boolean {
+  if (snapshot.status !== 'active' || typeof snapshot.source !== 'string' || !snapshot.source || snapshot.source.length > 100 || !Array.isArray(snapshot.buckets)) return false;
+  const stats = loadAllStats();
+  const history = new Map(stats.map(day => [day.date, day]));
+  const dates = new Set(snapshot.buckets.filter(bucket => Number.isFinite(bucket?.start)).map(bucket => {
+    const date = new Date(bucket.start);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }));
+  for (const date of dates) {
+    const incoming = normalizeInputActivity(snapshot.buckets, date);
+    if (!incoming.length) continue;
+    const day = history.get(date) ?? emptyDay(date);
+    const previous = day.inputActivityCursor?.source === snapshot.source ? day.inputActivityCursor.buckets : [];
+    day.inputActivity = mergeInputActivity(day.inputActivity ?? [], incoming, previous);
+    // Keep the maximum watermark if a delayed snapshot arrives after a newer one.
+    const buckets = normalizeInputActivity([...previous, ...incoming], date);
+    day.inputActivityCursor = { source: snapshot.source, buckets };
+    history.set(date, day);
+  }
+  try {
+    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify([...history.values()].sort((a, b) => a.date.localeCompare(b.date))));
+    return true;
+  } catch (error) { console.warn('Blincho: Input activity storage failed:', error); return false; }
+}
+
+export function clearInputActivity(): boolean {
+  try {
+    const stats = loadAllStats().map(({ inputActivity: _counts, inputActivityCursor: _cursor, ...day }) => day);
+    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats));
+    return true;
+  } catch (error) { console.warn('Blincho: Input activity deletion failed:', error); return false; }
 }
 
 // Focus totals and timeline observations share one snapshot and one write,

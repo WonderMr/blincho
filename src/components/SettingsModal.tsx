@@ -3,6 +3,8 @@ import { LanguagePicker } from './LanguagePicker';
 import { UpdateSettings } from './UpdateSettings';
 import { LocalMcpSettings } from './LocalMcpSettings';
 import { MeetingHistoryControls } from './MeetingHistoryControls';
+import { InputActivityControls } from './InputActivityControls';
+import type { InputActivityControlsProps } from './InputActivityControls';
 import type { MeetingHistoryControlsProps } from './MeetingHistoryControls';
 import { UpdateControls } from '../utils/updates';
 import { t, formatNumber } from '../i18n/runtime';
@@ -21,6 +23,7 @@ interface SettingsModalProps {
   onCameraAccessPendingChange?: (pending: boolean) => void;
   updates?: UpdateControls;
   meetingHistoryControls?: Omit<MeetingHistoryControlsProps, 'id'>;
+  inputActivityControls?: InputActivityControlsProps;
 }
 
 interface ToggleRowProps {
@@ -50,7 +53,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ id, title, description, checked, 
   </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, onCameraAccessPendingChange, updates, meetingHistoryControls }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, onCameraAccessPendingChange, updates, meetingHistoryControls, inputActivityControls }) => {
   const { preference, suggestedLocale, SUPPORTED_LANGUAGES, setLanguagePreference } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -61,6 +64,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   const [cameraPending, setCameraPending] = useState(false);
   const [cameraFeedback, setCameraFeedback] = useState('');
   const cameraRequestRef = useRef<AbortController | null>(null);
+  const cameraSettingRef = useRef<'cameraLockEnabled' | 'enhancedPresenceEnabled'>('cameraLockEnabled');
   const mountedRef = useRef(false);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -77,7 +81,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   const notificationsGranted = isNative || ('Notification' in window && Notification.permission === 'granted');
 
   const updateCameraSetting = (enabled: boolean) => {
-    const updated = { ...settingsRef.current, cameraLockEnabled: enabled };
+    const updated = { ...settingsRef.current, [cameraSettingRef.current]: enabled };
     settingsRef.current = updated;
     updateSettingsRef.current(updated);
   };
@@ -100,7 +104,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
     onClose();
   };
   onCloseRef.current = closeSettings;
-  const handleCameraChange = async (enabled: boolean) => {
+  const handleCameraChange = async (enabled: boolean, setting: 'cameraLockEnabled' | 'enhancedPresenceEnabled' = 'cameraLockEnabled') => {
+    if (cameraRequestRef.current) {
+      if (!enabled && cameraSettingRef.current === setting) cancelCameraRequest(true);
+      return;
+    }
+    cameraSettingRef.current = setting;
     if (!enabled) {
       if (cameraRequestRef.current) cancelCameraRequest(true);
       else { updateCameraSetting(false); setCameraFeedback(''); }
@@ -335,6 +344,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
               description={meetingSupported ? t("При системных признаках звонка перерыв откладывается. Детектор может ошибаться.") : t("Недоступно в этой версии. Системный детектор звонков поддерживается в приложении для macOS.")}
               checked={meetingSupported && settings.meetingDetectionEnabled} disabled={!meetingSupported} onChange={value => handleChange('meetingDetectionEnabled', value)} />
             {meetingHistoryControls && <MeetingHistoryControls id="settings-meeting-history" {...meetingHistoryControls} />}
+            <ToggleRow id="enhanced-presence" title={t("Уточнять присутствие камерой")}
+              description={t("После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.")}
+              checked={hasNativeTimer() && meetingSupported && settings.enhancedPresenceEnabled}
+              disabled={!hasNativeTimer() || !meetingSupported || !cameraLockSupported || cameraPending}
+              onChange={value => { void handleCameraChange(value, 'enhancedPresenceEnabled'); }} />
+            {settings.enhancedPresenceEnabled && <ToggleRow id="absence-lock" title={t("Блокировать при подтверждённом отсутствии")}
+              description={t("Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.")}
+              checked={settings.absenceLockEnabled} onChange={value => handleChange('absenceLockEnabled', value)} />}
             <ToggleRow id="camera-lock-enabled" title={t("Блокировать компьютер, если никого нет")}
               description={`${t("В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.")}${cameraLockSupported ? '' : ` ${t("Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.")}`}`}
               checked={cameraLockSupported && settings.cameraLockEnabled} disabled={!cameraLockSupported} onChange={value => { void handleCameraChange(value); }} />
@@ -357,6 +374,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
               checked={settings.strictMode} onChange={value => handleChange('strictMode', value)} />
           </section>
           <LocalMcpSettings enabled={settings.localMcpEnabled} onChange={value => handleChange('localMcpEnabled', value)} />
+          {inputActivityControls && <section className="settings-section-card"><InputActivityControls {...inputActivityControls} /></section>}
           {updates && <UpdateSettings updates={updates} />}
         </div>
         <footer className="settings-dialog-footer"><span><Monitor size={14} aria-hidden="true" />{isNative ? t("Настольная версия") : t("Браузерная версия")}</span>

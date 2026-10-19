@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Nu s-a putut copia. Selectează setările de conectare de mai jos.",
   "Подключение AI-клиентов": "Conectarea clienților AI",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Permite citirea stării, a setărilor și a rezumatelor zilnice, pornirea unei pauze și controlul cronometrului. Accesul este permis doar de pe acest computer, printr-un token. Dezactivarea oprește serverul.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Tokenul permite controlul Blincho. Se schimbă la reactivarea MCP."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Tokenul permite controlul Blincho. Se schimbă la reactivarea MCP.",
+  "Уточнять присутствие камерой": "Verifică prezența cu camera",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "După un minut fără activitate de intrare și dacă nu există un apel în curs, camera verifică prezența. Cititul este considerat timp de lucru. Cadrele sunt procesate doar pe dispozitiv.",
+  "Блокировать при подтверждённом отсутствии": "Blochează când absența este confirmată",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Blocarea are loc doar după verificarea cu camera și o nouă verificare a activității de intrare și a apelurilor. Dacă apare o eroare a camerei, blocarea este omisă.",
+  "Собирать счётчики ввода": "Numără evenimentele de intrare",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Doar totaluri locale de evenimente pe intervale de cinci minute. Fără text, aplicații sau coordonate. Frecvența evenimentelor depinde de dispozitiv. Aceste date nu stabilesc un diagnostic.",
+  "Нажатия клавиш": "Apăsări de taste",
+  "Клики": "Clicuri",
+  "Прокрутки": "Derulări",
+  "Движения мыши": "Mișcări ale mouse-ului",
+  "Профиль активности ввода": "Profilul activității de intrare",
+  "Скачать CSV": "Descarcă CSV",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Permite monitorizarea intrării în setările sistemului și activează din nou colectarea.",
+  "Системный сбор ввода недоступен в этой среде.": "Colectarea evenimentelor de intrare la nivel de sistem nu este disponibilă în acest mediu.",
+  "Удалить статистику ввода": "Șterge statisticile de intrare",
+  "Не удалось удалить статистику ввода.": "Nu s-au putut șterge statisticile de intrare."
 }
