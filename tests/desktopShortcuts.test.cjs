@@ -468,7 +468,12 @@ test('cleanup preserves a foreign replacement at the previous owned filename', a
   const f = await fixture(t, 'darwin');
   const initial = await f.controller.create({ mask: 1, name: 'Old' });
   const pending = await pendingPublication(f, { mask: 2, name: 'New' }, 'update');
-  await fsp.unlink(initial.path); await fsp.writeFile(initial.path, 'foreign replacement');
+  // Allocate the foreign inode while the owned file still exists. Linux may
+  // immediately reuse an inode when unlink is followed by creating a file.
+  const replacement = path.join(f.root, 'foreign-replacement');
+  await fsp.writeFile(replacement, 'foreign replacement');
+  assert.notEqual((await fsp.lstat(replacement, { bigint: true })).ino, (await fsp.lstat(initial.path, { bigint: true })).ino);
+  await fsp.unlink(initial.path); await fsp.rename(replacement, initial.path);
   assert.equal((await f.restart().status()).exists, true);
   assert.equal(await fsp.readFile(initial.path, 'utf8'), 'foreign replacement');
   assert.equal(fs.existsSync(pending.journalPath), false);
@@ -518,13 +523,15 @@ test('Windows refuses invalid, missing, non-file and symlinked portable targets'
 test('same-name publication rechecks the original inode after journal preparation', async t => {
   const f = await fixture(t, 'darwin');
   const initial = await f.controller.create({ mask: 1, name: 'Same' });
+  const replacement = path.join(f.root, 'foreign-marker.blincho');
+  await fsp.writeFile(replacement, MARKER);
+  const foreignIdentity = (await fsp.lstat(replacement, { bigint: true })).ino;
+  assert.notEqual(foreignIdentity, (await fsp.lstat(initial.path, { bigint: true })).ino);
   const original = fsp.rename;
-  let foreignIdentity;
   fsp.rename = async (...args) => {
     const result = await original.apply(fsp, args);
     if (args[1] === path.join(path.dirname(f.statePath), 'transaction.json')) {
-      await fsp.unlink(initial.path); await fsp.writeFile(initial.path, MARKER);
-      foreignIdentity = (await fsp.lstat(initial.path, { bigint: true })).ino;
+      await fsp.unlink(initial.path); await original.call(fsp, replacement, initial.path);
     }
     return result;
   };
