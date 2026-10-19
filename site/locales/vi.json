@@ -145,5 +145,6 @@
   "release.1.7.3": "Huy hiệu điện thoại và trạng thái trực tiếp ở khay hệ thống cho biết các cuộc gọi được phát hiện. Trạng thái cuộc gọi hoạt động riêng với việc tự nguyện ghi lịch sử cuộc gọi.",
   "release.1.8.0": "Kiểm tra sự hiện diện bằng camera cục bộ và khóa máy tính tùy chọn; khung hình được xử lý trên thiết bị, không bao giờ được lưu hay tải lên. Các bản phát hành sau chỉ kiểm tra khi một lần nghỉ có hẹn giờ kết thúc.",
   "release.1.8.14": "MCP cục bộ tùy chọn kết nối ứng dụng khách AI với trạng thái bộ hẹn giờ, cài đặt, tổng hôm nay và các thao tác với bộ hẹn giờ. Kiểm tra sự hiện diện bằng camera chỉ chạy sau khi lần nghỉ có hẹn giờ kết thúc.",
-  "release.1.8.15": "MCP cục bộ hiện báo cáo thống kê theo ngày, tuần lịch hoặc khoảng ngày, kèm ngày có dữ liệu và khoảng trống dễ thấy. Vị trí và kích thước cửa sổ được giữ sau khi khóa máy, ngủ và nghỉ."
+  "release.1.8.15": "MCP cục bộ hiện báo cáo thống kê theo ngày, tuần lịch hoặc khoảng ngày, kèm ngày có dữ liệu và khoảng trống dễ thấy. Vị trí và kích thước cửa sổ được giữ sau khi khóa máy, ngủ và nghỉ.",
+  "release.1.10.0": "Diện mạo và tên phụ thuộc vào các tính năng được bật. Lối tắt trên màn hình thay đổi theo cấu hình của bạn."
 }

@@ -145,5 +145,6 @@
   "release.1.7.3": "Um símbolo de telefone e o estado em tempo real na bandeja mostram as chamadas detectadas. O estado das chamadas funciona independentemente do registro voluntário do histórico de chamadas.",
   "release.1.8.0": "Verificações locais opcionais de presença com a câmera e bloqueio do computador, com imagens processadas no dispositivo e nunca salvas nem enviadas. Versões posteriores executam a verificação somente após o fim de uma pausa cronometrada.",
   "release.1.8.14": "O MCP local opcional conecta clientes de IA ao estado do timer, às configurações, aos totais de hoje e às ações do timer. As verificações de presença com a câmera ocorrem somente após o fim da pausa cronometrada.",
-  "release.1.8.15": "O MCP local agora fornece estatísticas por dia, semana do calendário ou intervalo de datas, com as datas dos dados disponíveis e lacunas visíveis. A posição e o tamanho da janela são preservados após bloqueio, suspensão e pausas."
+  "release.1.8.15": "O MCP local agora fornece estatísticas por dia, semana do calendário ou intervalo de datas, com as datas dos dados disponíveis e lacunas visíveis. A posição e o tamanho da janela são preservados após bloqueio, suspensão e pausas.",
+  "release.1.10.0": "A aparência e o nome dependem dos recursos ativados. O atalho no ambiente de trabalho acompanha a sua configuração."
 }

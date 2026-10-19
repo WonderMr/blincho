@@ -23,6 +23,7 @@ Website: https://blincho.app
 - Shows a small tray preview with the next break countdown, recorded work time, completed breaks and current call status on macOS and Windows. A phone badge marks a detected call on the tray icon. Linux exposes the live summary and call application in its tray menu.
 - Records daily work, absence, lock, sleep, manual pauses and rest intervals locally. Browse previous days, average and longest work intervals, and weekly averages per calendar day or day of use. Older totals stay available; missing time records remain unknown.
 - Optionally records detected calls with their application, observed start/end and duration after you enable call history. Browse daily call lanes and per-app totals, average call lengths and weekly call time. Browser calls identify the browser; detection is approximate.
+- Adapts the Blinchiborg character and localized build name to six optional features, with 64 combinations. In Settings, choose Create shortcut to add a desktop shortcut whose name and icon follow the build. macOS uses a separate .blincho document, preserving the signed app; Windows uses .lnk and Linux uses .desktop.
 - Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
 - Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.
 
