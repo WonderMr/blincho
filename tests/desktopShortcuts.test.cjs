@@ -4,11 +4,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
+const os = require('node:os');
 const { createShortcutController } = require('../electron/desktopShortcuts.cjs');
 
 const MARKER = '{"schema":"blincho-shortcut/1"}\n';
 async function fixture(t, platform = 'linux', overrides = {}) {
-  const root = await fsp.mkdtemp('/private/tmp/blincho-electron-test-');
+  const root = await fsp.realpath(await fsp.mkdtemp(path.join(os.tmpdir(), 'blincho-electron-test-')));
   t.after(() => fsp.rm(root, { recursive: true, force: true }));
   const desktop = path.join(root, 'Desktop');
   const userData = path.join(root, 'userData');
@@ -95,7 +96,8 @@ for (const platform of ['darwin', 'win32', 'linux']) {
         const text = await fsp.readFile(result.path, 'utf8');
         assert.match(text, /^\[Desktop Entry\]\n/);
         assert.match(text, /StartupWMClass=com\.myeyes\.app\n/);
-        assert.equal((await fsp.stat(result.path)).mode & 0o777, 0o755);
+        // Windows does not expose POSIX execute permission bits.
+        if (process.platform !== 'win32') assert.equal((await fsp.stat(result.path)).mode & 0o777, 0o755);
         const icon = /^Icon=(.+)$/m.exec(text)[1]; assert.equal((await fsp.readFile(icon))[24], mask);
         assert.equal(f.calls.at(-1).command, '/usr/bin/gio');
       }
