@@ -146,5 +146,6 @@
   "release.1.8.0": "Volitelné místní kontroly přítomnosti kamerou a uzamykání počítače se zpracováním snímků v zařízení bez jejich ukládání či odesílání. Pozdější verze provádějí kontrolu až po skončení časované přestávky.",
   "release.1.8.14": "Volitelný místní MCP propojuje AI klienty se stavem časovače, nastavením, dnešními součty a akcemi časovače. Kontroly přítomnosti kamerou probíhají až po skončení časované přestávky.",
   "release.1.8.15": "Místní MCP nyní poskytuje statistiky podle dne, kalendářního týdne nebo období, s daty dostupných záznamů a viditelnými mezerami. Poloha a velikost okna se zachovávají po uzamčení, spánku a přestávkách.",
-  "release.1.10.0": "Vzhled a název závisejí na zapnutých funkcích. Zástupce na ploše se mění podle konfigurace."
+  "release.1.10.0": "Vzhled a název závisejí na zapnutých funkcích. Zástupce na ploše se mění podle konfigurace.",
+  "release.1.10.1": "Vzhled a název závisejí na zapnutých funkcích. Zástupce na ploše se mění podle konfigurace. Odznak kamery v ikoně Blincho ukazuje používání kamery a po ukončení snímání zmizí."
 }

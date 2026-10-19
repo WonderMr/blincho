@@ -77,9 +77,9 @@ test('rejected graph execution reclaims real TensorFlow input tensors', async ()
 
 function asyncCameraHarness() {
   const file = path.join(repo, 'src/utils/cameraPresence.ts');
-  const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/export (const|function) /g, '$1 ');
+  const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/^import .*;\n/gm, '').replace(/export (const|function) /g, '$1 ');
   const module = { exports: {} }; const timers = new Map(); let id = 0, now = 0, closed = 0, calls = 0, settleInference;
-  vm.runInNewContext(code + '\nmodule.exports={createCameraPresenceChecker};', { module, console: { warn() {} }, setTimeout: (fn, delay) => { timers.set(++id, { fn, delay }); return id; }, clearTimeout: key => timers.delete(key) });
+  vm.runInNewContext(code + '\nmodule.exports={createCameraPresenceChecker};', { module, trackCameraStream: () => () => {}, console: { warn() {} }, setTimeout: (fn, delay) => { timers.set(++id, { fn, delay }); return id; }, clearTimeout: key => timers.delete(key) });
   const track = { readyState: 'live', muted: false, stop() { this.readyState = 'ended'; } };
   const pixels = Uint8ClampedArray.from([20, 40, 60, 255, 90, 120, 140, 255]);
   let frameTime = 0;

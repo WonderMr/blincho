@@ -1,3 +1,5 @@
+import { trackCameraStream } from './cameraActivity';
+
 export type CameraPresence = 'present' | 'absent' | 'unavailable';
 interface PersonDetector {
   detect(image: HTMLCanvasElement): { detections: Array<{ categories: Array<{ categoryName: string; score: number }> }> } | Promise<{ detections: Array<{ categories: Array<{ categoryName: string; score: number }> }> }>;
@@ -9,6 +11,7 @@ interface CameraEnvironment {
   createCanvas(): HTMLCanvasElement;
   loadDetector(): Promise<PersonDetector>;
   now(): number;
+  trackStream?(stream: MediaStream): () => void;
 }
 const CHECK_TIMEOUT_MS = 15_000;
 const FRAME_GAP_MS = 400;
@@ -46,11 +49,15 @@ export function createCameraPresenceChecker(environment: CameraEnvironment = def
     if (!media?.getUserMedia || signal?.aborted) return Promise.resolve('unavailable');
     const check = async (): Promise<CameraPresence> => {
       let cancelled = false;
+      let releaseIndicator: (() => void) | undefined;
       let stream: MediaStream | undefined;
       let detector: PersonDetector | undefined;
       let video: HTMLVideoElement | undefined;
       let timeout: ReturnType<typeof setTimeout> | undefined;
-      const stop = () => { for (const track of stream?.getTracks() ?? []) track.stop(); };
+      const stop = () => {
+        try { for (const track of stream?.getTracks() ?? []) track.stop(); }
+        finally { releaseIndicator?.(); releaseIndicator = undefined; }
+      };
       let cancel!: () => void;
       const aborted = new Promise<CameraPresence>(resolve => {
         cancel = () => { cancelled = true; stop(); resolve('unavailable'); };
@@ -60,6 +67,7 @@ export function createCameraPresenceChecker(environment: CameraEnvironment = def
       const capture = async (): Promise<CameraPresence> => {
         try {
           stream = await media.getUserMedia({ audio: false, video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' } });
+          releaseIndicator = (environment.trackStream ?? trackCameraStream)(stream);
           if (cancelled) { stop(); return 'unavailable'; }
           const track = stream.getVideoTracks()[0];
           if (!track || track.readyState !== 'live' || track.muted) return 'unavailable';

@@ -148,7 +148,13 @@ pub fn set_tooltip(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
     };
     // A custom hover window replaces the OS tooltip. Keep the text fallback
     // when that window could not be created or is no longer available.
-    let tooltip = app.get_webview_window(LABEL).is_none().then_some(text);
+    let (camera_active, camera_label) = crate::camera_activity::current(app);
+    let camera_tooltip = format!("Blincho\n{camera_label}");
+    let tooltip = if camera_active {
+        Some(camera_tooltip.as_str())
+    } else {
+        app.get_webview_window(LABEL).is_none().then_some(text)
+    };
     // Native tray setters dispatch to the UI thread, so lock only afterwards.
     let result = tray.set_tooltip(tooltip).map_err(|error| error.to_string());
     let state = app.state::<Preview>();
@@ -173,49 +179,55 @@ pub fn set_tooltip(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
 #[derive(Default)]
 struct CallIndicator {
     active: bool,
+    camera: bool,
+    camera_activations: u64,
+    camera_restores: u64,
     mask: u8,
     applied_mask: u8,
     updates: u64,
     attempts: u64,
     applying: bool,
-    retry: Option<((u8, bool), Instant)>,
+    retry: Option<((u8, bool, bool), Instant)>,
     last_error: Option<String>,
-    images: Option<(
-        u8,
-        tauri::image::Image<'static>,
-        tauri::image::Image<'static>,
-    )>,
+    images: Option<(u8, [tauri::image::Image<'static>; 4])>,
 }
 
 impl CallIndicator {
-    fn needs_update(&self, active: bool) -> bool {
-        self.needs_update_at(active, Instant::now())
+    fn needs_update(&self, active: bool, camera: bool) -> bool {
+        self.needs_update_at(active, camera, Instant::now())
     }
 
-    fn needs_update_at(&self, active: bool, now: Instant) -> bool {
-        (self.active != active || self.applied_mask != self.mask)
+    fn needs_update_at(&self, active: bool, camera: bool, now: Instant) -> bool {
+        (self.active != active || self.camera != camera || self.applied_mask != self.mask)
             && !self.applying
-            && self
-                .retry
-                .as_ref()
-                .is_none_or(|(wanted, deadline)| *wanted != (self.mask, active) || now >= *deadline)
+            && self.retry.as_ref().is_none_or(|(wanted, deadline)| {
+                *wanted != (self.mask, active, camera) || now >= *deadline
+            })
     }
 
-    fn failed(&mut self, mask: u8, active: bool, now: Instant, error: String) {
+    fn failed(&mut self, mask: u8, active: bool, camera: bool, now: Instant, error: String) {
         self.applying = false;
-        self.retry = Some(((mask, active), now + Duration::from_secs(3)));
+        self.retry = Some(((mask, active, camera), now + Duration::from_secs(3)));
         self.last_error = Some(error);
     }
 
-    fn clear_obsolete_error(&mut self, active: bool) {
-        if self.active == active && self.applied_mask == self.mask {
+    fn clear_obsolete_error(&mut self, active: bool, camera: bool) {
+        if self.active == active && self.camera == camera && self.applied_mask == self.mask {
             self.retry = None;
             self.last_error = None;
         }
     }
 
-    fn applied(&mut self, mask: u8, active: bool) {
+    fn applied(&mut self, mask: u8, active: bool, camera: bool) {
         self.active = active;
+        if self.camera != camera {
+            if camera {
+                self.camera_activations += 1;
+            } else {
+                self.camera_restores += 1;
+            }
+        }
+        self.camera = camera;
         self.applied_mask = mask;
         self.updates += 1;
         self.applying = false;
@@ -226,7 +238,10 @@ impl CallIndicator {
     fn call_error(&self, desired_active: bool) -> Option<&str> {
         // A rejected portrait is separate from a failed call badge. A badge
         // that was applied still requires a successful native restoration.
-        let failed_active = self.retry.as_ref().is_some_and(|((_, active), _)| *active);
+        let failed_active = self
+            .retry
+            .as_ref()
+            .is_some_and(|((_, active, _), _)| *active);
         if self.active || (desired_active && failed_active) {
             self.last_error.as_deref()
         } else {
@@ -234,18 +249,20 @@ impl CallIndicator {
         }
     }
 
-    fn image(&mut self, active: bool) -> tauri::Result<tauri::image::Image<'static>> {
+    fn image(&mut self, active: bool, camera: bool) -> tauri::Result<tauri::image::Image<'static>> {
         if self
             .images
             .as_ref()
-            .is_none_or(|(mask, _, _)| *mask != self.mask)
+            .is_none_or(|(mask, _)| *mask != self.mask)
         {
             let original = crate::symbiote_icons::image(self.mask)?;
             let calling = call_icon::with_call_badge(&original, false);
-            self.images = Some((self.mask, original, calling));
+            let filming = call_icon::with_camera_badge(&original);
+            let both = call_icon::with_camera_badge(&calling);
+            self.images = Some((self.mask, [original, calling, filming, both]));
         }
-        let (_, original, calling) = self.images.as_ref().unwrap();
-        Ok(if active { calling } else { original }.clone())
+        let (_, images) = self.images.as_ref().unwrap();
+        Ok(images[usize::from(active) + 2 * usize::from(camera)].clone())
     }
 }
 
@@ -465,6 +482,10 @@ pub fn diagnostics(app: &tauri::AppHandle) -> serde_json::Value {
         "dockVisible": dock_visible,
         "fallbackRows": fallback_rows,
         "callIndicatorActive": indicator_active,
+        "cameraRequestedActive": crate::camera_activity::current(app).0,
+        "cameraIndicatorActive": state.call_indicator.lock().ok().map(|indicator| indicator.camera),
+        "cameraIndicatorActivations": state.call_indicator.lock().ok().map(|indicator| indicator.camera_activations),
+        "cameraIndicatorRestores": state.call_indicator.lock().ok().map(|indicator| indicator.camera_restores),
         "requestedBuildMask": requested_mask, "appliedBuildMask": applied_mask,
         "callIndicatorUpdates": indicator_updates,
         "callIndicatorAttempts": indicator_attempts,
@@ -719,6 +740,7 @@ fn meeting_label(summary: &Summary, snapshot: &Snapshot) -> String {
 
 fn update_call_indicator(app: &tauri::AppHandle, snapshot: &Snapshot, state: &Preview) {
     let active = call_active(snapshot);
+    let camera = crate::camera_activity::current(app).0;
     let Some(tray) = app.tray_by_id("blincho") else {
         return;
     };
@@ -726,19 +748,19 @@ fn update_call_indicator(app: &tauri::AppHandle, snapshot: &Snapshot, state: &Pr
         let Ok(mut indicator) = state.call_indicator.lock() else {
             return;
         };
-        indicator.clear_obsolete_error(active);
-        if !indicator.needs_update(active) {
+        indicator.clear_obsolete_error(active, camera);
+        if !indicator.needs_update(active, camera) {
             return;
         }
         indicator.attempts += 1;
         let mask = indicator.mask;
-        match indicator.image(active) {
+        match indicator.image(active, camera) {
             Ok(image) => {
                 indicator.applying = true;
                 (mask, image)
             }
             Err(error) => {
-                indicator.failed(mask, active, Instant::now(), error.to_string());
+                indicator.failed(mask, active, camera, Instant::now(), error.to_string());
                 eprintln!("Tray call indicator: {error}");
                 return;
             }
@@ -749,9 +771,9 @@ fn update_call_indicator(app: &tauri::AppHandle, snapshot: &Snapshot, state: &Pr
     let result = tray.set_icon_with_as_template(Some(image), false);
     if let Ok(mut indicator) = state.call_indicator.lock() {
         match result {
-            Ok(()) => indicator.applied(mask, active),
+            Ok(()) => indicator.applied(mask, active, camera),
             Err(error) => {
-                indicator.failed(mask, active, Instant::now(), error.to_string());
+                indicator.failed(mask, active, camera, Instant::now(), error.to_string());
                 eprintln!("Tray call indicator: {error}");
             }
         }
@@ -798,7 +820,12 @@ pub fn update(app: &tauri::AppHandle, snapshot: &Snapshot, strict: bool) {
         format!("{}: {}", summary.focus_label, summary.focus_value),
         format!("{}: {}", summary.breaks_label, summary.breaks_value),
     ];
-    let tooltip = format!("{}\n{}", summary.title, rows.join("\n"));
+    let (camera_active, camera_label) = crate::camera_activity::current(app);
+    let tooltip = if camera_active {
+        format!("Blincho\n{camera_label}\n{}", rows.join("\n"))
+    } else {
+        format!("{}\n{}", summary.title, rows.join("\n"))
+    };
     let preview_available = app.get_webview_window(LABEL).is_some();
     {
         let Ok(mut previous) = state.tooltip.lock() else {
@@ -1007,54 +1034,83 @@ mod tests {
     #[test]
     fn icon_changes_only_on_applied_transitions_and_restores_exact_original() {
         let mut indicator = CallIndicator::default();
-        assert!(!indicator.needs_update(false));
-        assert!(indicator.needs_update(true));
-        let active = indicator.image(true).unwrap();
+        assert!(!indicator.needs_update(false, false));
+        assert!(indicator.needs_update(true, false));
+        let active = indicator.image(true, false).unwrap();
         // Obtaining an image never marks a failed native apply as successful.
-        assert!(indicator.needs_update(true));
+        assert!(indicator.needs_update(true, false));
         assert_eq!(indicator.updates, 0);
         indicator.applying = true;
-        assert!(!indicator.needs_update(true));
+        assert!(!indicator.needs_update(true, false));
         indicator.applying = false;
-        assert!(indicator.needs_update(true));
-        indicator.applied(0, true);
-        assert!(!indicator.needs_update(true));
+        assert!(indicator.needs_update(true, false));
+        indicator.applied(0, true, false);
+        assert!(!indicator.needs_update(true, false));
         assert_eq!(indicator.updates, 1);
-        let original = indicator.image(false).unwrap();
+        let original = indicator.image(false, false).unwrap();
         let expected = crate::symbiote_icons::image(0).unwrap();
         assert_ne!(active.rgba(), original.rgba());
         assert_eq!(original.rgba(), expected.rgba());
-        assert!(indicator.needs_update(false));
-        indicator.applied(0, false);
-        assert!(!indicator.needs_update(false));
+        assert!(indicator.needs_update(false, false));
+        indicator.applied(0, false, false);
+        assert!(!indicator.needs_update(false, false));
         assert_eq!(indicator.updates, 2);
     }
+    #[test]
+    fn camera_and_call_states_compose_and_restore_every_current_portrait() {
+        for mask in 0..64 {
+            let mut indicator = CallIndicator::default();
+            indicator.mask = mask;
+            let original = indicator.image(false, false).unwrap();
+            let camera = indicator.image(false, true).unwrap();
+            let call = indicator.image(true, false).unwrap();
+            let both = indicator.image(true, true).unwrap();
+            assert_ne!(camera.rgba(), original.rgba());
+            assert_ne!(both.rgba(), call.rgba());
+            assert_ne!(both.rgba(), camera.rgba());
+            indicator.applied(mask, true, true);
+            assert!(!indicator.needs_update(true, true));
+            assert!(indicator.needs_update(true, false));
+            indicator.failed(mask, true, false, Instant::now(), "restore failed".into());
+            assert!(indicator.camera);
+            indicator.applied(mask, true, false);
+            assert_eq!(indicator.image(true, false).unwrap().rgba(), call.rgba());
+            indicator.applied(mask, false, true);
+            assert_eq!(indicator.image(false, true).unwrap().rgba(), camera.rgba());
+            indicator.applied(mask, false, false);
+            assert_eq!(
+                indicator.image(false, false).unwrap().rgba(),
+                crate::symbiote_icons::image(mask).unwrap().rgba()
+            );
+        }
+    }
+
     #[test]
     fn native_icon_failure_backs_off_without_claiming_success_and_recovers() {
         let now = Instant::now();
         let mut indicator = CallIndicator::default();
         indicator.applying = true;
         indicator.attempts = 1;
-        indicator.failed(0, true, now, "backend unavailable".into());
+        indicator.failed(0, true, false, now, "backend unavailable".into());
         assert!(!indicator.active);
         assert_eq!(indicator.updates, 0);
         assert_eq!(indicator.last_error.as_deref(), Some("backend unavailable"));
-        assert!(!indicator.needs_update_at(true, now + Duration::from_millis(250)));
-        assert!(!indicator.needs_update_at(true, now + Duration::from_millis(2999)));
-        assert!(indicator.needs_update_at(true, now + Duration::from_secs(3)));
-        indicator.clear_obsolete_error(false);
+        assert!(!indicator.needs_update_at(true, false, now + Duration::from_millis(250)));
+        assert!(!indicator.needs_update_at(true, false, now + Duration::from_millis(2999)));
+        assert!(indicator.needs_update_at(true, false, now + Duration::from_secs(3)));
+        indicator.clear_obsolete_error(false, false);
         assert!(indicator.last_error.is_none());
-        assert!(indicator.needs_update_at(true, now));
-        indicator.applied(0, true);
+        assert!(indicator.needs_update_at(true, false, now));
+        indicator.applied(0, true, false);
         assert!(indicator.last_error.is_none());
         assert_eq!(indicator.updates, 1);
-        indicator.failed(0, false, now, "temporary restore failure".into());
+        indicator.failed(0, false, false, now, "temporary restore failure".into());
         assert!(
             indicator.active,
             "A failed restore cannot be reported as successful"
         );
-        assert!(!indicator.needs_update_at(false, now + Duration::from_secs(1)));
-        indicator.applied(0, false);
+        assert!(!indicator.needs_update_at(false, false, now + Duration::from_secs(1)));
+        indicator.applied(0, false, false);
         assert!(!indicator.active);
         assert!(indicator.last_error.is_none());
         assert_eq!(indicator.updates, 2);
@@ -1066,7 +1122,7 @@ mod tests {
         let mut indicator = CallIndicator::default();
         indicator.mask = 16;
         indicator.attempts = 1;
-        indicator.failed(16, false, now, "portrait unavailable".into());
+        indicator.failed(16, false, false, now, "portrait unavailable".into());
         assert!(indicator.call_error(false).is_none());
         assert_eq!(
             indicator.last_error.as_deref(),
@@ -1075,23 +1131,23 @@ mod tests {
         assert_eq!(indicator.applied_mask, 0);
         assert_eq!(indicator.updates, 0);
         assert_eq!(indicator.attempts, 1);
-        assert!(!indicator.needs_update_at(false, now + Duration::from_secs(1)));
-        assert!(indicator.needs_update_at(true, now));
+        assert!(!indicator.needs_update_at(false, false, now + Duration::from_secs(1)));
+        assert!(indicator.needs_update_at(true, false, now));
         assert!(
             indicator.call_error(true).is_none(),
             "A portrait failure is not evidence of a failed active-call attempt"
         );
         indicator.attempts += 1;
-        indicator.failed(16, true, now, "call unavailable".into());
+        indicator.failed(16, true, false, now, "call unavailable".into());
         assert_eq!(indicator.call_error(true), Some("call unavailable"));
         assert!(indicator.call_error(false).is_none());
-        indicator.clear_obsolete_error(false);
+        indicator.clear_obsolete_error(false, false);
         assert_eq!(indicator.last_error.as_deref(), Some("call unavailable"));
         assert_eq!(indicator.updates, 0);
         assert_eq!(indicator.attempts, 2);
-        indicator.applied(16, true);
+        indicator.applied(16, true, false);
         indicator.mask = 32;
-        indicator.failed(32, false, now, "restore unavailable".into());
+        indicator.failed(32, false, false, now, "restore unavailable".into());
         assert_eq!(indicator.call_error(false), Some("restore unavailable"));
         assert!(
             indicator.active,
@@ -1099,7 +1155,7 @@ mod tests {
         );
         assert_eq!(indicator.applied_mask, 16);
         assert_eq!(indicator.updates, 1);
-        indicator.applied(32, false);
+        indicator.applied(32, false, false);
         assert!(indicator.call_error(false).is_none());
         assert!(indicator.last_error.is_none());
         assert_eq!(indicator.applied_mask, 32);
@@ -1110,36 +1166,36 @@ mod tests {
     fn build_changes_during_calls_restore_the_latest_portrait_and_retry_identity() {
         let now = Instant::now();
         let mut indicator = CallIndicator::default();
-        indicator.applied(0, true);
+        indicator.applied(0, true, false);
         indicator.mask = 32;
-        assert!(indicator.needs_update(true));
-        let calling = indicator.image(true).unwrap();
+        assert!(indicator.needs_update(true, false));
+        let calling = indicator.image(true, false).unwrap();
         let expected = crate::symbiote_icons::image(32).unwrap();
         assert_ne!(calling.rgba(), expected.rgba());
         indicator.applying = true;
         indicator.mask = 63;
-        assert!(!indicator.needs_update(true));
-        indicator.applied(32, true);
+        assert!(!indicator.needs_update(true, false));
+        indicator.applied(32, true, false);
         assert!(
-            indicator.needs_update(true),
+            indicator.needs_update(true, false),
             "An old completion cannot acknowledge the newest mask"
         );
-        indicator.failed(63, true, now, "temporary failure".into());
-        assert!(!indicator.needs_update_at(true, now));
+        indicator.failed(63, true, false, now, "temporary failure".into());
+        assert!(!indicator.needs_update_at(true, false, now));
         indicator.mask = 16;
         assert!(
-            indicator.needs_update_at(true, now),
+            indicator.needs_update_at(true, false, now),
             "A new build bypasses an unrelated retry delay"
         );
-        indicator.applied(16, true);
-        assert!(indicator.needs_update(false));
-        let restored = indicator.image(false).unwrap();
+        indicator.applied(16, true, false);
+        assert!(indicator.needs_update(false, false));
+        let restored = indicator.image(false, false).unwrap();
         assert_eq!(
             restored.rgba(),
             crate::symbiote_icons::image(16).unwrap().rgba()
         );
-        indicator.applied(16, false);
-        assert!(!indicator.needs_update(false));
+        indicator.applied(16, false, false);
+        assert!(!indicator.needs_update(false, false));
     }
 
     #[test]

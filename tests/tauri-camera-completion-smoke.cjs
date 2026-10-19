@@ -201,6 +201,9 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
     assert.equal(observed.probe.frames, 3, 'Bundled local detector must sample three frames');
     assert.equal(new Set(observed.probe.frameHashes).size, 3, 'Every captured frame must have distinct pixels');
     assert.equal(observed.probe.stops, 1, 'Synthetic camera track must be released');
+    await until(app, app.read, value => value.trayPreview?.cameraIndicatorActive === false && value.trayPreview.cameraIndicatorRestores === 1, 'native camera badge restoration', 5_000);
+    assert.equal(app.read().trayPreview.cameraIndicatorActivations, 1, 'The real native tray must show the camera badge during capture');
+    assert.equal(app.read().trayPreview.trayIconError, null, 'Camera badge application must succeed on macOS');
     assert.equal(observed.probe.trackState, 'ended');
     assert.equal(observed.probe.dispatchedStationary, true, 'Stationary mousemove must occur during capture');
     assert(observed.probe.stationaryEvents >= 1, 'Capture must survive the stationary mousemove');
@@ -225,7 +228,7 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
     }
     result = { name, status: 'passed', strictMode, returnOutsideRenderer, version: initial.updates.currentVersion,
       executable, profile: directory, pid: child.pid, nativeBreakDeadline: deadline, completionObservedAt, probe: observed.probe,
-      realWKWebView: true, realNativeTimer: true, realLocalDetector: true };
+      cameraTray: app.read().trayPreview, realWKWebView: true, realNativeTimer: true, realLocalDetector: true };
   } catch (error) {
     primaryError = error;
     failure = { scenario: name, error: error.stack, exit: app.exit, runtime: app.read(), countdown };

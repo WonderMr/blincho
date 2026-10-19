@@ -7,9 +7,9 @@ const { transformSync } = require('rolldown/utils');
 const { createHarness } = require('./app.test.cjs');
 const repo = path.resolve(__dirname, '..');
 const file = path.join(repo, 'src/utils/cameraAccess.ts');
-const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/export (const|function) /g, '$1 ');
+const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/^import .*;\n/gm, '').replace(/export (const|function) /g, '$1 ');
 const moduleScope = { exports: {} };
-vm.runInNewContext(code + '\nmodule.exports={createCameraAccessRequester};', { module: moduleScope });
+vm.runInNewContext(code + '\nmodule.exports={createCameraAccessRequester};', { module: moduleScope, trackCameraStream: () => () => {} });
 const { createCameraAccessRequester } = moduleScope.exports;
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
 const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
@@ -23,6 +23,18 @@ test('permission probe waits for native configuration, acquires video only and r
   const pending = request(new AbortController().signal, () => native.promise);
   await settle(); assert.equal(acquired, 0);
   native.resolve(); assert.equal(await pending, 'granted'); assert.equal(acquired, 1); assert.equal(stopped, 2);
+});
+
+test('permission probe reports acquired ownership and releases it even after cancellation', async () => {
+  const media = deferred(), events = []; const controller = new AbortController();
+  const request = createCameraAccessRequester({
+    mediaDevices: () => ({ getUserMedia: () => media.promise }),
+    trackStream: () => { events.push('active'); return () => events.push('inactive'); },
+  });
+  const pending = request(controller.signal); await settle();
+  assert.deepEqual(events, []); controller.abort(); assert.equal(await pending, 'cancelled');
+  media.resolve({ getTracks: () => [{ stop() { events.push('stopped'); } }] }); await settle();
+  assert.deepEqual(events, ['active', 'stopped', 'inactive']);
 });
 
 test('missing devices, permission denial and configuration/camera errors fail closed', async () => {

@@ -11,6 +11,7 @@ declare global {
       showNotification: (title: string, body: string) => void;
       flashWindow: () => void;
       setAlwaysOnTop: (flag: boolean) => void;
+      setCameraActivity?: (active: boolean, label: string) => Promise<void>;
       setSymbioteBuild?: (mask: number) => Promise<void>;
       syncSymbioteShortcut?: (mask: number, name: string) => Promise<SymbioteShortcutStatus>;
       createSymbioteShortcut?: (mask: number, name: string) => Promise<SymbioteShortcutStatus>;
