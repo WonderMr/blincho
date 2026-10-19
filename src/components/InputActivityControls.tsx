@@ -38,7 +38,9 @@ export const InputActivityControls: React.FC<InputActivityControlsProps> = ({ en
     {confirming ? <div className="meeting-history-actions"><span>{t("Удалить статистику ввода")}</span>
       <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => setConfirming(false)}>{t("Отмена")}</button>
       <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => {
-        setPending(true); void onDelete().then(ok => { setFeedback(ok ? "Готово" : "Не удалось удалить статистику ввода."); setConfirming(false); }).finally(() => setPending(false));
+        setPending(true); void onDelete().then(ok => { setFeedback(ok ? "Готово" : "Не удалось удалить статистику ввода."); setConfirming(false); })
+          .catch(() => setFeedback("Не удалось удалить статистику ввода."))
+          .finally(() => setPending(false));
       }}>{t("Удалить записи")}</button></div> : <button type="button" className="btn btn-secondary" disabled={!hasHistory || pending} onClick={() => setConfirming(true)}>{t("Удалить статистику ввода")}</button>}
     {feedback && <p className="settings-feedback" role="status">{t(feedback)}</p>}
   </div>;

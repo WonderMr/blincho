@@ -3,7 +3,6 @@ use std::{
     cell::RefCell,
     ptr::{null, null_mut},
     sync::{mpsc::Sender, Arc},
-    time::Duration,
 };
 use windows_sys::Win32::{
     Foundation::{LPARAM, LRESULT, WPARAM},
@@ -65,7 +64,11 @@ pub fn run(shared: &Arc<Shared>, sender: Sender<bool>) {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
-            std::thread::sleep(Duration::from_millis(10));
+            // Low-level hooks run on this thread. Wake immediately for input
+            // instead of adding a fixed delay to every system-wide event.
+            if MsgWaitForMultipleObjects(0, null(), 0, 250, QS_ALLINPUT) == u32::MAX {
+                break;
+            }
         }
         UnhookWindowsHookEx(keys);
         UnhookWindowsHookEx(pointer);
