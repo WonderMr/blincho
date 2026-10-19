@@ -145,5 +145,6 @@
   "release.1.7.3": "En telefonmarkering och aktuell status i systemfältet visar upptäckta samtal. Samtalsstatus fungerar oberoende av den frivilliga registreringen av samtalshistorik.",
   "release.1.8.0": "Valfria lokala närvarokontroller med kameran och datorlåsning. Bilderna behandlas på enheten och sparas eller laddas aldrig upp. Senare versioner utför kontrollen först när en tidsinställd paus är slut.",
   "release.1.8.14": "Valfri lokal MCP ansluter AI-klienter till timerstatus, inställningar, dagens totaler och timeråtgärder. Närvarokontroller med kameran utförs först när den tidsinställda pausen är slut.",
-  "release.1.8.15": "Lokal MCP rapporterar nu statistik per dag, kalendervecka eller datumintervall, med datum för tillgängliga uppgifter och synliga luckor. Fönstrets placering och storlek bevaras efter låsning, viloläge och pauser."
+  "release.1.8.15": "Lokal MCP rapporterar nu statistik per dag, kalendervecka eller datumintervall, med datum för tillgängliga uppgifter och synliga luckor. Fönstrets placering och storlek bevaras efter låsning, viloläge och pauser.",
+  "release.1.10.0": "Utseendet och namnet beror på vilka funktioner som är aktiverade. Genvägen på skrivbordet följer din konfiguration."
 }

@@ -285,3 +285,33 @@ void blincho_window_level(void *pointer, int strict) {
         presentation = nil;
     }
 }
+
+// Called on the AppKit main thread with a fixed, embedded application asset.
+bool blincho_set_application_icon(const unsigned char *bytes, size_t length) {
+    if (![NSThread isMainThread] || bytes == NULL || length == 0) return false;
+    NSData *data = [NSData dataWithBytes:bytes length:length];
+    NSImage *image = [[NSImage alloc] initWithData:data];
+    if (image == nil || ![image isValid]) return false;
+    [NSApp setApplicationIconImage:image];
+    return true;
+}
+
+
+// Only external .blincho documents may receive custom Finder metadata.
+// NSWorkspace permits background calls when serialized by the Rust controller.
+bool blincho_set_shortcut_icon(const char *path, const unsigned char *bytes, size_t length) {
+    @autoreleasepool {
+        if (path == NULL || bytes == NULL || length == 0) return false;
+        NSString *file = [NSString stringWithUTF8String:path];
+        if (file == nil || [file.pathExtension caseInsensitiveCompare:@"blincho"] != NSOrderedSame) return false;
+        NSImage *image = [[NSImage alloc] initWithData:[NSData dataWithBytes:bytes length:length]];
+        if (image == nil || !image.isValid) return false;
+        [NSWorkspace.sharedWorkspace setIcon:nil forFile:file options:0];
+        return [NSWorkspace.sharedWorkspace setIcon:image forFile:file options:0];
+    }
+}
+void blincho_reveal_shortcut(const char *path) {
+    if (!NSThread.isMainThread || path == NULL) return;
+    NSString *file = [NSString stringWithUTF8String:path];
+    if (file != nil) [NSWorkspace.sharedWorkspace activateFileViewerSelectingURLs:@[[NSURL fileURLWithPath:file]]];
+}

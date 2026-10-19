@@ -19,12 +19,13 @@ function previewHarness(initial) {
     getItem() { throw Error('Preview must not read main storage'); },
     setItem() { throw Error('Preview must not write storage'); },
   } };
+  const helpers = transformer.transformSync('symbioteIcons.ts', fs.readFileSync(path.resolve(__dirname, '../src/utils/symbioteIcons.ts'), 'utf8')).code.replace(/export /g, '');
   const context = { React, useEffect: React.useEffect, useState: React.useState, document: doc, window,
     Date: class extends Date { static now() { return 100_000; } },
     console: { warn: (...args) => warnings.push(args) },
     setInterval() { throw Error('Preview must not start another timer'); },
   };
-  vm.runInNewContext(source + '\nthis.Component=TrayPreview;this.countdown=previewCountdown;', context, { filename });
+  vm.runInNewContext(helpers + '\n' + source + '\nthis.Component=TrayPreview;this.countdown=previewCountdown;', context, { filename });
   const host = doc.createElement('div'), root = ReactDOMClient.createRoot(host);
   const settle = async () => {
     for (let i = 0; i < 8; i++) { await Promise.resolve(); ReactDOM.flushSync(() => {}); }
@@ -41,7 +42,7 @@ const timer = { remainingMs: 61_001, totalMs: 1_200_000, manualPaused: false, br
 const summary = { date: '2026-10-14', locale: 'es', title: 'Hoy', todayLabel: 'Hoy',
   nextBreakLabel: 'Próximo descanso', focusLabel: 'Tiempo de trabajo', breaksLabel: 'Descansos hoy',
   pausedLabel: 'Pausa', absentLabel: 'Sin actividad', breakLabel: 'Descanso', exerciseLabel: 'Ejercicio',
-  readyLabel: 'Hora de descansar', focusValue: '65 min', breaksValue: '4', theme: 'light', colorPalette: 'ocean' };
+  readyLabel: 'Hora de descansar', focusValue: '65 min', breaksValue: '4', theme: 'light', colorPalette: 'ocean', symbioteMask: 63, buildName: 'Blinchiborg' };
 const callSummary = { ...summary, meetingLabel: 'Llamada', meetingInactiveLabel: 'Sin llamada activa',
   meetingUnknownLabel: 'Estado de llamada desconocido', meetingDisabledLabel: 'Detección de llamadas desactivada',
   unknownMeetingAppLabel: 'Aplicación desconocida' };
@@ -57,11 +58,15 @@ test('preview displays native countdown and localized daily data using only its 
     assert.deepEqual(h.invocations, ['tray_preview_state']);
     assert.equal(h.listeners.size, 2);
     assert.equal(h.warnings.length, 0);
+    assert.equal(h.host.querySelector('img').getAttribute('src'), './symbiote/3f.png');
+    assert(h.host.textContent.includes('Blinchiborg'));
     h.emit('native-timer', { ...timer, manualPaused: true, remainingMs: 59_000 });
     assert(h.host.textContent.includes('Pausa00:59'));
-    h.emit('tray-preview-summary', { ...summary, locale: 'ar', todayLabel: 'اليوم', focusValue: '٦٦ دقيقة' });
+    h.emit('tray-preview-summary', { ...summary, locale: 'ar', symbioteMask: 16, buildName: 'حارس', todayLabel: 'اليوم', focusValue: '٦٦ دقيقة' });
     assert(h.host.textContent.includes('٦٦ دقيقة'));
     assert.equal(doc.documentElement.dir, 'rtl');
+    assert.equal(h.host.querySelector('img').getAttribute('src'), './symbiote/10.png');
+    assert(h.host.textContent.includes('حارس'));
     assert.equal(doc.documentElement.dataset.palette, 'ocean');
     assert.deepEqual(h.invocations, ['tray_preview_state'], 'native and summary events never mutate the timer');
   } finally { h.destroy(); }

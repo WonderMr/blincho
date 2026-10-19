@@ -9,6 +9,8 @@ mod input_activity;
 mod local_mcp;
 mod platform;
 mod startup;
+mod symbiote_icons;
+mod symbiote_shortcuts;
 mod timer;
 mod tray_preview;
 mod ui;
@@ -780,8 +782,8 @@ fn diagnostics(app: &tauri::AppHandle) {
     );
     #[cfg(not(target_os = "macos"))]
     let (native_activation_policy, dock_visible) = (None::<i32>, None::<bool>);
-    let value = json!({"timer":snapshot,"strict":strict,"visible":window(app).ok().and_then(|w|w.is_visible().ok()),
-        "strictShieldCount":strict_shield_count,"trayPreview":tray_preview::diagnostics(app),
+    let value = json!({"pid":std::process::id(),"timer":snapshot,"strict":strict,"visible":window(app).ok().and_then(|w|w.is_visible().ok()),
+        "strictShieldCount":strict_shield_count,"trayPreview":tray_preview::diagnostics(app),"symbioteAppearance":symbiote_icons::diagnostics(app),
         "nativeActivationPolicy":native_activation_policy,"dockVisible":dock_visible,
         "focused":window(app).ok().and_then(|w|w.is_focused().ok()),"events":runtime.events.lock().ok().map(|v|v.clone()),
         "fullscreen":window(app).ok().and_then(|w|w.is_fullscreen().ok()),
@@ -1045,7 +1047,9 @@ fn main() {
                 return true;
             }
             let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
-            configure_timer,
+            configure_timer, symbiote_icons::set_symbiote_build,
+            symbiote_shortcuts::sync_symbiote_shortcut, symbiote_shortcuts::create_symbiote_shortcut,
+            symbiote_shortcuts::symbiote_shortcut_status, symbiote_shortcuts::show_symbiote_shortcut,
             local_mcp_configure, local_mcp_status, local_mcp_publish, local_mcp_take_commands,
             timer_snapshot,
             presence_check_begin, presence_check_finish,
@@ -1161,6 +1165,8 @@ fn main() {
             });
             app.manage(window_session::WindowSession::default());
             app.manage(tray_preview::Preview::default());
+            app.manage(symbiote_icons::Appearance::default());
+            app.manage(symbiote_shortcuts::Shortcuts::default());
             HANDLE
                 .set(app.handle().clone())
                 .map_err(|_| "Duplicate runtime")?;
@@ -1183,10 +1189,8 @@ fn main() {
             let startup_locale = startup_languages.first().map(String::as_str).unwrap_or("en");
             startup_trace("tray-build-start");
             TrayIconBuilder::with_id("blincho")
-                .icon(tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
-                    include_bytes!("../../assets/trayTemplate.png")
-                } else { include_bytes!("../../assets/icon.png") })?)
-                .icon_as_template(cfg!(target_os = "macos"))
+                .icon(symbiote_icons::image(0)?)
+                .icon_as_template(false)
                 .tooltip(ui::tray_title(startup_locale))
                 .menu(&menu)
                 .on_tray_icon_event(|tray, event| tray_preview::on_tray_event(tray.app_handle(), event))
@@ -1382,7 +1386,37 @@ fn main() {
         tauri::ActivationPolicy::Regular
     });
     startup_trace("event-loop-start");
-    app.run(|app, event| {
+    // macOS may deliver its initial document before Tauri's Ready/setup event.
+    // Keep only the accepted marker's intent, never a file-provided command.
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    let mut shortcut_open_pending = false;
+    app.run(move |app, event| {
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if let tauri::RunEvent::Opened { ref urls } = event {
+            if urls
+                .iter()
+                .filter_map(|url| url.to_file_path().ok())
+                .any(|path| symbiote_shortcuts::is_document(&path))
+            {
+                shortcut_open_pending = true;
+                startup_trace("shortcut-open-accepted");
+            }
+        }
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if shortcut_open_pending && app.get_webview_window("main").is_some() {
+            if let Some(runtime) = app.try_state::<Runtime>() {
+                shortcut_open_pending = false;
+                if let Ok(mut events) = runtime.events.lock() {
+                    if events.len() == 100 {
+                        events.remove(0);
+                    }
+                    events.push(json!({"source":"shortcut-open","at":Utc::now().to_rfc3339()}));
+                }
+                if let Err(error) = show_manual(app) {
+                    eprintln!("Shortcut open: {error}");
+                }
+            }
+        }
         if let tauri::RunEvent::Ready = event {
             startup_trace("event-loop-ready");
         }

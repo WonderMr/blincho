@@ -1,0 +1,19 @@
+Use case: stylized-concept.
+Asset: one beautifully finished master illustration of BLINCHIBORG, the fully upgraded Blincho mascot, intended as the visual source from which simpler versions will later be derived.
+Input image 1 is an identity and palette reference for the ORIGINAL mascot, not a finished cyborg design to imitate.
+
+Draw a new, cohesive, fully designed cyborg character in the same high-end soft 3D illustration language. Preserve the reference's rounded asymmetric mint blob, large glossy dark open eye on the viewer's left, winking eye on the right, friendly small curved smile and peach cheek. Keep the frontal viewpoint, recognizable silhouette, navy rounded-square app tile, and soft upper-left studio light. The character must still be unmistakably Blincho, friendly and charming.
+
+Design the MAXIMUM configuration as a single art-directed composition with six distinct removable cybernetic assemblies:
+1. Presence optics: a sophisticated transparent optical monocle around the open eye, with a real lens bevel, nested machined bezel, tiny focusing/hinge details and a small warm contact. Keep the original expressive eye clearly visible through it.
+2. Automatic lock: substantial fitted protective lower cheek and chin armor, rounded overlapping shell segments with carefully resolved seams, stepped edges, soft inner gasket and restrained mint inlays. Fit the organic contour and keep the smile free.
+3. Call history: an engineered acoustic module at the outer right temple, with a padded inner seat, a small speaker grille and subtle recorder/status detail. Clear physical construction, no microphone boom over the face.
+4. Input telemetry: a compact curved forehead instrument with three distinct illuminated bars behind inset glass, a proper recessed housing and crisp edge finishing.
+5. Strict mode: a sculpted protective brow/crown assembly above the other optic side, with a confident layered silhouette, articulated segments and an inset mint channel.
+6. Local MCP connection: a small, clearly modeled connector/terminal assembly on the opposite upper temple, with a recessed console-like face, a simple >_ prompt mark and two tiny mechanical contacts. It should look like a local interface module, with no cloud symbol.
+
+All six assemblies belong to the same industrial design family: satin midnight-blue titanium, softer graphite recesses, pale metallic edge highlights, mint illuminated inserts and very sparing peach accents matching the cheek. Draw actual three-dimensional thickness, curved contact surfaces, mounting seats, fasteners, glass reflections, precise parting lines and soft occlusion shadows. Rich, deliberate craftsmanship at large scale. No arbitrary greebles. The result should look like one completed collectible 3D cyborg mascot with meaningful substantial hardware, not flat vector strokes or separate stickers placed on a base image.
+
+Crucial for later subtraction: each of the six assemblies has its own clearly bounded silhouette and complete independent mounting, with narrow intentional gaps between neighboring modules; avoid cables or structural parts that fuse different assemblies together. Do not expose missing panels or damage in the mint body. About two thirds of the mint face stays visible. Leave the wink, smile and cheek unobstructed. Make the tiny finishing details serve the larger forms.
+
+Composition: one centered character only, filling a square high-resolution canvas, ideally 2048 by 2048. Keep the full navy rounded-square tile with comfortable breathing room and genuinely transparent outer corners/background beyond the tile. Premium polished 3D render, carefully matched materials, broad soft highlights, beautiful clean edge treatment, crisp but not harsh. No captions, labels, arrows, exploded diagrams, comparison grid, extra characters, body/arms/legs, weapons, red laser eyes, background scene, watermark or cloud icon.

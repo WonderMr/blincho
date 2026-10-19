@@ -145,5 +145,6 @@
   "release.1.7.3": "Telefon rozeti ve anlık tepsi durumu, algılanan aramaları gösterir. Arama durumu, isteğe bağlı arama geçmişi kaydından bağımsız çalışır.",
   "release.1.8.0": "İsteğe bağlı yerel kamerayla varlık kontrolleri ve bilgisayar kilitleme. Görüntü kareleri cihazda işlenir, hiçbir zaman kaydedilmez veya yüklenmez. Sonraki sürümler kontrolü yalnızca süreli bir mola bittikten sonra çalıştırır.",
   "release.1.8.14": "İsteğe bağlı yerel MCP, yapay zekâ istemcilerini zamanlayıcı durumuna, ayarlara, bugünkü toplamlara ve zamanlayıcı işlemlerine bağlar. Kamerayla varlık kontrolleri yalnızca süreli mola bittikten sonra çalışır.",
-  "release.1.8.15": "Yerel MCP artık gün, takvim haftası veya tarih aralığına göre istatistik sunar; verilerin bulunduğu tarihler ve boşluklar gösterilir. Kilit, uyku ve molalardan sonra pencerenin konumu ve boyutu korunur."
+  "release.1.8.15": "Yerel MCP artık gün, takvim haftası veya tarih aralığına göre istatistik sunar; verilerin bulunduğu tarihler ve boşluklar gösterilir. Kilit, uyku ve molalardan sonra pencerenin konumu ve boyutu korunur.",
+  "release.1.10.0": "Görünüm ve ad, etkin özelliklere göre değişir. Masaüstü kısayolu yapılandırmanıza göre değişir."
 }

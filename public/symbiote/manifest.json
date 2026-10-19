@@ -1,0 +1,649 @@
+{
+  "width": 256,
+  "height": 256,
+  "sources": {
+    "base": "83af79988946598a0e4344bcc25bed18844a320d1586044a04b408a73ebe6d20",
+    "master": "2c62942e96ac711be4271c12d163ccc7f3d72fbc158b0e02919b7ce0b77689b2"
+  },
+  "variants": [
+    {
+      "mask": 0,
+      "file": "00.png",
+      "perks": [],
+      "sha256": "1894b9cc955dced5795ea76afbfa267394f24a037004e1831dc4469931644d33"
+    },
+    {
+      "mask": 1,
+      "file": "01.png",
+      "perks": [
+        "presence"
+      ],
+      "sha256": "07e1063f500349086dc6ce649dde4c7602f72d5a4fb70634517eb936185bad6e"
+    },
+    {
+      "mask": 2,
+      "file": "02.png",
+      "perks": [
+        "lock"
+      ],
+      "sha256": "284bdfa5ec826a8ca06c02472ec4ef5d02d6306d0097b5b84de9c9c5fb11d79f"
+    },
+    {
+      "mask": 3,
+      "file": "03.png",
+      "perks": [
+        "presence",
+        "lock"
+      ],
+      "sha256": "f31450df6b51b614d8c30d7e3e2c512594604d376d85046f325a9828ad444159"
+    },
+    {
+      "mask": 4,
+      "file": "04.png",
+      "perks": [
+        "calls"
+      ],
+      "sha256": "4309208d2e99e58d4ba9e7d76974495afbcf210adc5aa15a18888851b600bced"
+    },
+    {
+      "mask": 5,
+      "file": "05.png",
+      "perks": [
+        "presence",
+        "calls"
+      ],
+      "sha256": "df64b14cb0547830344e0bd366dad4e11d6b9836d6750800634ba0ab136f492b"
+    },
+    {
+      "mask": 6,
+      "file": "06.png",
+      "perks": [
+        "lock",
+        "calls"
+      ],
+      "sha256": "c96fdc9f28d12f1d1140143887c0b64175df0dc24a9054ff45f62fc794e8b073"
+    },
+    {
+      "mask": 7,
+      "file": "07.png",
+      "perks": [
+        "presence",
+        "lock",
+        "calls"
+      ],
+      "sha256": "54155cc764a75c7ead59902451ae9eca548c045ec6ba6e54f7a98c58c3442454"
+    },
+    {
+      "mask": 8,
+      "file": "08.png",
+      "perks": [
+        "input"
+      ],
+      "sha256": "5f956b1291127819f2a6beb175c138e40fe1f0545d141e4d23658e57cc418fb8"
+    },
+    {
+      "mask": 9,
+      "file": "09.png",
+      "perks": [
+        "presence",
+        "input"
+      ],
+      "sha256": "c8c2e31cb33b28f8ed9d4a16294cf8b2465e23a6bff9509cd9c0bc816ef64128"
+    },
+    {
+      "mask": 10,
+      "file": "0a.png",
+      "perks": [
+        "lock",
+        "input"
+      ],
+      "sha256": "fdc5330b07d629dbd00261c78f783e8efb2564766ee2f98e97e974f0370bb858"
+    },
+    {
+      "mask": 11,
+      "file": "0b.png",
+      "perks": [
+        "presence",
+        "lock",
+        "input"
+      ],
+      "sha256": "7f323f2600ca5526460af087ee75418566224e920427569e83ac8fd9d0e0ea52"
+    },
+    {
+      "mask": 12,
+      "file": "0c.png",
+      "perks": [
+        "calls",
+        "input"
+      ],
+      "sha256": "da84c29603f0f9a5bb03a5fea76e1a9a849642f99d8c692e3c3ed5e0385c6656"
+    },
+    {
+      "mask": 13,
+      "file": "0d.png",
+      "perks": [
+        "presence",
+        "calls",
+        "input"
+      ],
+      "sha256": "f0335e07822ee9d735155d0bad7a5099fb18d94ccd5ed95f267b590342e59ae6"
+    },
+    {
+      "mask": 14,
+      "file": "0e.png",
+      "perks": [
+        "lock",
+        "calls",
+        "input"
+      ],
+      "sha256": "769c5d3529dc1469eff4ae952c2e2c5e92397e76c58602876ecda65e9e9f963f"
+    },
+    {
+      "mask": 15,
+      "file": "0f.png",
+      "perks": [
+        "presence",
+        "lock",
+        "calls",
+        "input"
+      ],
+      "sha256": "35c910a43ae268d5208941525830112f81193137f7b5afc0854f369096e4dc48"
+    },
+    {
+      "mask": 16,
+      "file": "10.png",
+      "perks": [
+        "strict"
+      ],
+      "sha256": "8de26bd6a2fb3cd0efb9e3de55583994e5e1333727c0a02c0337b4176f6c8bbc"
+    },
+    {
+      "mask": 17,
+      "file": "11.png",
+      "perks": [
+        "presence",
+        "strict"
+      ],
+      "sha256": "a6de6be1d169746d1d668de4b6666b942efee07b98f4262aac1b893fefddbaa7"
+    },
+    {
+      "mask": 18,
+      "file": "12.png",
+      "perks": [
+        "lock",
+        "strict"
+      ],
+      "sha256": "e5fe12cda0cf36f7ff3ed8f0c354e1ae471189492e79f4a5773975be3cb18aa3"
+    },
+    {
+      "mask": 19,
+      "file": "13.png",
+      "perks": [
+        "presence",
+        "lock",
+        "strict"
+      ],
+      "sha256": "6cce4377dc1be8115070937ad981de1f98f4e81e78488bbdb43a40a37cc5bc66"
+    },
+    {
+      "mask": 20,
+      "file": "14.png",
+      "perks": [
+        "calls",
+        "strict"
+      ],
+      "sha256": "c059e63cfb1267b1990820cc639bba3d0a098deb4ca39f5649dd80d41862e3ea"
+    },
+    {
+      "mask": 21,
+      "file": "15.png",
+      "perks": [
+        "presence",
+        "calls",
+        "strict"
+      ],
+      "sha256": "6e0368115135eab37d2520f3409329b0c0ba040cc8faff25aef77dd07d65ee0b"
+    },
+    {
+      "mask": 22,
+      "file": "16.png",
+      "perks": [
+        "lock",
+        "calls",
+        "strict"
+      ],
+      "sha256": "39a242657eefee7cfb5f6b1e946bcd0e20db181663b8e09e6aa9aaa3e3a72ccb"
+    },
+    {
+      "mask": 23,
+      "file": "17.png",
+      "perks": [
+        "presence",
+        "lock",
+        "calls",
+        "strict"
+      ],
+      "sha256": "ac15f4fe8850d6b53bf65abf966d288267e137229010367e67a922028fe7896d"
+    },
+    {
+      "mask": 24,
+      "file": "18.png",
+      "perks": [
+        "input",
+        "strict"
+      ],
+      "sha256": "26fa58e8e0f031c8735a243b0ed1d6b7e1351052f8be2e472542d7896ff5834b"
+    },
+    {
+      "mask": 25,
+      "file": "19.png",
+      "perks": [
+        "presence",
+        "input",
+        "strict"
+      ],
+      "sha256": "3562d83acee088d3e1ac7c593f547ac88a86fc495ddff7b2235ddf1253d4fb08"
+    },
+    {
+      "mask": 26,
+      "file": "1a.png",
+      "perks": [
+        "lock",
+        "input",
+        "strict"
+      ],
+      "sha256": "9a0967a80709f6a87c514a39b7ffc12acfdf6c25b46cf101f9de399090cef59a"
+    },
+    {
+      "mask": 27,
+      "file": "1b.png",
+      "perks": [
+        "presence",
+        "lock",
+        "input",
+        "strict"
+      ],
+      "sha256": "7caf2f51d773b20f19b7bd8ed3d758f63ff3c724d339f82b708f7eba08fecab3"
+    },
+    {
+      "mask": 28,
+      "file": "1c.png",
+      "perks": [
+        "calls",
+        "input",
+        "strict"
+      ],
+      "sha256": "5d356b7dfadeaec9dae7e71eec11865b3adb70ba1081b59e1d86327d72b0d273"
+    },
+    {
+      "mask": 29,
+      "file": "1d.png",
+      "perks": [
+        "presence",
+        "calls",
+        "input",
+        "strict"
+      ],
+      "sha256": "c1b52de4d4f56f0ca6105b079ba02fb1079bbb454d46cccc731d929225fc6603"
+    },
+    {
+      "mask": 30,
+      "file": "1e.png",
+      "perks": [
+        "lock",
+        "calls",
+        "input",
+        "strict"
+      ],
+      "sha256": "407f8caf8aeebb555162502f042a185e668c4e0ea49a94a8c4e7d1deeba1a7a6"
+    },
+    {
+      "mask": 31,
+      "file": "1f.png",
+      "perks": [
+        "presence",
+        "lock",
+        "calls",
+        "input",
+        "strict"
+      ],
+      "sha256": "54acde3f492abd7737533031d971f44abbd40b7d74face54d28525b6bc8301be"
+    },
+    {
+      "mask": 32,
+      "file": "20.png",
+      "perks": [
+        "mcp"
+      ],
+      "sha256": "7259dbc247a82bdf1689d57d9053c1de55fa9fe693206b9b080e51f2da6a85f6"
+    },
+    {
+      "mask": 33,
+      "file": "21.png",
+      "perks": [
+        "presence",
+        "mcp"
+      ],
+      "sha256": "cb7fea1d0f93829f0293e0010ea3e4282da0dfec3aef09dbad799de1a9898d08"
+    },
+    {
+      "mask": 34,
+      "file": "22.png",
+      "perks": [
+        "lock",
+        "mcp"
+      ],
+      "sha256": "ddc3908ac8195cea5ce185c3bfa742b16680566827d63c2b36fe5c359b1b727b"
+    },
+    {
+      "mask": 35,
+      "file": "23.png",
+      "perks": [
+        "presence",
+        "lock",
+        "mcp"
+      ],
+      "sha256": "a5ada8e3779377231f387ce26a9f625f6762a30b851d295b1526707933b1dda4"
+    },
+    {
+      "mask": 36,
+      "file": "24.png",
+      "perks": [
+        "calls",
+        "mcp"
+      ],
+      "sha256": "fe7bd61bcb602374df84d1cd25025e19d57ea58c47ceb0db081005318530d6cb"
+    },
+    {
+      "mask": 37,
+      "file": "25.png",
+      "perks": [
+        "presence",
+        "calls",
+        "mcp"
+      ],
+      "sha256": "79848b6afd94777a9a39a326ff748d26b89337ee4784b23e3aebea941041c426"
+    },
+    {
+      "mask": 38,
+      "file": "26.png",
+      "perks": [
+        "lock",
+        "calls",
+        "mcp"
+      ],
+      "sha256": "e6773d7de14575b0e5391fe0847df565c840d3055876df668d12b566df5827f1"
+    },
+    {
+      "mask": 39,
+      "file": "27.png",
+      "perks": [
+        "presence",
+        "lock",
+        "calls",
+        "mcp"
+      ],
+      "sha256": "699f868e85b0af994356cb20ad50de818e0a7ef5156859e3372e008de8a12a20"
+    },
+    {
+      "mask": 40,
+      "file": "28.png",
+      "perks": [
+        "input",
+        "mcp"
+      ],
+      "sha256": "602d0f37116004ee38717b144443081bcba8d12701e1518a4b0a836c260896c9"
+    },
+    {
+      "mask": 41,
+      "file": "29.png",
+      "perks": [
+        "presence",
+        "input",
+        "mcp"
+      ],
+      "sha256": "f4c849bf9348b2bad0323f14cae1b1cbdbefec3a816fbff73873e9673c205f64"
+    },
+    {
+      "mask": 42,
+      "file": "2a.png",
+      "perks": [
+        "lock",
+        "input",
+        "mcp"
+      ],
+      "sha256": "66e7fa47d1749ba5a9d7344cb83262e9bab199b02bcf7d03990d0b729408d103"
+    },
+    {
+      "mask": 43,
+      "file": "2b.png",
+      "perks": [
+        "presence",
+        "lock",
+        "input",
+        "mcp"
+      ],
+      "sha256": "35e7ea0535c25ddf23f40c5c39534173d2b0a617f041f79144049c9586009f6b"
+    },
+    {
+      "mask": 44,
+      "file": "2c.png",
+      "perks": [
+        "calls",
+        "input",
+        "mcp"
+      ],
+      "sha256": "77f88cdb78f2f1c06265afc160ab3778dbeb80c1474fc1c2ec889bb33dea4284"
+    },
+    {
+      "mask": 45,
+      "file": "2d.png",
+      "perks": [
+        "presence",
+        "calls",
+        "input",
+        "mcp"
+      ],
+      "sha256": "ca30d206ad90633a33e5d372042c8adea46677c42f52174a743de45604bce848"
+    },
+    {
+      "mask": 46,
+      "file": "2e.png",
+      "perks": [
+        "lock",
+        "calls",
+        "input",
+        "mcp"
+      ],
+      "sha256": "a7d02dff1130a65502ae6b94452c18aea899ce607cad139206be212978c5c220"
+    },
+    {
+      "mask": 47,
+      "file": "2f.png",
+      "perks": [
+        "presence",
+        "lock",
+        "calls",
+        "input",
+        "mcp"
+      ],
+      "sha256": "6e3b0982a642c4164febc51657b8d03c7abcedff6874bfbe585cfe22a3aa3e73"
+    },
+    {
+      "mask": 48,
+      "file": "30.png",
+      "perks": [
+        "strict",
+        "mcp"
+      ],
+      "sha256": "6c91bcf73344c175bfe4cf7e4d2e04197075e48f571186e2951a13ad95f01397"
+    },
+    {
+      "mask": 49,
+      "file": "31.png",
+      "perks": [
+        "presence",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "bbaae5d8f11774d510efc8f683015566f62427cd4995bcffcdeaeb70da67f26a"
+    },
+    {
+      "mask": 50,
+      "file": "32.png",
+      "perks": [
+        "lock",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "fd6c4971e697e2ec78dfa889b58e45c7c590b53a8a591d358770b387f062dd49"
+    },
+    {
+      "mask": 51,
+      "file": "33.png",
+      "perks": [
+        "presence",
+        "lock",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "37cf7c1773039582f5930706892d263437b53238df3493f08803fcf20ab665ac"
+    },
+    {
+      "mask": 52,
+      "file": "34.png",
+      "perks": [
+        "calls",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "a25793f65fd73fd6e3bf8429293fc96875c1ba6bd6ab7ae7105a7d7f17ed924e"
+    },
+    {
+      "mask": 53,
+      "file": "35.png",
+      "perks": [
+        "presence",
+        "calls",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "3dc6ba15e03334eb1d6b41355db94a1577bd61690508467cf3aa0646c25de176"
+    },
+    {
+      "mask": 54,
+      "file": "36.png",
+      "perks": [
+        "lock",
+        "calls",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "cd991a1dcd480329362b029ce259e4ca00a1b7bfb1f79188cf79ebfecfaa3919"
+    },
+    {
+      "mask": 55,
+      "file": "37.png",
+      "perks": [
+        "presence",
+        "lock",
+        "calls",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "b461d8f3e84a9f02232db5be26e80fe7ecd3e6d08526d8b3d0e43497a3031c07"
+    },
+    {
+      "mask": 56,
+      "file": "38.png",
+      "perks": [
+        "input",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "76efe654dd10f7f852ebb7544c67d1c20b4d4872b5fda3d6ee4b71b4d188ba37"
+    },
+    {
+      "mask": 57,
+      "file": "39.png",
+      "perks": [
+        "presence",
+        "input",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "9bfe20e2b33f1d9a4d75b059ce9902e54fc5ff29d869c5c6deecd3a55b51968f"
+    },
+    {
+      "mask": 58,
+      "file": "3a.png",
+      "perks": [
+        "lock",
+        "input",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "f4fa527eb7d1c53a70319c259dfc469e5915c0fea8ae4cba2793be2f37e6d615"
+    },
+    {
+      "mask": 59,
+      "file": "3b.png",
+      "perks": [
+        "presence",
+        "lock",
+        "input",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "84051f1cfbfcd08567fad20ab4efab2fafa48779f9d6bc749492e587a442d0d4"
+    },
+    {
+      "mask": 60,
+      "file": "3c.png",
+      "perks": [
+        "calls",
+        "input",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "0abd3e64fb709bff8cd73833786006b4d34683678d42db5ebe4670d450cfcabd"
+    },
+    {
+      "mask": 61,
+      "file": "3d.png",
+      "perks": [
+        "presence",
+        "calls",
+        "input",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "44f7bee668d48bac03dd406d9a063ed0b832012b11c32625d1ebecc33a4cd576"
+    },
+    {
+      "mask": 62,
+      "file": "3e.png",
+      "perks": [
+        "lock",
+        "calls",
+        "input",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "a21699101e6014e922484c3da38cb3bd20d7ea29299c1e1d0a098d25cdca4312"
+    },
+    {
+      "mask": 63,
+      "file": "3f.png",
+      "perks": [
+        "presence",
+        "lock",
+        "calls",
+        "input",
+        "strict",
+        "mcp"
+      ],
+      "sha256": "3017e1bbca604ab9961bc5d481ee89e3f604a5b3e53bf0a07fc3e696f70883b5"
+    }
+  ]
+}
