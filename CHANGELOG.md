@@ -2,6 +2,19 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.10.1]
+
+### Added
+
+- Blinchiborg adapts to six optional features with 64 portraits, compact names in all 30 languages and matching desktop shortcuts. macOS .blincho documents change independently of the signed app bundle.
+
+- Show a camera badge on Blincho's tray icon while the app holds a live camera stream, with an explicit camera label in all 30 interface languages. Camera and call badges compose with the current Blinchiborg portrait.
+- Track camera ownership across presence checks and permission probes, including overlapping streams, cancellation, late acquisition and ended tracks. Restore the current portrait when the final capture ends.
+
+### Fixed
+
+- Reject stale camera reports after main-window navigation and preserve camera indication when the window is hidden in the tray. Electron also clears it after renderer termination.
+
 ## [1.10.0]
 
 ### Added

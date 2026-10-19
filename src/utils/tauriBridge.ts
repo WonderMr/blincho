@@ -113,6 +113,8 @@ async function installTauriBridge(): Promise<void> {
   const api = window.__TAURI__;
   if (!api) return;
   const info = await api.core.invoke<{ platform: 'darwin' | 'win32' | 'linux'; meetingDetectionSupported: boolean }>('desktop_info');
+  const cameraGeneration = await api.core.invoke<number>('camera_activity_generation');
+  let cameraRevision = 0;
   document.documentElement.dataset.platform = info.platform;
   document.documentElement.dataset.runtime = 'tauri';
   const command = (operation: string, flag?: boolean) => api.core.invoke<void>('desktop_command', { operation, flag: flag ?? null });
@@ -129,6 +131,7 @@ async function installTauriBridge(): Promise<void> {
     showNotification: (title, body) => { void api.core.invoke('notification_send', {title, body}).catch(error => console.warn('Blincho: Notification failed:', error)); },
     flashWindow: () => { void api.core.invoke('attention').catch(error => console.warn('Blincho: Attention failed:', error)); },
     setLocale: locale => api.core.invoke('set_locale', { locale }),
+    setCameraActivity: (active, label) => api.core.invoke('camera_activity_update', { input: { generation: cameraGeneration, revision: ++cameraRevision, active, label } }),
     setSymbioteBuild: mask => api.core.invoke('set_symbiote_build', { selection: { mask } }),
     syncSymbioteShortcut: (mask, name) => api.core.invoke('sync_symbiote_shortcut', { selection: { mask, name } }),
     createSymbioteShortcut: (mask, name) => api.core.invoke('create_symbiote_shortcut', { selection: { mask, name } }),

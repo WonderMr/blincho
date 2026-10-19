@@ -146,5 +146,6 @@
   "release.1.8.0": "Valfria lokala närvarokontroller med kameran och datorlåsning. Bilderna behandlas på enheten och sparas eller laddas aldrig upp. Senare versioner utför kontrollen först när en tidsinställd paus är slut.",
   "release.1.8.14": "Valfri lokal MCP ansluter AI-klienter till timerstatus, inställningar, dagens totaler och timeråtgärder. Närvarokontroller med kameran utförs först när den tidsinställda pausen är slut.",
   "release.1.8.15": "Lokal MCP rapporterar nu statistik per dag, kalendervecka eller datumintervall, med datum för tillgängliga uppgifter och synliga luckor. Fönstrets placering och storlek bevaras efter låsning, viloläge och pauser.",
-  "release.1.10.0": "Utseendet och namnet beror på vilka funktioner som är aktiverade. Genvägen på skrivbordet följer din konfiguration."
+  "release.1.10.0": "Utseendet och namnet beror på vilka funktioner som är aktiverade. Genvägen på skrivbordet följer din konfiguration.",
+  "release.1.10.1": "Utseendet och namnet beror på vilka funktioner som är aktiverade. Genvägen på skrivbordet följer din konfiguration. En kameramarkering på Blinchos ikon visar när kameran används och försvinner när bildinsamlingen avslutas."
 }

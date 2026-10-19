@@ -146,5 +146,6 @@
   "release.1.8.0": "Optional local camera presence checks and computer locking, with frames processed on the device and never saved or uploaded. Later releases run the check only after a timed break finishes.",
   "release.1.8.14": "Optional local MCP connects AI clients to timer status, settings, today's totals and timer actions. Camera presence checks run only after the timed break finishes.",
   "release.1.8.15": "Local MCP now reports statistics by day, calendar week or date range, with available-data dates and visible gaps. Window position and size are preserved after lock, sleep and breaks.",
-  "release.1.10.0": "The appearance and name depend on the features you enable. The desktop shortcut follows your build."
+  "release.1.10.0": "The appearance and name depend on the features you enable. The desktop shortcut follows your build.",
+  "release.1.10.1": "The appearance and name depend on the features you enable. The desktop shortcut follows your build. A camera badge in the tray identifies Blincho while it uses the camera and clears when capture ends."
 }

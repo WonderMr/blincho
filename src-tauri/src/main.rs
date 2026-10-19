@@ -2,6 +2,7 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
+mod camera_activity;
 #[cfg(any(target_os = "linux", test))]
 mod camera_permission;
 mod history;
@@ -1048,6 +1049,7 @@ fn main() {
             }
             let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             configure_timer, symbiote_icons::set_symbiote_build,
+            camera_activity::camera_activity_generation, camera_activity::camera_activity_update,
             symbiote_shortcuts::sync_symbiote_shortcut, symbiote_shortcuts::create_symbiote_shortcut,
             symbiote_shortcuts::symbiote_shortcut_status, symbiote_shortcuts::show_symbiote_shortcut,
             local_mcp_configure, local_mcp_status, local_mcp_publish, local_mcp_take_commands,
@@ -1065,6 +1067,7 @@ fn main() {
             handler(invoke)
         })
         .setup(move |app| {
+            app.manage(camera_activity::CameraActivity::default());
             app.manage(local_mcp::LocalMcp::default());
             app.manage(Mutex::new(input_activity::InputActivity::default()));
             startup_trace("setup-enter");
@@ -1113,14 +1116,18 @@ fn main() {
                 }
                 #[cfg(not(target_os = "macos"))]
                 { builder = builder.data_directory(path.join("webview")); }
-                builder = builder.on_page_load(|_, payload| {
-                    use tauri::webview::PageLoadEvent;
-                    startup_trace(match payload.event() {
-                        PageLoadEvent::Started => "renderer-page-started",
-                        PageLoadEvent::Finished => "renderer-page-finished",
-                    });
-                });
+
             }
+            builder = builder.on_page_load(|webview, payload| {
+                use tauri::webview::PageLoadEvent;
+                if matches!(payload.event(), PageLoadEvent::Started) {
+                    camera_activity::reset(webview.app_handle());
+                }
+                startup_trace(match payload.event() {
+                    PageLoadEvent::Started => "renderer-page-started",
+                    PageLoadEvent::Finished => "renderer-page-finished",
+                });
+            });
             startup_trace("webview-config-ready");
             let source = std::env::var_os("BLINCHO_PROTOTYPE_HISTORY_SOURCE")
                 .map(PathBuf::from)
@@ -1359,6 +1366,7 @@ fn main() {
                         }
                     }
                 }
+                tauri::WindowEvent::Destroyed => camera_activity::reset(window.app_handle()),
                 tauri::WindowEvent::Focused(false) if strict => {
                     let _ = window.unminimize();
                     let _ = window.set_focus();
