@@ -618,5 +618,10 @@
   "Автоблокировка": "Kunci otomatis",
   "История звонков": "Riwayat panggilan",
   "Статистика ввода": "Statistik input",
-  "Связь с помощником": "Koneksi ke asisten"
+  "Связь с помощником": "Koneksi ke asisten",
+  "Создать ярлык": "Buat pintasan",
+  "Обновить ярлык": "Perbarui pintasan",
+  "Показать ярлык": "Tampilkan pintasan",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "Pintasan desktop mengikuti konfigurasi Anda.",
+  "Не удалось сохранить ярлык.": "Pintasan tidak dapat disimpan."
 }

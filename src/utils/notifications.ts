@@ -1,3 +1,4 @@
+export interface SymbioteShortcutStatus { supported: boolean; exists: boolean; path?: string | null }
 // Cross-platform Notification Dispatcher (Electron IPC & Web Notifications)
 import type { UpdateBridge } from './updates';
 import type { LocalMcpBridge } from './localMcp';
@@ -11,6 +12,10 @@ declare global {
       flashWindow: () => void;
       setAlwaysOnTop: (flag: boolean) => void;
       setSymbioteBuild?: (mask: number) => Promise<void>;
+      syncSymbioteShortcut?: (mask: number, name: string) => Promise<SymbioteShortcutStatus>;
+      createSymbioteShortcut?: (mask: number, name: string) => Promise<SymbioteShortcutStatus>;
+      getSymbioteShortcutStatus?: () => Promise<SymbioteShortcutStatus>;
+      showSymbioteShortcut?: () => Promise<boolean>;
       bringToFront?: (options?: { alwaysOnTop?: boolean }) => void;
       setBreakFullscreen?: (flag: boolean) => void;
       minimizeToTray?: () => void;

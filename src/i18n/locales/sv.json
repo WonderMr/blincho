@@ -618,5 +618,10 @@
   "Автоблокировка": "Automatisk låsning",
   "История звонков": "Samtalshistorik",
   "Статистика ввода": "Inmatningsstatistik",
-  "Связь с помощником": "Anslutning till assistenten"
+  "Связь с помощником": "Anslutning till assistenten",
+  "Создать ярлык": "Skapa genväg",
+  "Обновить ярлык": "Uppdatera genväg",
+  "Показать ярлык": "Visa genväg",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "Genvägen på skrivbordet följer din konfiguration.",
+  "Не удалось сохранить ярлык.": "Det gick inte att spara genvägen."
 }

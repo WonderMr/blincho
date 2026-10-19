@@ -618,5 +618,10 @@
   "Автоблокировка": "Bloqueo automático",
   "История звонков": "Historial de llamadas",
   "Статистика ввода": "Estadísticas de entrada",
-  "Связь с помощником": "Conexión con el asistente"
+  "Связь с помощником": "Conexión con el asistente",
+  "Создать ярлык": "Crear acceso directo",
+  "Обновить ярлык": "Actualizar acceso directo",
+  "Показать ярлык": "Mostrar acceso directo",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "El acceso directo del escritorio se adapta a tu configuración.",
+  "Не удалось сохранить ярлык.": "No se pudo guardar el acceso directo."
 }

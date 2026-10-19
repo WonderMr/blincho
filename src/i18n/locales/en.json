@@ -618,5 +618,10 @@
   "Автоблокировка": "Auto-lock",
   "История звонков": "Call history",
   "Статистика ввода": "Input statistics",
-  "Связь с помощником": "Assistant connection"
+  "Связь с помощником": "Assistant connection",
+  "Создать ярлык": "Create shortcut",
+  "Обновить ярлык": "Update shortcut",
+  "Показать ярлык": "Show shortcut",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "The desktop shortcut follows your build.",
+  "Не удалось сохранить ярлык.": "Could not save the shortcut."
 }

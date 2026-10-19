@@ -618,5 +618,10 @@
   "Автоблокировка": "Automatyczna blokada",
   "История звонков": "Historia połączeń",
   "Статистика ввода": "Statystyki wprowadzania",
-  "Связь с помощником": "Połączenie z lokalnym asystentem"
+  "Связь с помощником": "Połączenie z lokalnym asystentem",
+  "Создать ярлык": "Utwórz skrót",
+  "Обновить ярлык": "Aktualizuj skrót",
+  "Показать ярлык": "Pokaż skrót",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "Skrót na pulpicie zmienia się wraz z konfiguracją.",
+  "Не удалось сохранить ярлык.": "Nie udało się zapisać skrótu."
 }

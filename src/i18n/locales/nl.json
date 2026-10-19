@@ -618,5 +618,10 @@
   "Автоблокировка": "Automatische vergrendeling",
   "История звонков": "Oproepgeschiedenis",
   "Статистика ввода": "Invoerstatistieken",
-  "Связь с помощником": "Verbinding met de assistent"
+  "Связь с помощником": "Verbinding met de assistent",
+  "Создать ярлык": "Snelkoppeling maken",
+  "Обновить ярлык": "Snelkoppeling bijwerken",
+  "Показать ярлык": "Snelkoppeling tonen",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "De snelkoppeling op het bureaublad volgt je configuratie.",
+  "Не удалось сохранить ярлык.": "De snelkoppeling kon niet worden opgeslagen."
 }

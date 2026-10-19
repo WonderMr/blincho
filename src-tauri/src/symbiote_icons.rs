@@ -40,6 +40,10 @@ struct Applied {
     error: Option<String>,
 }
 
+pub fn png(mask: u8) -> &'static [u8] {
+    ICONS[usize::from(mask)]
+}
+
 pub fn image(mask: u8) -> tauri::Result<tauri::image::Image<'static>> {
     tauri::image::Image::from_bytes(ICONS[usize::from(mask)])
 }

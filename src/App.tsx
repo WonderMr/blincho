@@ -136,13 +136,17 @@ export const App: React.FC = () => {
         phase === 'manual' ? t("Таймер на ручной паузе") : inMeetingActive ? t("Перерыв отложен: встреча") : t("Рабочий цикл");
 
   const symbioteBuild = getSymbioteBuild(settings, readSymbioteCapabilities(inputStatus === 'active'), cameraAccessPending);
+  const symbioteName = getSymbioteName(symbioteBuild.mask, t);
 
   useEffect(() => {
     updateDocumentSymbioteIcon(symbioteBuild.mask);
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const apply = async () => {
-      try { await window.electronAPI?.setSymbioteBuild?.(symbioteBuild.mask); }
+      try {
+        await window.electronAPI?.setSymbioteBuild?.(symbioteBuild.mask);
+        if (!cancelled) await window.electronAPI?.syncSymbioteShortcut?.(symbioteBuild.mask, symbioteName);
+      }
       catch (error) {
         console.warn('Blincho: Build icon update failed:', error);
         if (!cancelled) retry = setTimeout(() => { void apply(); }, 3000);
@@ -150,7 +154,7 @@ export const App: React.FC = () => {
     };
     void apply();
     return () => { cancelled = true; clearTimeout(retry); };
-  }, [symbioteBuild.mask]);
+  }, [symbioteBuild.mask, symbioteName]);
 
   const refreshStats = () => {
     const stats = loadAllStats();

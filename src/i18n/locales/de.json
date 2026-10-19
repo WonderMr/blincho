@@ -618,5 +618,10 @@
   "Автоблокировка": "Automatische Sperre",
   "История звонков": "Anrufverlauf",
   "Статистика ввода": "Eingabestatistik",
-  "Связь с помощником": "Verbindung zum Assistenten"
+  "Связь с помощником": "Verbindung zum Assistenten",
+  "Создать ярлык": "Verknüpfung erstellen",
+  "Обновить ярлык": "Verknüpfung aktualisieren",
+  "Показать ярлык": "Verknüpfung anzeigen",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "Die Desktop-Verknüpfung passt sich deiner Konfiguration an.",
+  "Не удалось сохранить ярлык.": "Die Verknüpfung konnte nicht gespeichert werden."
 }

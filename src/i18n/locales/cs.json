@@ -618,5 +618,10 @@
   "Автоблокировка": "Automatické zamykání",
   "История звонков": "Historie hovorů",
   "Статистика ввода": "Statistiky vstupu",
-  "Связь с помощником": "Spojení s asistentem"
+  "Связь с помощником": "Spojení s asistentem",
+  "Создать ярлык": "Vytvořit zástupce",
+  "Обновить ярлык": "Aktualizovat zástupce",
+  "Показать ярлык": "Zobrazit zástupce",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "Zástupce na ploše se mění podle konfigurace.",
+  "Не удалось сохранить ярлык.": "Zástupce se nepodařilo uložit."
 }
