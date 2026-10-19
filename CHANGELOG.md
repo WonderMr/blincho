@@ -13,7 +13,7 @@ Release notes are curated here before a version tag is pushed. The website keeps
 
 ### Fixed
 
-- Reject stale camera reports after main-window navigation and preserve camera indication when the window is hidden in the tray. Electron also clears it after renderer termination.
+- Reject stale camera reports after main-window navigation and preserve camera indication when the window is hidden in the tray. macOS and Electron also clear it after renderer termination.
 
 ## [1.10.0]
 
