@@ -436,6 +436,13 @@ impl Timer {
             && self.snapshot.idle_seconds >= 60.
     }
 
+    pub fn presence_check_may_start(&self) -> bool {
+        self.presence_check_allowed()
+            && !self
+                .camera_presence
+                .is_some_and(|(_, present)| present == Some(false))
+    }
+
     pub fn begin_camera_check(&mut self, now: i64) {
         if self.camera_presence.is_none()
             || self
@@ -1465,6 +1472,31 @@ mod tests {
             ["idle"],
             "an unfinished check cannot preserve work indefinitely"
         );
+    }
+    #[test]
+    fn confirmed_absence_stops_camera_retries_until_new_input() {
+        let mut timer = enhanced_timer();
+        let epoch = timer.snapshot.presence_epoch;
+        assert!(timer.presence_check_may_start());
+        timer.begin_camera_check(1000);
+        assert!(timer.observe_camera_presence(epoch, 1000, None, 1500));
+        assert!(
+            timer.presence_check_may_start(),
+            "unknown results may retry"
+        );
+        timer.begin_camera_check(2000);
+        assert!(timer.observe_camera_presence(epoch, 2000, Some(false), 2500));
+        assert!(!timer.presence_check_may_start());
+        assert!(
+            timer.presence_check_allowed(),
+            "the result may still request a lock"
+        );
+        assert!(timer.claim_presence_lock());
+        timer.tick(3000, Some(0.), Some(false));
+        for second in 4..=64 {
+            timer.tick(second * 1000, Some((second - 3) as f64), Some(false));
+        }
+        assert!(timer.presence_check_may_start(), "new input resets absence");
     }
     #[test]
     fn input_calls_power_and_policy_changes_reject_stale_camera_results() {

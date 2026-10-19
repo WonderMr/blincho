@@ -237,6 +237,22 @@ export const App: React.FC = () => {
     finishReturn();
     sync();
   };
+  const confirmPendingBreak = (present: boolean, idle: number, sampledMonotonicAt: number) => {
+    const pendingBreak = pendingBreakRef.current;
+    if (!pendingBreak) return;
+    // A short return window avoids crediting a break after a later return
+    // within the much longer work-idle grace period.
+    if (performance.now() - pendingBreak.deadlineMonotonicAt > 15_000) pendingBreakRef.current = null;
+    else if (present && Number.isFinite(idle) && idle >= 0 && sampledMonotonicAt - (idle + 1) * 1000 > pendingBreak.deadlineMonotonicAt) {
+      // Native idle is rounded down to seconds. Subtract another second
+      // and use the query start time, so earlier input and slow IPC cannot
+      // masquerade as activity after the rest deadline.
+      pendingBreakRef.current = null;
+      recordBreakCompleted(0, pendingBreak.eventId);
+      refreshStats();
+      setNoticeMessage("Перерыв записан. Рабочий цикл продолжается.");
+    }
+  };
   const samplePresence = (refresh = false): Promise<boolean> => {
     if (presenceInFlightRef.current) {
       if (refresh) presenceRefreshRef.current = true;
@@ -244,9 +260,13 @@ export const App: React.FC = () => {
     }
     const query = async (): Promise<boolean> => {
       if (hasNativeTimer() && settingsRef.current.enhancedPresenceEnabled) {
+        const sampledMonotonicAt = performance.now();
         const snapshot = await readNativeTimer();
-        if (snapshot && mountedRef.current) applyNativeRef.current(snapshot);
-        return !!snapshot && snapshot.reasons.length === 0;
+        if (!snapshot || !mountedRef.current) return false;
+        applyNativeRef.current(snapshot);
+        const present = snapshot.reasons.length === 0;
+        confirmPendingBreak(present, snapshot.idleSeconds, sampledMonotonicAt);
+        return present;
       }
       for (let attempt = 0; mountedRef.current && attempt < 2; attempt += 1) {
         presenceRefreshRef.current = false;
@@ -331,21 +351,7 @@ export const App: React.FC = () => {
           if (hidden !== session.reasons.has('hidden')) setPresenceReason('hidden', hidden);
         }
         finishReturn();
-        const pendingBreak = pendingBreakRef.current;
-        if (pendingBreak) {
-          // A short return window avoids crediting a break after a later return
-          // within the much longer work-idle grace period.
-          if (performance.now() - pendingBreak.deadlineMonotonicAt > 15_000) pendingBreakRef.current = null;
-          else if (session.present && sampledMonotonicAt - (idle + 1) * 1000 > pendingBreak.deadlineMonotonicAt) {
-            // Native idle is rounded down to seconds. Subtract another second
-            // and use the query start time, so earlier input and slow IPC cannot
-            // masquerade as activity after the rest deadline.
-            pendingBreakRef.current = null;
-            recordBreakCompleted(0, pendingBreak.eventId);
-            refreshStats();
-            setNoticeMessage("Перерыв записан. Рабочий цикл продолжается.");
-          }
-        }
+        confirmPendingBreak(session.present, idle, sampledMonotonicAt);
         return session.present;
       }
       return false;

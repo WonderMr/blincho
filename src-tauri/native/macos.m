@@ -9,7 +9,7 @@ bool blincho_input_permission(bool prompt) {
     return CGPreflightListenEventAccess() || (prompt && CGRequestListenEventAccess());
 }
 typedef bool (*BlinchoInputCallback)(void *, int);
-typedef struct { void *context; BlinchoInputCallback callback; bool failed; } BlinchoInputContext;
+typedef struct { void *context; BlinchoInputCallback callback; bool failed; CFMachPortRef tap; } BlinchoInputContext;
 static CGEventRef blincho_input_event(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *data) {
     (void)proxy;
     BlinchoInputContext *context = data;
@@ -20,7 +20,12 @@ static CGEventRef blincho_input_event(CGEventTapProxy proxy, CGEventType type, C
         case kCGEventScrollWheel: kind = 2; break;
         case kCGEventMouseMoved: case kCGEventLeftMouseDragged: case kCGEventRightMouseDragged: case kCGEventOtherMouseDragged: kind = 3; break;
         case kCGEventTapDisabledByTimeout: case kCGEventTapDisabledByUserInput:
-            context->failed = true; context->callback(context->context, 5); break;
+            if (context->tap && CGPreflightListenEventAccess() && context->callback(context->context, -1)) {
+                CGEventTapEnable(context->tap, true);
+            } else {
+                context->failed = true; context->callback(context->context, 5);
+            }
+            break;
         default: break;
     }
     if (kind >= 0) context->callback(context->context, kind);
@@ -28,13 +33,14 @@ static CGEventRef blincho_input_event(CGEventTapProxy proxy, CGEventType type, C
 }
 void blincho_input_run(void *data, BlinchoInputCallback callback) {
     @autoreleasepool {
-        BlinchoInputContext context = {data, callback, false};
+        BlinchoInputContext context = {data, callback, false, NULL};
         CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventLeftMouseDown) |
             CGEventMaskBit(kCGEventRightMouseDown) | CGEventMaskBit(kCGEventOtherMouseDown) |
             CGEventMaskBit(kCGEventScrollWheel) | CGEventMaskBit(kCGEventMouseMoved) |
             CGEventMaskBit(kCGEventLeftMouseDragged) | CGEventMaskBit(kCGEventRightMouseDragged) | CGEventMaskBit(kCGEventOtherMouseDragged);
         CFMachPortRef tap = CGEventTapCreate(kCGSessionEventTap, kCGTailAppendEventTap, kCGEventTapOptionListenOnly, mask, blincho_input_event, &context);
         if (!tap) return;
+        context.tap = tap;
         CFRunLoopSourceRef source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0);
         if (!source) { CFRelease(tap); return; }
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, kCFRunLoopCommonModes);

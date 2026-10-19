@@ -329,3 +329,120 @@ test('delayed final idle query cannot hide input after camera capture began', as
     assert.equal(locks, 0, 'input during the delayed query invalidates camera absence');
   } finally { h.destroy(); }
 });
+
+test('enhanced native presence credits a completed break once after confirmed later input', async () => {
+  const previous = window.__TAURI__;
+  let h, snapshot, ticks = 0, idleSeconds = 20;
+  window.__TAURI__ = { core: { async invoke(command, args) {
+    if (command === 'configure_timer') snapshot = {
+      ...args.input, reasons: [], focusByDate: {}, absenceEpoch: 0, absentSince: null,
+      locked: false, suspended: false, breakElapsed: false,
+      breakEndAt: args.input.breakActive ? h.now + args.input.breakSeconds * 1000 : null,
+    };
+    if (command === 'configure_timer' || command === 'timer_snapshot') {
+      if (snapshot.breakActive && h.now >= snapshot.breakEndAt) snapshot.breakElapsed = true;
+      return { ...snapshot, idleSeconds, tickCount: ++ticks };
+    }
+    if (command === 'presence_check_begin') return null;
+  } } };
+  try {
+    h = createHarness({ enhancedPresenceEnabled: true });
+    await h.settle();
+    await h.call('TimerWidget', 'onTriggerInstantBreak');
+    const elapsed = h.captured.BreakOverlay.onElapsed;
+    await h.advance(20_000);
+    assert.equal(h.active.has('BreakOverlay'), false, 'native deadline closes the break');
+    assert.equal(h.stats().breaksCompleted, 0, 'elapsed time alone does not prove resumed input');
+    await h.advance(1000);
+    assert.equal(h.stats().breaksCompleted, 0, 'stale idle cannot credit the break');
+    idleSeconds = 0;
+    await h.advance(1000);
+    assert.equal(h.stats().breaksCompleted, 1, 'native input after the deadline credits the pending break');
+    await elapsed(h.monotonicNow);
+    await h.emit('mousemove');
+    await h.advance(1000);
+    assert.equal(h.stats().breaksCompleted, 1, 'later native samples and renderer callbacks cannot credit twice');
+    assert.equal(h.idleCalls, 0, 'enhanced presence uses native snapshot idle rather than the legacy query');
+  } finally {
+    h?.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+  }
+});
+
+test('enhanced native presence does not credit stale, invalid or late input', async () => {
+  for (const sample of ['stale', 'negative', 'non-finite', 'late']) {
+    const previous = window.__TAURI__;
+    let h, snapshot, ticks = 0, idleSeconds = 20;
+    window.__TAURI__ = { core: { async invoke(command, args) {
+      if (command === 'configure_timer') snapshot = {
+        ...args.input, reasons: [], focusByDate: {}, absenceEpoch: 0, absentSince: null,
+        locked: false, suspended: false, breakElapsed: false,
+        breakEndAt: args.input.breakActive ? h.now + args.input.breakSeconds * 1000 : null,
+      };
+      if (command === 'configure_timer' || command === 'timer_snapshot') {
+        if (snapshot.breakActive && h.now >= snapshot.breakEndAt) snapshot.breakElapsed = true;
+        return { ...snapshot, idleSeconds, tickCount: ++ticks };
+      }
+      if (command === 'presence_check_begin') return null;
+    } } };
+    try {
+      h = createHarness({ enhancedPresenceEnabled: true });
+      await h.settle();
+      await h.call('TimerWidget', 'onTriggerInstantBreak');
+      await h.advance(20_000);
+      if (sample === 'late') await h.advance(16_000);
+      idleSeconds = sample === 'negative' ? -1 : sample === 'non-finite' ? NaN : sample === 'late' ? 0 : 20;
+      await h.advance(2000);
+      assert.equal(h.stats().breaksCompleted, 0, sample);
+    } finally {
+      h?.destroy();
+      if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+    }
+  }
+});
+
+test('slow enhanced native reads cannot turn input before the deadline into completion credit', async () => {
+  const previous = window.__TAURI__;
+  let h, snapshot, ticks = 0, idleSeconds = 20, holdNext = false, resolveHeld;
+  window.__TAURI__ = { core: { async invoke(command, args) {
+    if (command === 'configure_timer') snapshot = {
+      ...args.input, reasons: [], focusByDate: {}, absenceEpoch: 0, absentSince: null,
+      locked: false, suspended: false, breakElapsed: false,
+      breakEndAt: args.input.breakActive ? h.now + args.input.breakSeconds * 1000 : null,
+    };
+    if (command === 'configure_timer' || command === 'timer_snapshot') {
+      if (snapshot.breakActive && h.now >= snapshot.breakEndAt) snapshot.breakElapsed = true;
+      const frame = { ...snapshot, idleSeconds, tickCount: ++ticks };
+      if (command === 'timer_snapshot' && holdNext) {
+        holdNext = false;
+        return new Promise(resolve => { resolveHeld = () => resolve(frame); });
+      }
+      return frame;
+    }
+    if (command === 'presence_check_begin') return null;
+  } } };
+  try {
+    h = createHarness({ enhancedPresenceEnabled: true });
+    await h.settle();
+    await h.call('TimerWidget', 'onTriggerInstantBreak');
+    await h.advance(20_000);
+    await h.advance(500);
+    idleSeconds = 0;
+    holdNext = true;
+    await h.emit('mousemove');
+    assert.equal(typeof resolveHeld, 'function', 'the enhanced presence sample is waiting for native IPC');
+    await h.advance(1500);
+    idleSeconds = 20;
+    resolveHeld();
+    await h.settle();
+    assert.equal(h.stats().breaksCompleted, 0, 'query-start time and rounded idle cannot prove later input');
+    await h.advance(1000);
+    assert.equal(h.stats().breaksCompleted, 0, 'stale subsequent reads still cannot credit the break');
+    idleSeconds = 0;
+    await h.advance(1000);
+    assert.equal(h.stats().breaksCompleted, 1, 'a later fresh sample can still confirm the pending break');
+  } finally {
+    h?.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+  }
+});

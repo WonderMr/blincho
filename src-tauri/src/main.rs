@@ -416,7 +416,7 @@ async fn presence_check_begin(app: tauri::AppHandle) -> Result<Option<Value>, St
         let (epoch, meeting_epoch) = {
             let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
             sample(&mut timer);
-            if !timer.presence_check_allowed() {
+            if !timer.presence_check_may_start() {
                 return Ok(None);
             }
             (timer.snapshot.presence_epoch, timer.meeting_epoch())
@@ -425,7 +425,7 @@ async fn presence_check_begin(app: tauri::AppHandle) -> Result<Option<Value>, St
         let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
         sample(&mut timer);
         if epoch != timer.snapshot.presence_epoch
-            || !timer.presence_check_allowed()
+            || !timer.presence_check_may_start()
             || !meeting.supported
             || meeting.in_meeting
         {
@@ -508,13 +508,19 @@ async fn presence_check_finish(
         // Only the first confirmed absence in an input episode may attempt it.
         let lock = present == Some(false) && timer.claim_presence_lock();
         sample(&mut timer);
-        let locked = if lock
+        let request_lock = lock
             && epoch == timer.snapshot.presence_epoch
             && timer.presence_check_allowed()
             && Utc::now().timestamp_millis() - (timer.snapshot.idle_seconds * 1000.) as i64 + 1000
-                <= started_at
-        {
-            platform::lock_computer(runtime.test_dir.is_some())?
+                <= started_at;
+        if request_lock {
+            platform::request_computer_lock(runtime.test_dir.is_some())?;
+        }
+        // The native request is serialized with policy changes, but waiting
+        // for OS confirmation must not block timer ticks or power events.
+        drop(timer);
+        let locked = if request_lock {
+            platform::confirm_computer_lock(runtime.test_dir.is_some())?
         } else {
             false
         };

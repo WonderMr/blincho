@@ -14,6 +14,8 @@ Release notes are curated here before a version tag is pushed. The website keeps
 
 - Preserve active breaks and exercises while enhanced presence observations are renewed. Cancel stale camera decisions after new input, calls, power changes or settings changes.
 - Preserve final input totals when collection stops, prevent cumulative snapshot replays from inflating counts, and clear native replay buffers when collection is disabled.
+- Credit completed breaks after confirmed input in enhanced presence mode, without accepting stale or delayed samples.
+- Recover macOS input monitoring after transient tap disablement and process Windows hook messages without polling delays. Keep native timer and power handling responsive while confirming a session lock.
 
 ## [1.8.15]
 
