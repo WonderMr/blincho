@@ -10,11 +10,11 @@
 .daily-metrics > div { display: flex; align-items: baseline; gap: 9px; }
 .daily-metrics strong { font-size: 1.8rem; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .daily-metrics span { font-size: .8rem; color: var(--text-secondary); }
-.recommended-exercise { display: flex; align-items: center; gap: 15px; padding: 20px 0; border-bottom: 1px solid var(--border-subtle); }
+.recommended-exercise { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
 .recommended-exercise > svg { flex-shrink: 0; color: var(--accent-primary); }
-.recommended-exercise-copy { min-width: 0; flex: 1; }
-.recommended-exercise-copy > span { font-size: .71rem; color: var(--text-secondary); }
-.recommended-exercise h2 { font-size: .94rem; line-height: 1.45; font-weight: 550; margin-top: 3px; }
+.recommended-exercise-copy { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1; }
+.recommended-exercise-copy > span { flex: 0 0 auto; white-space: nowrap; font-size: .71rem; color: var(--text-secondary); }
+.recommended-exercise h2 { min-width: 0; font-size: .88rem; line-height: 1.4; font-weight: 550; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .recommended-exercise .btn { flex-shrink: 0; font-size: .8rem; background: transparent; border-color: transparent; color: var(--accent-primary); }
 .main-content .feature-status-list { padding: 16px 0 0; gap: 10px 20px; }
 .main-content .feature-status-row { display: inline-flex; align-items: center; gap: 7px; padding: 0; border: 0; background: transparent; font-size: .72rem; color: var(--text-secondary); line-height: 1.5; }
@@ -74,13 +74,18 @@
 @media (max-width: 760px) {
   .app-workspace > .main-content { padding: 18px 20px 24px; gap: 16px; }
   .main-content .dashboard-title, .main-content .view-header h2 { font-size: 1.5rem; }
-  .recommended-exercise { flex-wrap: wrap; gap: 10px; }
+  .recommended-exercise { flex-wrap: nowrap; gap: 10px; }
   .recommended-exercise .btn { margin-inline-start: auto; }
 }
 @media (max-width: 440px) {
   .app-workspace > .main-content { padding-inline: 16px; }
   .daily-metrics { gap: 16px 24px; }
-  .recommended-exercise > svg { display: none; }
-  .recommended-exercise-copy { flex-basis: 100%; }
-  .recommended-exercise .btn { padding-inline: 0; margin: 0; }
+}
+
+@container content-column (max-width: 620px) {
+  .recommended-exercise-copy > span { display: none; }
+}
+@container content-column (max-width: 440px) {
+  .recommended-exercise .recommended-action-label { display: none; }
+  .recommended-exercise .btn { min-width: 44px; width: 44px; padding-inline: 0; justify-content: center; }
 }

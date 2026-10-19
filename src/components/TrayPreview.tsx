@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { NativeTimerSnapshot } from '../utils/tauriBridge';
 import '../styles/tray-preview.css';
+import { getSymbioteIconPath, updateDocumentSymbioteIcon } from '../utils/symbioteIcons';
 
 interface TraySummary {
   date: string; focusMinutes: number; breaksCompleted: number; locale: string;
@@ -9,7 +10,7 @@ interface TraySummary {
   readyLabel: string; focusValue: string; breaksValue: string; todayLabel: string;
   meetingLabel?: string; meetingInactiveLabel?: string; meetingUnknownLabel?: string;
   meetingDisabledLabel?: string; unknownMeetingAppLabel?: string;
-  theme?: string; colorPalette?: string;
+  theme?: string; colorPalette?: string; symbioteMask?: number; buildName?: string;
 }
 interface PreviewState { timer: NativeTimerSnapshot; summary: TraySummary | null }
 
@@ -55,6 +56,7 @@ export default function TrayPreview() {
   useEffect(() => {
     if (!summary) return;
     document.documentElement.lang = summary.locale;
+    updateDocumentSymbioteIcon(summary.symbioteMask ?? 0);
     document.documentElement.dir = ['ar', 'fa', 'he', 'ur'].includes(summary.locale) ? 'rtl' : 'ltr';
     document.documentElement.dataset.palette = ['sage', 'ocean', 'lavender'].includes(summary.colorPalette || '') ? summary.colorPalette : 'sage';
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -82,7 +84,7 @@ export default function TrayPreview() {
     : meetingState === 'unknown' ? summary.meetingUnknownLabel : summary.meetingInactiveLabel;
   return (
     <section className="tray-preview-shell" aria-label={summary.title}>
-      <header className="tray-preview-heading"><span className="tray-preview-brand" aria-hidden="true">B</span><strong>Blincho</strong><span>{summary.todayLabel}</span></header>
+      <header className="tray-preview-heading"><img className="tray-preview-brand" src={getSymbioteIconPath(summary.symbioteMask ?? 0)} alt="" width="28" height="28" /><div><strong>Blincho</strong>{summary.buildName && <span className="tray-preview-build-name" title={summary.buildName}>{summary.buildName}</span>}</div><span>{summary.todayLabel}</span></header>
       <div className="tray-preview-clock-row"><span>{timerLabel(summary, timer)}</span><strong className="tray-preview-countdown">{previewCountdown(timer)}</strong></div>
       <div className="tray-preview-progress" aria-hidden="true"><span style={{ width: `${progress * 100}%` }} /></div>
       {summary.meetingLabel && meetingText && <div className="tray-preview-meeting" data-meeting-state={meetingState} title={meetingText}>

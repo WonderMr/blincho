@@ -1,6 +1,7 @@
 // Cross-platform Notification Dispatcher (Electron IPC & Web Notifications)
 import type { UpdateBridge } from './updates';
 import type { LocalMcpBridge } from './localMcp';
+import { getCurrentSymbioteIconPath } from './symbioteIcons';
 
 declare global {
   interface Window {
@@ -9,6 +10,7 @@ declare global {
       showNotification: (title: string, body: string) => void;
       flashWindow: () => void;
       setAlwaysOnTop: (flag: boolean) => void;
+      setSymbioteBuild?: (mask: number) => Promise<void>;
       bringToFront?: (options?: { alwaysOnTop?: boolean }) => void;
       setBreakFullscreen?: (flag: boolean) => void;
       minimizeToTray?: () => void;
@@ -66,7 +68,7 @@ export function showEyeBreakNotification(title: string, body: string): void {
     try {
       new Notification(title, {
         body,
-        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2338bdf8"><circle cx="12" cy="12" r="10"/></svg>',
+        icon: getCurrentSymbioteIconPath(),
       });
     } catch {
       // Notification blocked or restricted

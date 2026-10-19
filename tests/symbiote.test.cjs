@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { createHash } = require('node:crypto');
 const { React, transformer } = require('./support/syntheticDom.cjs');
 const { renderToStaticMarkup } = require('react-dom/server');
 const repo = path.resolve(__dirname, '..');
@@ -25,7 +26,7 @@ function load(relative) {
   vm.runInNewContext(source, { module, require: requireLocal, console, window, navigator: navigatorStub, document, localStorage: window.localStorage }, { filename: file });
   return module.exports;
 }
-const { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities } = load('src/utils/symbiote.ts');
+const { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities, SYMBIOTE_PERKS } = load('src/utils/symbiote.ts');
 const { DEFAULT_SETTINGS } = load('src/utils/storage.ts');
 const { SymbioteIcon } = load('src/components/SymbioteIcon.tsx');
 const { SymbioteBuildCard } = load('src/components/SymbioteBuildCard.tsx');
@@ -35,7 +36,7 @@ const translate = (key, variables = {}) => key.replace(/\{(\w+)\}/g, (_, name) =
 const fromMask = mask => ({ ...DEFAULT_SETTINGS, enhancedPresenceEnabled: !!(mask & 1), cameraLockEnabled: !!(mask & 2),
   absenceLockEnabled: false, meetingHistoryEnabled: !!(mask & 4), inputActivityEnabled: !!(mask & 8), strictMode: !!(mask & 16), localMcpEnabled: !!(mask & 32) });
 
-test('all 64 enabled-feature combinations have exact modules, distinct names and matching icon parts', () => {
+test('all 64 enabled-feature combinations have exact modules, distinct names and matching approved raster assets', () => {
   const names = new Set();
   for (let mask = 0; mask < 64; mask++) {
     const settings = fromMask(mask), before = JSON.stringify(settings);
@@ -46,13 +47,9 @@ test('all 64 enabled-feature combinations have exact modules, distinct names and
     names.add(getSymbioteName(mask, translate));
     for (const size of [40, 48, 128]) {
       const html = renderToStaticMarkup(React.createElement(SymbioteIcon, { mask, size }));
-      assert.equal((html.match(/data-symbiote-perk=/g) || []).length, build.perks.length);
+      assert(html.includes(`src="./symbiote/${mask.toString(16).padStart(2, '0')}.png"`));
       assert(html.includes(`data-symbiote-mask="${mask}"`));
-      assert(!html.includes('data-connection-appearance="cloud"'), 'cloud art is dormant');
-      if (mask) {
-        assert(html.includes(`data-symbiote-detail="${size < 80 ? 'compact' : 'full'}"`));
-        assert.equal(html.includes('data-art-detail="micro"'), size >= 80, 'only larger portraits render fine detailing');
-      }
+      assert(!html.includes('<svg'), 'all surfaces use the same approved raster artwork');
     }
   }
   assert.equal(names.size, 64);
@@ -89,17 +86,45 @@ test('capability reads never request permissions, configure integrations or invo
   } finally { window.electronAPI = oldApi; window.__TAURI__ = oldTauri; navigatorStub.mediaDevices = oldMedia; }
 });
 
-test('SVG references remain unique across portraits; base icon stays original and the cloud variant is explicit only', () => {
-  const base = renderToStaticMarkup(React.createElement(SymbioteIcon, { mask: 0 }));
-  assert(base.includes('src="./icon.png"')); assert(!base.includes('<svg'));
-  const paired = renderToStaticMarkup(React.createElement('div', null,
-    React.createElement(SymbioteIcon, { mask: 63 }), React.createElement(SymbioteIcon, { mask: 63 })));
-  const ids = [...paired.matchAll(/ id="([^"]+)"/g)].map(match => match[1]);
-  assert.equal(new Set(ids).size, ids.length);
-  for (const match of paired.matchAll(/url\(#([^)]+)\)/g)) assert(ids.includes(match[1]));
-  for (const match of paired.matchAll(/href="#([^"]+)"/g)) assert(ids.includes(match[1]), 'inherited material exists');
-  const future = renderToStaticMarkup(React.createElement(SymbioteIcon, { mask: 32, connectionAppearance: 'cloud' }));
-  assert(future.includes('data-connection-appearance="cloud"'));
+test('all shipped portraits are distinct 256px PNGs with verified source and asset hashes', () => {
+  const manifest = load('public/symbiote/manifest.json');
+  const hashes = new Set();
+  const layers = load('design/symbiote/layers.json');
+  for (const source of ['base', 'master']) {
+    const bytes = fs.readFileSync(path.join(repo, 'design/symbiote', layers[source]));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), manifest.sources[source]);
+  }
+  assert.equal(manifest.variants.length, 64);
+  for (let mask = 0; mask < 64; mask++) {
+    const entry = manifest.variants[mask];
+    assert.equal(entry.mask, mask);
+    assert.deepEqual(entry.perks, Array.from(SYMBIOTE_PERKS.filter(perk => mask & perk.bit), perk => perk.id));
+    const bytes = fs.readFileSync(path.join(repo, 'public/symbiote', entry.file));
+    assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    assert.equal(bytes.readUInt32BE(16), 256); assert.equal(bytes.readUInt32BE(20), 256);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), entry.sha256);
+    hashes.add(entry.sha256);
+  }
+  assert.equal(hashes.size, 64);
+});
+
+test('document and notification icons share a bounded safe mask and reset to base', () => {
+  const { getSymbioteIconPath, updateDocumentSymbioteIcon, getCurrentSymbioteIconPath } = load('src/utils/symbioteIcons.ts');
+  const links = ['icon', 'apple-touch-icon'].map(rel => {
+    const link = document.createElement('link'); link.setAttribute('rel', rel);
+    document.documentElement.appendChild(link); return link;
+  });
+  try {
+    for (const mask of [63, 1, 32, 16, 0]) {
+      updateDocumentSymbioteIcon(mask);
+      const expected = `./symbiote/${mask.toString(16).padStart(2, '0')}.png`;
+      assert.equal(getCurrentSymbioteIconPath(), expected);
+      for (const link of links) assert.equal(link.getAttribute('href'), expected);
+    }
+    for (const invalid of [-1, 64, NaN, Infinity, 1.5, '../secret']) {
+      assert.equal(getSymbioteIconPath(invalid), './symbiote/00.png');
+    }
+  } finally { for (const link of links) link.parentNode.removeChild(link); }
 });
 
 test('every localized build name is complete, distinct and safe to interpolate in all 30 languages', () => {

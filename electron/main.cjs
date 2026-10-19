@@ -20,7 +20,26 @@ app.setPath('sessionData', legacyProfilePath);
 if (process.platform === 'win32') app.setAppUserModelId('com.myeyes.app');
 if (process.platform === 'linux') app.setDesktopName('com.myeyes.app.desktop');
 
-const appIconPath = path.join(app.getAppPath(), 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+let symbioteMask = 0;
+const symbioteIconPath = (mask = symbioteMask) => path.join(app.getAppPath(), app.isPackaged ? 'dist' : 'public', 'symbiote', `${mask.toString(16).padStart(2, '0')}.png`);
+
+function trayImage(mask = symbioteMask) {
+  const icon = nativeImage.createFromPath(symbioteIconPath(mask));
+  if (icon.isEmpty()) throw new Error('Build icon unavailable');
+  const size = process.platform === 'darwin' ? 20 : 24;
+  const resized = icon.resize({ width: size, height: size });
+  resized.setTemplateImage(false);
+  return resized;
+}
+
+function setSymbioteBuild(mask) {
+  if (!Number.isInteger(mask) || mask < 0 || mask > 63) throw new TypeError('Invalid build mask');
+  const icon = symbioteIconPath(mask);
+  if (process.platform === 'darwin') app.dock.setIcon(icon);
+  else if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setIcon(icon);
+  if (tray) tray.setImage(trayImage(mask));
+  symbioteMask = mask;
+}
 
 let mainWindow = null;
 let tray = null;
@@ -317,7 +336,7 @@ function createWindow() {
     minHeight: 620,
     title: locales[nativeLocale].title,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    icon: appIconPath,
+    icon: symbioteIconPath(),
     backgroundColor: '#070a12',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -389,6 +408,7 @@ function createWindow() {
 }
 
 // IPC Handlers
+ipcMain.handle('set-symbiote-build', (event, mask) => { requireMainRenderer(event); setSymbioteBuild(mask); });
 ipcMain.handle('local-mcp-configure', (event, enabled) => { requireMainRenderer(event); return localMcp.configure(enabled); });
 ipcMain.handle('local-mcp-status', event => { requireMainRenderer(event); return localMcp.state(); });
 ipcMain.handle('local-mcp-publish', (event, snapshot) => { requireMainRenderer(event); localMcp.publish(snapshot); });
@@ -419,7 +439,7 @@ ipcMain.on('show-notification', (event, payload) => {
       title: safeTitle,
       body: safeBody,
       silent: false,
-      ...(process.platform === 'linux' ? { icon: appIconPath } : {}),
+      icon: symbioteIconPath(),
     });
     notification.show();
     notification.on('click', () => showMainWindow());
@@ -659,24 +679,10 @@ app.whenReady().then(() => {
     }
   });
 
-  // Use the bundled brand in native formats, with a template for macOS themes.
   try {
-    let icon = appIconPath;
-    if (process.platform !== 'win32') {
-      if (process.platform === 'darwin') {
-        icon = nativeImage.createFromPath(path.join(app.getAppPath(), 'assets/trayTemplate.png'));
-        if (!icon.isEmpty()) icon.setTemplateImage(true);
-      }
-      if (typeof icon === 'string' || icon.isEmpty()) {
-        icon = nativeImage.createFromPath(appIconPath).resize({ width: process.platform === 'darwin' ? 16 : 24, height: process.platform === 'darwin' ? 16 : 24 });
-      }
-    }
-
-    if (typeof icon === 'string' || !icon.isEmpty()) {
-      tray = new Tray(icon);
-      updateNativeLanguage();
-      if (process.platform !== 'darwin') tray.on('click', () => showMainWindow());
-    }
+    tray = new Tray(trayImage());
+    updateNativeLanguage();
+    if (process.platform !== 'darwin') tray.on('click', () => showMainWindow());
   } catch (error) {
     tray = null;
     console.warn('Blincho: Tray unavailable; window remains accessible from Dock/taskbar:', error);

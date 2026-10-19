@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   takeLocalMcpCommands: () => ipcRenderer.invoke('local-mcp-take-commands'),
   getPreferredLanguages: () => ipcRenderer.invoke('get-preferred-languages'),
   setLocale: (locale) => ipcRenderer.invoke('set-locale', locale),
+  setSymbioteBuild: mask => ipcRenderer.invoke('set-symbiote-build', mask),
   getUpdateState: () => ipcRenderer.invoke('get-update-state'),
   setUpdatePolicy: (policy) => ipcRenderer.invoke('set-update-policy', policy),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

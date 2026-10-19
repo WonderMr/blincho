@@ -10,12 +10,13 @@ export default defineConfig({
     apply: 'build',
     generateBundle(_options, bundle) {
       const files = Object.keys(bundle).sort();
+      const icons = ['symbiote/install.png', ...Array.from({ length: 64 }, (_, mask) => `symbiote/${mask.toString(16).padStart(2, '0')}.png`)];
       const hash = createHash('sha256').update(files.join('|'));
-      for (const file of ['index.html', 'public/manifest.webmanifest', 'public/icon.png', 'public/favicon.png']) {
+      for (const file of ['index.html', 'public/manifest.webmanifest', 'public/icon.png', 'public/favicon.png', ...icons.map(icon => `public/${icon}`)]) {
         hash.update(readFileSync(new URL(file, import.meta.url)));
       }
       const version = hash.digest('hex').slice(0, 12);
-      const shell = [...new Set(['index.html', 'manifest.webmanifest', 'icon.png', 'favicon.png', ...files])];
+      const shell = [...new Set(['index.html', 'manifest.webmanifest', 'icon.png', 'favicon.png', ...icons, ...files])];
       this.emitFile({
         type: 'asset',
         fileName: 'sw.js',

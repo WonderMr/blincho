@@ -1,0 +1,14 @@
+Use case: precise-object-edit.
+Input image 1 is the EDIT TARGET: the approved fully equipped Blinchiborg app icon.
+
+Create its clean ZERO-EQUIPMENT base for a modular app-icon system. Remove only all six cybernetic assemblies: eye monocle and its side mounts; lower cheek/chin armor; right acoustic pod and its mounts; three-bar forehead display; upper-left crown armor; upper-right terminal/connector module. Remove their attachment hardware and cast/contact shadows too. Reconstruct the intact smooth mint mascot under the removed parts, with no holes, sockets, straps, panel seams, badges or residual equipment.
+
+STRICT INVARIANTS: retain the same canvas framing and exact navy rounded-square tile position, size, corners, surface and lighting. Keep every visible facial feature of the approved master exactly at the same coordinates, same sizes, same expression: the large open glossy dark eye, the winking eye, curved smile and peach cheek. Keep the approved master's mint facial surface shading and body scale. In particular do not replace this with a newly posed, smaller or differently proportioned mascot. The newly uncovered skin must seamlessly continue the existing skin. Preserve existing unoccluded regions as closely as possible; do not restyle or recolor them.
+
+The result must look like the exact same approved character and tile photographed immediately after all equipment was lifted off. Fully intact friendly asymmetric mint body, detailed soft polished 3D materials, same broad upper-left light. One centered square icon, matching the input canvas dimensions and alignment. Preserve genuine transparent background outside the navy tile. No text, labels, comparison, new objects or decorative marks.
+
+Refinement:
+Use case: precise-object-edit. Edit input image 1 only.
+Remove the leftover transparent oval optical lens surrounding the open black eye. It is still visible as a large glossy clear/glass oval rim and reflection on the viewer's left. That entire transparent oval lens, rim, watery highlight and lens halo must disappear. Restore ordinary smooth mint skin immediately around the original dark eye. The eye itself must remain glossy black with its single small white eye catchlight, same shape, exact position and size. Do not turn the eye into a new lens or recess.
+
+Keep absolutely everything else unchanged: the mint body's contour, winking eye, smile, peach cheek, shadows, navy rounded-square tile, canvas alignment and transparent outer corners. Output the same clean zero-equipment app icon. No equipment of any kind, no glass patch around the eye, no labels, no extra elements.
