@@ -44,10 +44,16 @@ test('all 64 enabled-feature combinations have exact modules, distinct names and
     assert.equal(build.perks.length, mask.toString(2).replaceAll('0', '').length);
     assert.equal(JSON.stringify(settings), before, 'branding never changes consent or settings');
     names.add(getSymbioteName(mask, translate));
-    const html = renderToStaticMarkup(React.createElement(SymbioteIcon, { mask }));
-    assert.equal((html.match(/data-symbiote-perk=/g) || []).length, build.perks.length);
-    assert(html.includes(`data-symbiote-mask="${mask}"`));
-    assert(!html.includes('data-connection-appearance="cloud"'), 'cloud art is dormant');
+    for (const size of [40, 48, 128]) {
+      const html = renderToStaticMarkup(React.createElement(SymbioteIcon, { mask, size }));
+      assert.equal((html.match(/data-symbiote-perk=/g) || []).length, build.perks.length);
+      assert(html.includes(`data-symbiote-mask="${mask}"`));
+      assert(!html.includes('data-connection-appearance="cloud"'), 'cloud art is dormant');
+      if (mask) {
+        assert(html.includes(`data-symbiote-detail="${size < 80 ? 'compact' : 'full'}"`));
+        assert.equal(html.includes('data-art-detail="micro"'), size >= 80, 'only larger portraits render fine detailing');
+      }
+    }
   }
   assert.equal(names.size, 64);
   assert.equal(getSymbioteName(0, translate), 'Блинчо');
@@ -91,6 +97,7 @@ test('SVG references remain unique across portraits; base icon stays original an
   const ids = [...paired.matchAll(/ id="([^"]+)"/g)].map(match => match[1]);
   assert.equal(new Set(ids).size, ids.length);
   for (const match of paired.matchAll(/url\(#([^)]+)\)/g)) assert(ids.includes(match[1]));
+  for (const match of paired.matchAll(/href="#([^"]+)"/g)) assert(ids.includes(match[1]), 'inherited material exists');
   const future = renderToStaticMarkup(React.createElement(SymbioteIcon, { mask: 32, connectionAppearance: 'cloud' }));
   assert(future.includes('data-connection-appearance="cloud"'));
 });
