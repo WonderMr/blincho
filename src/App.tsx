@@ -35,6 +35,7 @@ import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
 import { useLocalMcp } from './utils/localMcp';
 import { buildMcpStats } from './utils/mcpStats';
+import { getSymbioteBuild, readSymbioteCapabilities } from './utils/symbiote';
 import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory } from './utils/tauriBridge';
 
 import {
@@ -106,8 +107,10 @@ export const App: React.FC = () => {
   const expiryInFlightRef = useRef(false);
   const cameraAbortRef = useRef<AbortController | null>(null);
   const cameraAccessPendingRef = useRef(false);
+  const [cameraAccessPending, setCameraAccessPending] = useState(false);
   const handleCameraAccessPendingChange = (pending: boolean) => {
     cameraAccessPendingRef.current = pending;
+    if (mountedRef.current) setCameraAccessPending(pending);
     if (pending) cameraAbortRef.current?.abort();
     // A crash during a system prompt must not turn a temporary grant into opt-in.
     saveSettings(pending ? { ...settingsRef.current, cameraLockEnabled: false, enhancedPresenceEnabled: false } : settingsRef.current);
@@ -130,6 +133,8 @@ export const App: React.FC = () => {
       (session.reasons.has('unconfirmed') ? t("Пауза: присутствие не подтверждено") : t("Пауза: нет активности")) :
       phase === 'break' ? t("Перерыв для глаз") : phase === 'exercise' ? t("Выполняется упражнение") :
         phase === 'manual' ? t("Таймер на ручной паузе") : inMeetingActive ? t("Перерыв отложен: встреча") : t("Рабочий цикл");
+
+  const symbioteBuild = getSymbioteBuild(settings, readSymbioteCapabilities(inputStatus === 'active'), cameraAccessPending);
 
   const refreshStats = () => {
     const stats = loadAllStats();
@@ -950,6 +955,7 @@ export const App: React.FC = () => {
       <div className="app-workspace">
         {/* Navigation */}
         <Navbar
+          symbioteBuild={symbioteBuild}
           activeTab={activeTab}
           onSelectTab={setActiveTab}
           onOpenSettings={() => setIsSettingsOpen(true)}
@@ -1101,6 +1107,7 @@ export const App: React.FC = () => {
       {/* Settings Modal */}
       {isSettingsOpen && (
         <SettingsModal
+          symbioteBuild={symbioteBuild}
           updates={updates}
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
