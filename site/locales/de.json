@@ -145,5 +145,6 @@
   "release.1.7.3": "Ein Telefonsymbol und der aktuelle Status im Infobereich zeigen erkannte Anrufe an. Der Anrufstatus funktioniert unabhängig von der freiwilligen Aufzeichnung des Anrufverlaufs.",
   "release.1.8.0": "Optionale lokale Anwesenheitsprüfung per Kamera und Computersperre. Die Bilder werden auf dem Gerät verarbeitet und niemals gespeichert oder hochgeladen. Spätere Versionen führen die Prüfung erst nach dem Ende einer zeitgesteuerten Pause aus.",
   "release.1.8.14": "Optionales lokales MCP verbindet KI-Clients mit Timerstatus, Einstellungen, heutigen Summen und Timeraktionen. Anwesenheitsprüfungen per Kamera laufen erst nach dem Ende der zeitgesteuerten Pause.",
-  "release.1.8.15": "Lokales MCP liefert jetzt Statistiken nach Tag, Kalenderwoche oder Datumsbereich, mit Datumsangaben zu verfügbaren Daten und sichtbaren Lücken. Fensterposition und -größe bleiben nach Sperren, Ruhezustand und Pausen erhalten."
+  "release.1.8.15": "Lokales MCP liefert jetzt Statistiken nach Tag, Kalenderwoche oder Datumsbereich, mit Datumsangaben zu verfügbaren Daten und sichtbaren Lücken. Fensterposition und -größe bleiben nach Sperren, Ruhezustand und Pausen erhalten.",
+  "release.1.10.0": "Aussehen und Name hängen von den aktivierten Funktionen ab. Die Desktop-Verknüpfung passt sich deiner Konfiguration an."
 }

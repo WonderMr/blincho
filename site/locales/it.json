@@ -145,5 +145,6 @@
   "release.1.7.3": "Un simbolo del telefono e lo stato in tempo reale nella barra di sistema mostrano le chiamate rilevate. Lo stato delle chiamate funziona indipendentemente dalla registrazione volontaria della cronologia delle chiamate.",
   "release.1.8.0": "Controlli locali facoltativi di presenza con la videocamera e blocco del computer, con immagini elaborate sul dispositivo e mai salvate né caricate. Nelle versioni successive il controllo viene eseguito solo dopo la fine di una pausa a tempo.",
   "release.1.8.14": "MCP locale facoltativo collega i client IA allo stato del timer, alle impostazioni, ai totali di oggi e alle azioni sul timer. I controlli di presenza con la videocamera vengono eseguiti solo dopo la fine della pausa a tempo.",
-  "release.1.8.15": "MCP locale ora fornisce statistiche per giorno, settimana di calendario o intervallo di date, con le date dei dati disponibili e le lacune visibili. La posizione e le dimensioni della finestra vengono conservate dopo blocco, sospensione e pause."
+  "release.1.8.15": "MCP locale ora fornisce statistiche per giorno, settimana di calendario o intervallo di date, con le date dei dati disponibili e le lacune visibili. La posizione e le dimensioni della finestra vengono conservate dopo blocco, sospensione e pause.",
+  "release.1.10.0": "L’aspetto e il nome dipendono dalle funzioni attivate. Il collegamento sul desktop segue la tua configurazione."
 }
