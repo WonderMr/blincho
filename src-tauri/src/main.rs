@@ -9,6 +9,7 @@ mod input_activity;
 mod local_mcp;
 mod platform;
 mod startup;
+mod symbiote_icons;
 mod timer;
 mod tray_preview;
 mod ui;
@@ -781,7 +782,7 @@ fn diagnostics(app: &tauri::AppHandle) {
     #[cfg(not(target_os = "macos"))]
     let (native_activation_policy, dock_visible) = (None::<i32>, None::<bool>);
     let value = json!({"timer":snapshot,"strict":strict,"visible":window(app).ok().and_then(|w|w.is_visible().ok()),
-        "strictShieldCount":strict_shield_count,"trayPreview":tray_preview::diagnostics(app),
+        "strictShieldCount":strict_shield_count,"trayPreview":tray_preview::diagnostics(app),"symbioteAppearance":symbiote_icons::diagnostics(app),
         "nativeActivationPolicy":native_activation_policy,"dockVisible":dock_visible,
         "focused":window(app).ok().and_then(|w|w.is_focused().ok()),"events":runtime.events.lock().ok().map(|v|v.clone()),
         "fullscreen":window(app).ok().and_then(|w|w.is_fullscreen().ok()),
@@ -1045,7 +1046,7 @@ fn main() {
                 return true;
             }
             let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
-            configure_timer,
+            configure_timer, symbiote_icons::set_symbiote_build,
             local_mcp_configure, local_mcp_status, local_mcp_publish, local_mcp_take_commands,
             timer_snapshot,
             presence_check_begin, presence_check_finish,
@@ -1161,6 +1162,7 @@ fn main() {
             });
             app.manage(window_session::WindowSession::default());
             app.manage(tray_preview::Preview::default());
+            app.manage(symbiote_icons::Appearance::default());
             HANDLE
                 .set(app.handle().clone())
                 .map_err(|_| "Duplicate runtime")?;
@@ -1183,10 +1185,8 @@ fn main() {
             let startup_locale = startup_languages.first().map(String::as_str).unwrap_or("en");
             startup_trace("tray-build-start");
             TrayIconBuilder::with_id("blincho")
-                .icon(tauri::image::Image::from_bytes(if cfg!(target_os = "macos") {
-                    include_bytes!("../../assets/trayTemplate.png")
-                } else { include_bytes!("../../assets/icon.png") })?)
-                .icon_as_template(cfg!(target_os = "macos"))
+                .icon(symbiote_icons::image(0)?)
+                .icon_as_template(false)
                 .tooltip(ui::tray_title(startup_locale))
                 .menu(&menu)
                 .on_tray_icon_event(|tray, event| tray_preview::on_tray_event(tray.app_handle(), event))

@@ -35,7 +35,8 @@ import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
 import { useLocalMcp } from './utils/localMcp';
 import { buildMcpStats } from './utils/mcpStats';
-import { getSymbioteBuild, readSymbioteCapabilities } from './utils/symbiote';
+import { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities } from './utils/symbiote';
+import { updateDocumentSymbioteIcon } from './utils/symbioteIcons';
 import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory } from './utils/tauriBridge';
 
 import {
@@ -135,6 +136,21 @@ export const App: React.FC = () => {
         phase === 'manual' ? t("Таймер на ручной паузе") : inMeetingActive ? t("Перерыв отложен: встреча") : t("Рабочий цикл");
 
   const symbioteBuild = getSymbioteBuild(settings, readSymbioteCapabilities(inputStatus === 'active'), cameraAccessPending);
+
+  useEffect(() => {
+    updateDocumentSymbioteIcon(symbioteBuild.mask);
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const apply = async () => {
+      try { await window.electronAPI?.setSymbioteBuild?.(symbioteBuild.mask); }
+      catch (error) {
+        console.warn('Blincho: Build icon update failed:', error);
+        if (!cancelled) retry = setTimeout(() => { void apply(); }, 3000);
+      }
+    };
+    void apply();
+    return () => { cancelled = true; clearTimeout(retry); };
+  }, [symbioteBuild.mask]);
 
   const refreshStats = () => {
     const stats = loadAllStats();
@@ -768,10 +784,11 @@ export const App: React.FC = () => {
       focusValue: t("{value0} мин", { value0: Math.floor(todayStats.focusMinutes) }),
       breaksValue: formatNumber(todayStats.breaksCompleted), todayLabel: t("Сегодня"),
       theme: settings.theme, colorPalette: settings.colorPalette,
+      symbioteMask: symbioteBuild.mask, buildName: getSymbioteName(symbioteBuild.mask, t),
     };
     void window.__TAURI__!.core.invoke('tray_preview_summary', { summary })
       .catch(error => console.warn('Blincho: Tray summary failed:', error));
-  }, [todayStats.date, Math.floor(todayStats.focusMinutes), todayStats.breaksCompleted, statusLabel, getLocale(), settings.theme, settings.colorPalette]);
+  }, [todayStats.date, Math.floor(todayStats.focusMinutes), todayStats.breaksCompleted, statusLabel, getLocale(), settings.theme, settings.colorPalette, symbioteBuild.mask]);
   useEffect(() => {
     mountedRef.current = true;
     markPageActivity();
@@ -1007,10 +1024,10 @@ export const App: React.FC = () => {
                 <BookOpen size={20} aria-hidden="true" />
                 <div className="recommended-exercise-copy">
                   <span>{t("Рекомендация дня")}</span>
-                  <h2 id="recommended-exercise-title">{t("Осознанное моргание")}</h2>
+                  <h2 id="recommended-exercise-title" title={t("Осознанное моргание")}>{t("Осознанное моргание")}</h2>
                 </div>
-                <button type="button" className="btn btn-secondary" onClick={() => startTechnique(MEDICAL_TECHNIQUES[1])}>
-                  <Play size={15} aria-hidden="true" />{t("Выполнить сейчас")}
+                <button type="button" className="btn btn-secondary" aria-label={t("Выполнить сейчас")} title={t("Выполнить сейчас")} onClick={() => startTechnique(MEDICAL_TECHNIQUES[1])}>
+                  <Play size={15} aria-hidden="true" /><span className="recommended-action-label">{t("Выполнить сейчас")}</span>
                 </button>
               </section>
           <div className="feature-status-list">

@@ -129,6 +129,7 @@ async function installTauriBridge(): Promise<void> {
     showNotification: (title, body) => { void api.core.invoke('notification_send', {title, body}).catch(error => console.warn('Blincho: Notification failed:', error)); },
     flashWindow: () => { void api.core.invoke('attention').catch(error => console.warn('Blincho: Attention failed:', error)); },
     setLocale: locale => api.core.invoke('set_locale', { locale }),
+    setSymbioteBuild: mask => api.core.invoke('set_symbiote_build', { selection: { mask } }),
     getUpdateState: () => api.core.invoke<UpdateState>('update_get_state'),
     setUpdatePolicy: policy => api.core.invoke<UpdateState>('update_set_policy', {policy}),
     checkForUpdates: () => api.core.invoke<UpdateState>('update_check'),

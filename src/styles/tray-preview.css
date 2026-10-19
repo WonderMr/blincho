@@ -36,3 +36,7 @@ html:has(.tray-preview-shell), body:has(.tray-preview-shell), #root:has(.tray-pr
 .tray-preview-totals > div { display: flex; justify-content: space-between; gap: 10px; }
 .tray-preview-totals dt { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tray-preview-totals dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.tray-preview-brand { width: 28px; height: 28px; flex: 0 0 28px; background: transparent; border-radius: 0; }
+.tray-preview-heading > div { min-width: 0; flex: 1; }
+.tray-preview-build-name { display: block; font-size: 10px; line-height: 1.25; color: var(--text-secondary); overflow-wrap: anywhere; }

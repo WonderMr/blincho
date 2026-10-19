@@ -285,3 +285,13 @@ void blincho_window_level(void *pointer, int strict) {
         presentation = nil;
     }
 }
+
+// Called on the AppKit main thread with a fixed, embedded application asset.
+bool blincho_set_application_icon(const unsigned char *bytes, size_t length) {
+    if (![NSThread isMainThread] || bytes == NULL || length == 0) return false;
+    NSData *data = [NSData dataWithBytes:bytes length:length];
+    NSImage *image = [[NSImage alloc] initWithData:data];
+    if (image == nil || ![image isValid]) return false;
+    [NSApp setApplicationIconImage:image];
+    return true;
+}
