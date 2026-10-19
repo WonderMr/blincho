@@ -146,5 +146,6 @@
   "release.1.8.0": "Verificări locale opționale de prezență cu camera și blocarea computerului, cu cadre procesate pe dispozitiv și niciodată salvate sau încărcate. Versiunile ulterioare execută verificarea numai după încheierea unei pauze cronometrate.",
   "release.1.8.14": "MCP local opțional conectează clienții AI la starea temporizatorului, setări, totalurile de astăzi și acțiunile temporizatorului. Verificările de prezență cu camera se execută numai după încheierea pauzei cronometrate.",
   "release.1.8.15": "MCP local raportează acum statistici pe zi, săptămână calendaristică sau interval de date, cu datele pentru care există informații și lacune vizibile. Poziția și dimensiunea ferestrei sunt păstrate după blocare, repausul sistemului și pauze.",
-  "release.1.10.0": "Aspectul și numele depind de funcțiile activate. Scurtătura de pe desktop se adaptează configurației tale."
+  "release.1.10.0": "Aspectul și numele depind de funcțiile activate. Scurtătura de pe desktop se adaptează configurației tale.",
+  "release.1.10.1": "Aspectul și numele depind de funcțiile activate. Scurtătura de pe desktop se adaptează configurației tale. Un indicator de cameră pe pictograma Blincho arată când este folosită camera și dispare la încheierea capturii."
 }

@@ -37,6 +37,8 @@ const shortcutStatus = async pending => {
   return value;
 };
 
+const { withCameraBadge } = require(path.join(__dirname, 'trayCamera.cjs'));
+let cameraGeneration = 0, cameraRevision = 0, cameraActive = false, cameraLabel = '';
 let symbioteMask = 0;
 const symbioteIconPath = (mask = symbioteMask) => path.join(app.getAppPath(), app.isPackaged ? 'dist' : 'public', 'symbiote', `${mask.toString(16).padStart(2, '0')}.png`);
 
@@ -44,7 +46,8 @@ function trayImage(mask = symbioteMask) {
   const icon = nativeImage.createFromPath(symbioteIconPath(mask));
   if (icon.isEmpty()) throw new Error('Build icon unavailable');
   const size = process.platform === 'darwin' ? 20 : 24;
-  const resized = icon.resize({ width: size, height: size });
+  let resized = icon.resize({ width: size, height: size });
+  if (cameraActive) resized = nativeImage.createFromBitmap(withCameraBadge(resized.toBitmap({ scaleFactor: 1 }), size, size), { width: size, height: size });
   resized.setTemplateImage(false);
   return resized;
 }
@@ -90,7 +93,7 @@ function updateNativeLanguage() {
     { label: text.quit, click: quit },
   ];
   if (tray) {
-    tray.setToolTip(text.title);
+    tray.setToolTip(cameraActive ? `Blincho\n${cameraLabel}` : text.title);
     tray.setContextMenu(Menu.buildFromTemplate(actions));
   }
   const appItems = process.platform === 'darwin' ? [
@@ -112,6 +115,11 @@ function updateNativeLanguage() {
       ...(process.platform === 'darwin' ? [{ type: 'separator' }, { label: text.front, role: 'front' }] : []),
     ] },
   ]));
+}
+
+function resetCameraActivity() {
+  cameraGeneration++; cameraRevision = 0; cameraActive = false; cameraLabel = '';
+  if (tray) { tray.setImage(trayImage()); updateNativeLanguage(); }
 }
 
 let isStrictLockActive = false;
@@ -404,7 +412,12 @@ function createWindow() {
     }
   });
 
+  // Only a committed main-document navigation releases the old capture.
+  // Provisional or canceled navigation can leave its stream and preload alive.
+  mainWindow.webContents.on('did-navigate', resetCameraActivity);
+  mainWindow.webContents.on('render-process-gone', resetCameraActivity);
   mainWindow.on('closed', () => {
+    resetCameraActivity();
     mainWindow = null;
     breakWindowState = null;
     pendingFullscreenRestore = null;
@@ -425,6 +438,16 @@ function createWindow() {
 }
 
 // IPC Handlers
+ipcMain.handle('camera-activity-generation', event => { requireMainRenderer(event); return cameraGeneration; });
+ipcMain.handle('camera-activity-update', (event, input) => {
+  requireMainRenderer(event);
+  if (!input || typeof input !== 'object' || Object.keys(input).sort().join(',') !== 'active,generation,label,revision' ||
+      typeof input.active !== 'boolean' || !Number.isSafeInteger(input.revision) || input.revision <= cameraRevision ||
+      input.generation !== cameraGeneration || typeof input.label !== 'string' || !input.label.trim() || input.label.length > 256 || input.label.includes('\0')) throw new TypeError('Invalid or obsolete camera activity');
+  cameraRevision = input.revision; cameraActive = input.active; cameraLabel = input.label;
+  if (tray) tray.setImage(trayImage());
+  updateNativeLanguage();
+});
 ipcMain.handle('set-symbiote-build', (event, mask) => { requireMainRenderer(event); setSymbioteBuild(mask); });
 ipcMain.handle('sync-symbiote-shortcut', (event, mask, name) => { requireMainRenderer(event); return shortcutStatus(desktopShortcuts.update({ mask, name })); });
 ipcMain.handle('create-symbiote-shortcut', (event, mask, name) => { requireMainRenderer(event); return shortcutStatus(desktopShortcuts.create({ mask, name })); });

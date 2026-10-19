@@ -623,5 +623,6 @@
   "Обновить ярлык": "Update shortcut",
   "Показать ярлык": "Show shortcut",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "The desktop shortcut follows your build.",
-  "Не удалось сохранить ярлык.": "Could not save the shortcut."
+  "Не удалось сохранить ярлык.": "Could not save the shortcut.",
+  "Камера Blincho активна": "Blincho is using the camera"
 }

@@ -623,5 +623,6 @@
   "Обновить ярлык": "Uppdatera genväg",
   "Показать ярлык": "Visa genväg",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Genvägen på skrivbordet följer din konfiguration.",
-  "Не удалось сохранить ярлык.": "Det gick inte att spara genvägen."
+  "Не удалось сохранить ярлык.": "Det gick inte att spara genvägen.",
+  "Камера Blincho активна": "Blincho använder kameran"
 }

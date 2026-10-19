@@ -9,10 +9,10 @@ const repo = path.resolve(__dirname, '..');
 
 function cameraHarness({ results = [[], [], []], black = false, cameraError, modelError, frozen = false, repeatedPixels = false, muted = false, missing = false, late = false } = {}) {
   const file = path.join(repo, 'src/utils/cameraPresence.ts');
-  const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/export (const|function) /g, '$1 ');
-  const module = { exports: {} }; const timers = new Map(); let next = 0, now = 0, time = 0, stopped = 0, closed = 0, detections = 0, acquisitions = 0, release;
+  const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/^import .*;\n/gm, '').replace(/export (const|function) /g, '$1 ');
+  const module = { exports: {} }; const timers = new Map(); let next = 0, now = 0, time = 0, stopped = 0, closed = 0, detections = 0, acquisitions = 0, release; const cameraActivity = [];
   vm.runInNewContext(code + '\nmodule.exports={createCameraPresenceChecker,isUsableCameraFrame};', {
-    module, console: { warn() {} }, setTimeout: (fn, delay) => { const id = ++next; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
+    module, trackCameraStream: () => () => {}, console: { warn() {} }, setTimeout: (fn, delay) => { const id = ++next; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
   }, { filename: file });
   const track = { readyState: 'live', muted, stop() { stopped++; this.readyState = 'ended'; } };
   const stream = { getTracks: () => [track], getVideoTracks: () => [track] };
@@ -23,11 +23,24 @@ function cameraHarness({ results = [[], [], []], black = false, cameraError, mod
     createCanvas: () => ({ getContext: () => ({ drawImage() { if (!black && !repeatedPixels) pixels[0]++; }, getImageData: () => ({ data: pixels }) }) }),
     async loadDetector() { if (modelError) throw modelError; return { detect() { const categories = results[detections++] ?? []; return { detections: categories.length ? [{ categories }] : [] }; }, close() { closed++; } }; },
     now: () => now,
+    trackStream: () => { cameraActivity.push(true); return () => cameraActivity.push(false); },
   });
   const settle = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
   const frame = async () => { await settle(); const entry = [...timers].find(([, v]) => v.delay === 400); assert(entry); timers.delete(entry[0]); now += 400; entry[1].fn(); await settle(); };
-  return { check, frame, settle, track, get stopped() { return stopped; }, get closed() { return closed; }, get detections() { return detections; }, get acquisitions() { return acquisitions; }, release: () => release(), async timeout() { await settle(); const entry = [...timers].find(([, v]) => v.delay === 15000); assert(entry); timers.delete(entry[0]); entry[1].fn(); await settle(); } };
+  return { check, frame, settle, track, cameraActivity, get stopped() { return stopped; }, get closed() { return closed; }, get detections() { return detections; }, get acquisitions() { return acquisitions; }, release: () => release(), async timeout() { await settle(); const entry = [...timers].find(([, v]) => v.delay === 15000); assert(entry); timers.delete(entry[0]); entry[1].fn(); await settle(); } };
 }
+
+
+test('camera ownership is visible only while a live captured stream is held and clears after cancellation', async () => {
+  const h = cameraHarness(); const abort = new AbortController();
+  const pending = h.check(abort.signal);
+  assert.deepEqual(h.cameraActivity, []);
+  await h.settle();
+  assert.deepEqual(h.cameraActivity, [true]);
+  abort.abort(); await pending;
+  assert.deepEqual(h.cameraActivity, [true, false]);
+  assert(h.stopped > 0);
+});
 
 test('three distinct healthy empty frames establish absence and release camera/model', async () => {
   const h = cameraHarness(); const pending = h.check(); await h.frame(); await h.frame(); await h.frame();
@@ -54,6 +67,7 @@ test('repeated image content with advancing video timestamps cannot establish ab
 test('timeout stops a camera stream that arrives after the check has already ended', async () => {
   const h = cameraHarness({ late: true }); const pending = h.check(); await h.timeout(); assert.equal(await pending, 'unavailable');
   h.release(); await h.settle(); assert(h.stopped > 0); assert.equal(h.detections, 0);
+  assert.deepEqual(h.cameraActivity, [true, false]);
 });
 test('cancellation closes resources and overlapping queries share one camera session', async () => {
   const h = cameraHarness(); const abort = new AbortController(); const pending = h.check(abort.signal); assert.equal(h.check(), pending);
