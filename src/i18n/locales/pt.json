@@ -618,5 +618,10 @@
   "Автоблокировка": "Bloqueio automático",
   "История звонков": "Histórico de chamadas",
   "Статистика ввода": "Estatísticas de entrada",
-  "Связь с помощником": "Conexão com o assistente"
+  "Связь с помощником": "Conexão com o assistente",
+  "Создать ярлык": "Criar atalho",
+  "Обновить ярлык": "Atualizar atalho",
+  "Показать ярлык": "Mostrar atalho",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "O atalho no ambiente de trabalho acompanha a sua configuração.",
+  "Не удалось сохранить ярлык.": "Não foi possível guardar o atalho."
 }

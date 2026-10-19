@@ -19,6 +19,23 @@ app.setPath('userData', legacyProfilePath);
 app.setPath('sessionData', legacyProfilePath);
 if (process.platform === 'win32') app.setAppUserModelId('com.myeyes.app');
 if (process.platform === 'linux') app.setDesktopName('com.myeyes.app.desktop');
+const { createShortcutController } = require(path.join(__dirname, 'desktopShortcuts.cjs'));
+const desktopShortcuts = createShortcutController({ app, shell, nativeImage });
+let shortcutOpenPending = false;
+app.on('open-file', (event, file) => {
+  if (path.extname(file).toLowerCase() !== '.blincho') return;
+  event.preventDefault();
+  void desktopShortcuts.isShortcutFile(file).then(valid => {
+    if (!valid || isQuitting || !gotTheLock) return;
+    if (app.isReady()) showMainWindow();
+    else shortcutOpenPending = true;
+  });
+});
+const shortcutStatus = async pending => {
+  const value = await pending;
+  if (value.error) throw new Error(value.error);
+  return value;
+};
 
 let symbioteMask = 0;
 const symbioteIconPath = (mask = symbioteMask) => path.join(app.getAppPath(), app.isPackaged ? 'dist' : 'public', 'symbiote', `${mask.toString(16).padStart(2, '0')}.png`);
@@ -409,6 +426,10 @@ function createWindow() {
 
 // IPC Handlers
 ipcMain.handle('set-symbiote-build', (event, mask) => { requireMainRenderer(event); setSymbioteBuild(mask); });
+ipcMain.handle('sync-symbiote-shortcut', (event, mask, name) => { requireMainRenderer(event); return shortcutStatus(desktopShortcuts.update({ mask, name })); });
+ipcMain.handle('create-symbiote-shortcut', (event, mask, name) => { requireMainRenderer(event); return shortcutStatus(desktopShortcuts.create({ mask, name })); });
+ipcMain.handle('get-symbiote-shortcut-status', event => { requireMainRenderer(event); return shortcutStatus(desktopShortcuts.status()); });
+ipcMain.handle('show-symbiote-shortcut', async event => { requireMainRenderer(event); return (await shortcutStatus(desktopShortcuts.reveal())).exists; });
 ipcMain.handle('local-mcp-configure', (event, enabled) => { requireMainRenderer(event); return localMcp.configure(enabled); });
 ipcMain.handle('local-mcp-status', event => { requireMainRenderer(event); return localMcp.state(); });
 ipcMain.handle('local-mcp-publish', (event, snapshot) => { requireMainRenderer(event); localMcp.publish(snapshot); });
@@ -623,6 +644,7 @@ app.whenReady().then(() => {
     },
   });
   createWindow();
+  if (shortcutOpenPending) { shortcutOpenPending = false; showMainWindow(); }
   updateNativeLanguage();
   updateController.start();
 

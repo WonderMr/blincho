@@ -16,3 +16,8 @@
   .symbiote-build-card > .symbiote-icon { width: 104px; height: 104px; }
 }
 @media (forced-colors: active) { .symbiote-perk-list li { border: 1px solid CanvasText; } }
+
+.symbiote-shortcut-controls { margin-top: 14px; min-width: 0; }
+.symbiote-shortcut-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.symbiote-shortcut-actions .btn { min-width: 0; white-space: normal; text-align: start; overflow-wrap: anywhere; }
+.symbiote-shortcut-actions .btn svg { flex: 0 0 auto; }

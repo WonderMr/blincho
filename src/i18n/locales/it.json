@@ -618,5 +618,10 @@
   "Автоблокировка": "Blocco automatico",
   "История звонков": "Cronologia delle chiamate",
   "Статистика ввода": "Statistiche di input",
-  "Связь с помощником": "Connessione all’assistente"
+  "Связь с помощником": "Connessione all’assistente",
+  "Создать ярлык": "Crea collegamento",
+  "Обновить ярлык": "Aggiorna collegamento",
+  "Показать ярлык": "Mostra collegamento",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "Il collegamento sul desktop segue la tua configurazione.",
+  "Не удалось сохранить ярлык.": "Impossibile salvare il collegamento."
 }

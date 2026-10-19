@@ -618,5 +618,10 @@
   "Автоблокировка": "Blocare automată",
   "История звонков": "Istoricul apelurilor",
   "Статистика ввода": "Statistici de intrare",
-  "Связь с помощником": "Conexiune cu asistentul"
+  "Связь с помощником": "Conexiune cu asistentul",
+  "Создать ярлык": "Creează o scurtătură",
+  "Обновить ярлык": "Actualizează scurtătura",
+  "Показать ярлык": "Arată scurtătura",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "Scurtătura de pe desktop se adaptează configurației tale.",
+  "Не удалось сохранить ярлык.": "Scurtătura nu a putut fi salvată."
 }

@@ -63,7 +63,7 @@ pub fn is_packaged() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn launch_executable(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn launch_executable(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     // An AppImage mount disappears when the process exits. Persist its outer
     // image path, as the Tauri environment captured it before startup.
     app.env()
@@ -75,7 +75,7 @@ fn launch_executable(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn launch_executable(_app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn launch_executable(_app: &tauri::AppHandle) -> Result<PathBuf, String> {
     std::env::current_exe().map_err(|e| e.to_string())
 }
 

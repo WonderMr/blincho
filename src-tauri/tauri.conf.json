@@ -65,6 +65,25 @@
     },
     "macOS": {
       "minimumSystemVersion": "14.0"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "blincho"
+        ],
+        "name": "Blincho Shortcut",
+        "role": "Viewer",
+        "rank": "Owner",
+        "contentTypes": [
+          "com.myeyes.blincho-shortcut"
+        ],
+        "exportedType": {
+          "identifier": "com.myeyes.blincho-shortcut",
+          "conformsTo": [
+            "public.data"
+          ]
+        }
+      }
+    ]
   }
 }

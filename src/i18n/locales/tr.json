@@ -618,5 +618,10 @@
   "Автоблокировка": "Otomatik kilitleme",
   "История звонков": "Arama geçmişi",
   "Статистика ввода": "Girdi istatistikleri",
-  "Связь с помощником": "Yerel asistan bağlantısı"
+  "Связь с помощником": "Yerel asistan bağlantısı",
+  "Создать ярлык": "Kısayol oluştur",
+  "Обновить ярлык": "Kısayolu güncelle",
+  "Показать ярлык": "Kısayolu göster",
+  "Ярлык на рабочем столе меняется вместе со сборкой.": "Masaüstü kısayolu yapılandırmanıza göre değişir.",
+  "Не удалось сохранить ярлык.": "Kısayol kaydedilemedi."
 }

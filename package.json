@@ -40,7 +40,15 @@
         "dir",
         "dmg"
       ],
-      "identity": null
+      "identity": null,
+      "fileAssociations": [
+        {
+          "ext": "blincho",
+          "name": "Blincho Shortcut",
+          "role": "Viewer",
+          "rank": "Owner"
+        }
+      ]
     },
     "files": [
       "dist/**/*",
