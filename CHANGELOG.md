@@ -2,6 +2,19 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.9.0]
+
+### Added
+
+- Optional enhanced presence checks after one minute without input. Fresh call checks and local camera observations distinguish reading from absence, with a separate option to lock the session after confirmed absence.
+- Optional anonymous input-event statistics for keyboard presses, clicks, scrolling and mouse movement. Five-minute local totals include a daily profile, CSV export and independent deletion, without text, key identities, app names, coordinates or individual event timestamps.
+- Native input collectors for macOS with Input Monitoring permission, Windows and supported X11 sessions. Unsupported environments and permission failures remain explicit. All options are off by default and detailed input history stays outside Local MCP.
+
+### Fixed
+
+- Preserve active breaks and exercises while enhanced presence observations are renewed. Cancel stale camera decisions after new input, calls, power changes or settings changes.
+- Preserve final input totals when collection stops, prevent cumulative snapshot replays from inflating counts, and clear native replay buffers when collection is disabled.
+
 ## [1.8.15]
 
 ### Added

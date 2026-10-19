@@ -18,11 +18,11 @@ function load(relative) {
   if (cache.has(file)) return cache.get(file);
   const module = { exports: {} }; cache.set(file, module.exports);
   let source = transformer.transformSync(file, fs.readFileSync(file, 'utf8'), { jsx: { runtime: 'classic' } }).code;
-  const names = [...source.matchAll(/export (?:const|function|class)\s+(\w+)/g)].map(match => match[1]);
+  const names = [...source.matchAll(/export (?:async )?(?:const|function|class)\s+(\w+)/g)].map(match => match[1]);
   source = source.replace(/import (\w+), \{([^}]+)\} from "([^"]+)";/g, 'const $1=require("$3");const {$2}=$1;')
     .replace(/import \{([^}]+)\} from "([^"]+)";/g, 'const {$1}=require("$2");')
     .replace(/import (\w+) from "([^"]+)";/g, 'const $1=require("$2");')
-    .replace(/export (const|function|class) /g, '$1 ') + `\nObject.assign(module.exports,{${names.join(',')}});`;
+    .replace(/export ((?:async )?(?:const|function|class)) /g, '$1 ') + `\nObject.assign(module.exports,{${names.join(',')}});`;
   const requireLocal = name => {
     if (name === 'react') return React;
     if (name === 'lucide-react') return new Proxy({}, { get: () => () => null });

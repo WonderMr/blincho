@@ -5,6 +5,7 @@
 #[cfg(any(target_os = "linux", test))]
 mod camera_permission;
 mod history;
+mod input_activity;
 mod local_mcp;
 mod platform;
 mod startup;
@@ -407,6 +408,120 @@ fn timer_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
     let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
     sample(&mut timer);
     Ok(timer.snapshot.clone())
+}
+#[tauri::command]
+async fn presence_check_begin(app: tauri::AppHandle) -> Result<Option<Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let runtime = app.state::<Runtime>();
+        let (epoch, meeting_epoch) = {
+            let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+            sample(&mut timer);
+            if !timer.presence_check_allowed() {
+                return Ok(None);
+            }
+            (timer.snapshot.presence_epoch, timer.meeting_epoch())
+        };
+        let meeting = runtime.meeting.check_fresh(meeting_epoch);
+        let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+        sample(&mut timer);
+        if epoch != timer.snapshot.presence_epoch
+            || !timer.presence_check_allowed()
+            || !meeting.supported
+            || meeting.in_meeting
+        {
+            return Ok(None);
+        }
+        let now = Utc::now().timestamp_millis();
+        if !timer.observe_meeting_if_current(meeting_epoch, now, &meeting) {
+            return Ok(None);
+        }
+        timer.begin_camera_check(now);
+        Ok(Some(json!({"epoch":epoch,"startedAt":now})))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn input_activity_configure(
+    enabled: bool,
+    prompt: bool,
+    app: tauri::AppHandle,
+) -> Result<input_activity::Snapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let isolated = app.state::<Runtime>().test_dir.is_some();
+        let state = app.state::<Mutex<input_activity::InputActivity>>();
+        let mut monitor = state.lock().map_err(|e| e.to_string())?;
+        let collect = app
+            .state::<Runtime>()
+            .timer
+            .lock()
+            .map(|timer| {
+                !timer.snapshot.locked
+                    && !timer.snapshot.suspended
+                    && !timer
+                        .snapshot
+                        .reasons
+                        .iter()
+                        .any(|reason| reason == "unconfirmed")
+            })
+            .unwrap_or(false);
+        monitor.sample(collect);
+        Ok(monitor.configure(enabled, prompt, isolated))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+fn input_activity_snapshot(app: tauri::AppHandle) -> Result<input_activity::Snapshot, String> {
+    Ok(app
+        .state::<Mutex<input_activity::InputActivity>>()
+        .lock()
+        .map_err(|e| e.to_string())?
+        .snapshot())
+}
+#[tauri::command]
+async fn presence_check_finish(
+    epoch: u64,
+    started_at: i64,
+    present: Option<bool>,
+    app: tauri::AppHandle,
+) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let runtime = app.state::<Runtime>();
+        let meeting_epoch = {
+            let timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+            if epoch != timer.snapshot.presence_epoch || !timer.presence_check_allowed() {
+                return Ok(json!({"accepted":false,"locked":false}));
+            }
+            timer.meeting_epoch()
+        };
+        let meeting = runtime.meeting.check_fresh(meeting_epoch);
+        let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+        sample(&mut timer);
+        let now = Utc::now().timestamp_millis();
+        if !timer.observe_meeting_if_current(meeting_epoch, now, &meeting)
+            || !timer.observe_camera_presence(epoch, started_at, present, now)
+        {
+            return Ok(json!({"accepted":false,"locked":false}));
+        }
+        // Keep configuration changes serialized through the final lock request.
+        // Only the first confirmed absence in an input episode may attempt it.
+        let lock = present == Some(false) && timer.claim_presence_lock();
+        sample(&mut timer);
+        let locked = if lock
+            && epoch == timer.snapshot.presence_epoch
+            && timer.presence_check_allowed()
+            && Utc::now().timestamp_millis() - (timer.snapshot.idle_seconds * 1000.) as i64 + 1000
+                <= started_at
+        {
+            platform::lock_computer(runtime.test_dir.is_some())?
+        } else {
+            false
+        };
+        Ok(json!({"accepted":true,"locked":locked}))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn clear_meeting_history(app: tauri::AppHandle) -> Result<Snapshot, String> {
@@ -927,6 +1042,8 @@ fn main() {
             configure_timer,
             local_mcp_configure, local_mcp_status, local_mcp_publish, local_mcp_take_commands,
             timer_snapshot,
+            presence_check_begin, presence_check_finish,
+            input_activity_configure, input_activity_snapshot,
             clear_meeting_history,
             desktop_command,
             legacy_history,
@@ -939,6 +1056,7 @@ fn main() {
         })
         .setup(move |app| {
             app.manage(local_mcp::LocalMcp::default());
+            app.manage(Mutex::new(input_activity::InputActivity::default()));
             startup_trace("setup-enter");
             ui::initialize_dock(app.handle(), !hidden);
             #[cfg(target_os = "macos")]
@@ -1147,6 +1265,9 @@ fn main() {
                         )
                     };
                     if !snapshot.expiry_pending {handled_expiry=None;}
+                    if let Ok(mut monitor) = handle.state::<Mutex<input_activity::InputActivity>>().lock() {
+                        monitor.sample(!snapshot.locked && !snapshot.suspended && !snapshot.reasons.iter().any(|reason| reason == "unconfirmed"));
+                    }
                     if expired {
                         // A history boundary invalidates an in-flight probe.
                         // Retry that expiry with the new observation epoch.
@@ -1260,6 +1381,11 @@ fn main() {
             startup_trace("event-loop-ready");
         }
         if let tauri::RunEvent::Exit = event {
+            if let Some(state) = app.try_state::<Mutex<input_activity::InputActivity>>() {
+                if let Ok(mut monitor) = state.lock() {
+                    monitor.stop();
+                }
+            }
             if let Some(server) = app.try_state::<local_mcp::LocalMcp>() {
                 server.shutdown();
             }

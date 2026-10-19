@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Det gick inte att kopiera. Markera anslutningsinställningarna nedan.",
   "Подключение AI-клиентов": "Anslutning av AI-klienter",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Gör det möjligt att läsa status, inställningar och dagliga sammanfattningar, starta en paus och styra timern. Åtkomst är endast möjlig från den här datorn med en token. Servern stoppas när funktionen stängs av.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Token ger åtkomst till att styra Blincho. Den ändras när MCP aktiveras igen."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Token ger åtkomst till att styra Blincho. Den ändras när MCP aktiveras igen.",
+  "Уточнять присутствие камерой": "Kontrollera närvaro med kameran",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "Efter en minut utan inmatning och om inget samtal pågår kontrollerar kameran om du är närvarande. Läsning räknas som arbete. Bilderna behandlas bara på din enhet.",
+  "Блокировать при подтверждённом отсутствии": "Lås när frånvaro har bekräftats",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Låsning sker först efter en kamerakontroll och en ny kontroll av inmatning och pågående samtal. Vid kamerafel hoppas låsningen över.",
+  "Собирать счётчики ввода": "Räkna inmatningshändelser",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Endast lokala räknare för händelser i femminutersintervall. Ingen text, inga appar eller koordinater. Händelsernas frekvens beror på enheten. Dessa data kan inte användas för att ställa en diagnos.",
+  "Нажатия клавиш": "Tangenttryckningar",
+  "Клики": "Klick",
+  "Прокрутки": "Rullningar",
+  "Движения мыши": "Musrörelser",
+  "Профиль активности ввода": "Profil för inmatningsaktivitet",
+  "Скачать CSV": "Ladda ner CSV",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Tillåt inmatningsövervakning i systeminställningarna och aktivera insamlingen igen.",
+  "Системный сбор ввода недоступен в этой среде.": "Insamling av inmatningshändelser för hela systemet är inte tillgänglig i den här miljön.",
+  "Удалить статистику ввода": "Radera inmatningsstatistik",
+  "Не удалось удалить статистику ввода.": "Det gick inte att radera inmatningsstatistiken."
 }

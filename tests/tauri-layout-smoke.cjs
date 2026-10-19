@@ -14,7 +14,8 @@ fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date
   myeyes_settings_v1: JSON.stringify({ cameraLockEnabled: false, idleDetectionEnabled: true, meetingDetectionEnabled: true, strictMode: true,
     workMinutes: 20, breakSeconds: 20, soundEnabled: false, notificationsEnabled: false }),
   'blincho-language-v1': '{"preference":"en","acknowledged":true}',
-  myeyes_stats_v1: JSON.stringify([{ date, breaksCompleted: 11, exercisesCompleted: 4, focusMinutes: 656 },
+  myeyes_stats_v1: JSON.stringify([{ date, breaksCompleted: 11, exercisesCompleted: 4, focusMinutes: 656,
+    inputActivity: [9, 12, 15].map(hour => ({ start: new Date(`${date}T${String(hour).padStart(2, '0')}:00:00`).getTime(), keyPresses: 1234, clicks: 567, scrolls: 89, mouseMoves: 12345 })) },
     { date: '2025-05-01', breaksCompleted: 2, exercisesCompleted: 0, focusMinutes: 45 }]),
 } }));
 const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.resolve(__dirname, '../src-tauri/target/debug/blincho');
