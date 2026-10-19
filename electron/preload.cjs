@@ -4,6 +4,9 @@ window.addEventListener('DOMContentLoaded', () => {
   document.documentElement.dataset.platform = process.platform;
 }, { once: true });
 
+let cameraGeneration;
+let cameraRevision = 0;
+
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   platform: process.platform,
@@ -14,6 +17,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   takeLocalMcpCommands: () => ipcRenderer.invoke('local-mcp-take-commands'),
   getPreferredLanguages: () => ipcRenderer.invoke('get-preferred-languages'),
   setLocale: (locale) => ipcRenderer.invoke('set-locale', locale),
+  setCameraActivity: async (active, label) => {
+    cameraGeneration ??= ipcRenderer.invoke('camera-activity-generation');
+    const generation = await cameraGeneration;
+    return ipcRenderer.invoke('camera-activity-update', { generation, revision: ++cameraRevision, active, label });
+  },
   setSymbioteBuild: mask => ipcRenderer.invoke('set-symbiote-build', mask),
   syncSymbioteShortcut: (mask, name) => ipcRenderer.invoke('sync-symbiote-shortcut', mask, name),
   createSymbioteShortcut: (mask, name) => ipcRenderer.invoke('create-symbiote-shortcut', mask, name),

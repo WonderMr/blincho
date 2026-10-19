@@ -26,10 +26,10 @@ async function mainHarness(platform='darwin',assertion='',host='',hostError=null
  const appPaths={appData:'/virtual',userData:'/virtual/blincho',sessionData:'/virtual/blincho'};
  const app={dock:{setIcon:icon=>calls.push(['dockIcon',icon])},getPreferredSystemLanguages:()=>['ru'],isPackaged:packaged,requestSingleInstanceLock:()=>{calls.push(['requestSingleInstanceLock']);return instanceLock},on:(name,cb)=>listeners[name]=cb,quit(){calls.push(['quit']);listeners['before-quit']?.();for(const window of BrowserWindow.getAllWindows())window.close()},whenReady:()=>{calls.push(['whenReady']);return Promise.resolve()},getAppPath:()=>repo,getPath:name=>appPaths[name],setName:name=>calls.push(['setName',name]),setPath:(name,value)=>{calls.push(['setPath',name,value]);appPaths[name]=value},setAppUserModelId:id=>calls.push(['setAppUserModelId',id]),setDesktopName:name=>calls.push(['setDesktopName',name])};
  const ipcMain={on:(name,cb)=>handlers[name]=cb,handle:(name,cb)=>handlers[name]=cb};
- const nativeImage={createFromPath:file=>{calls.push(['createFromPath',file]);return{path:file,isEmpty:()=>false,resize(options){calls.push(['resize',options]);return this},setTemplateImage:flag=>calls.push(['setTemplateImage',flag])}}};
+ const nativeImage={createFromBitmap:(bitmap,options)=>({path:'camera-active',bitmap,options,setTemplateImage:flag=>calls.push(['setTemplateImage',flag])}),createFromPath:file=>{calls.push(['createFromPath',file]);return{path:file,width:20,height:20,isEmpty:()=>false,resize(options){this.width=options.width;this.height=options.height;calls.push(['resize',options]);return this},toBitmap(){return Buffer.alloc(this.width*this.height*4,17)},setTemplateImage:flag=>calls.push(['setTemplateImage',flag])}}};
  const execFile=(file,args,options,cb)=>{execCalls.push({file,args,options});const sampledOutput=sessionOutput,sampledError=sessionError;const finish=()=>file==='loginctl'?cb(sampledError,sampledOutput):file.includes('pmset')?cb(null,assertion):cb(hostError,host);if(deferProbes)pendingProbes.push(finish);else finish()};
  function Notification(options){const notification=new EventEmitter();notification.options=options;notification.show=()=>{};notifications.push(notification);return notification}Notification.isSupported=()=>true;
- vm.runInNewContext(fs.readFileSync(repo+'/electron/main.cjs','utf8'),{require:name=>name==='electron'?{app,BrowserWindow,ipcMain,Notification,Tray:function(icon){if(trayError)throw trayError;tray=new EventEmitter();tray.icon=icon;tray.setImage=icon=>{tray.icon=icon;calls.push(['trayIcon',icon.path])};tray.setToolTip=()=>{};tray.setContextMenu=menu=>trayMenu=menu;return tray},Menu:{buildFromTemplate:x=>x,setApplicationMenu:menu=>calls.push(['setApplicationMenu',menu])},nativeImage,powerMonitor:power,screen}:name==='./updater.cjs'?require(repo+'/electron/updater.cjs'):name==='./locales.cjs'?require(repo+'/electron/locales.cjs'):name==='./linuxSession.cjs'?require(repo+'/electron/linuxSession.cjs'):name==='child_process'?{execFile}:name==='node:perf_hooks'?{performance:{now:()=>now}}:name==='fs'?diagnosticFs:require(name),process:{platform,argv:['electron','.','--dev'],env},Date:Clock,__dirname:repo+'/electron',console:testConsole});
+ vm.runInNewContext(fs.readFileSync(repo+'/electron/main.cjs','utf8'),{require:name=>name==='electron'?{app,BrowserWindow,ipcMain,Notification,Tray:function(icon){if(trayError)throw trayError;tray=new EventEmitter();tray.icon=icon;tray.setImage=icon=>{tray.icon=icon;calls.push(['trayIcon',icon.path])};tray.setToolTip=text=>tray.tooltip=text;tray.setContextMenu=menu=>trayMenu=menu;return tray},Menu:{buildFromTemplate:x=>x,setApplicationMenu:menu=>calls.push(['setApplicationMenu',menu])},nativeImage,powerMonitor:power,screen}:name==='./updater.cjs'?require(repo+'/electron/updater.cjs'):name==='./locales.cjs'?require(repo+'/electron/locales.cjs'):name==='./linuxSession.cjs'?require(repo+'/electron/linuxSession.cjs'):name==='child_process'?{execFile}:name==='node:perf_hooks'?{performance:{now:()=>now}}:name==='fs'?diagnosticFs:require(name),process:{platform,argv:['electron','.','--dev'],env},Date:Clock,__dirname:repo+'/electron',console:testConsole});
  await Promise.resolve();return{handlers,calls,execCalls,pendingProbes,notifications,advanceTime:ms=>now+=ms,get tray(){return tray},get window(){return windows.at(-1)},windows,app,listeners,get trayMenu(){return trayMenu},get diagnostics(){const value=diagnosticFiles.get(nativePath.join('/virtual','myeyes','runtime-diagnostics.json'));return value?JSON.parse(value):null},diagnosticWrites,power,warnings,setState:value=>state=value,setDisplays:value=>displays=value,setLinuxSession:(output,error=null)=>{sessionOutput=output;sessionError=error}};
 }
 (async()=>{
@@ -158,6 +158,33 @@ async function mainHarness(platform='darwin',assertion='',host='',hostError=null
   assert(!build.calls.slice(start).some(([name])=>['show','focus','restore'].includes(name)));
   build.handlers['show-notification']({},{});
   assert(portablePath(build.notifications.at(-1).options.icon).endsWith('/public/symbiote/3f.png'));
+  const generation=build.handlers['camera-activity-generation'](event);
+  const cameraInput={generation,revision:1,active:true,label:'Blincho is using the camera'};
+  assert.throws(()=>build.handlers['camera-activity-update']({},cameraInput),/main renderer/);
+  assert.throws(()=>build.handlers['camera-activity-update']({...event,senderFrame:{}},cameraInput),/main renderer/);
+  build.handlers['camera-activity-update'](event,cameraInput);
+  assert.equal(build.tray.icon.path,'camera-active');
+  assert.equal(build.tray.tooltip,'Blincho\nBlincho is using the camera');
+  build.handlers['set-symbiote-build'](event,5); assert.equal(build.tray.icon.path,'camera-active');
+  assert.throws(()=>build.handlers['camera-activity-update'](event,cameraInput),/obsolete/);
+  build.window.webContents.emit('did-start-navigation',{},'tauri://localhost',false,false);
+  assert.equal(build.tray.icon.path,'camera-active','subframe navigation does not release the main camera');
+  build.window.close(); assert.equal(build.tray.icon.path,'camera-active','close-to-tray preserves live capture');
+  build.handlers['camera-activity-update'](event,{...cameraInput,revision:2,active:false});
+  assert(portablePath(build.tray.icon.path).endsWith('/public/symbiote/05.png'));
+  build.handlers['camera-activity-update'](event,{...cameraInput,revision:3});
+  build.window.webContents.emit('did-start-navigation',{},'tauri://localhost',false,true);
+  build.window.webContents.emit('did-fail-provisional-load',{},-3,'ERR_ABORTED','tauri://localhost',true);
+  assert.equal(build.tray.icon.path,'camera-active','an aborted navigation leaves the live document and its camera visible');
+  build.handlers['camera-activity-update'](event,{...cameraInput,revision:4});
+  build.window.webContents.emit('did-navigate',{},'tauri://localhost',200,'OK');
+  assert(portablePath(build.tray.icon.path).endsWith('/public/symbiote/05.png'));
+  assert.throws(()=>build.handlers['camera-activity-update'](event,{...cameraInput,revision:5}),/obsolete/);
+  const nextGeneration=build.handlers['camera-activity-generation'](event);
+  build.handlers['camera-activity-update'](event,{...cameraInput,generation:nextGeneration});
+  build.window.webContents.emit('render-process-gone',{},{});
+  assert(portablePath(build.tray.icon.path).endsWith('/public/symbiote/05.png'));
+  build.handlers['set-symbiote-build'](event,63);
   build.window.destroy();build.listeners.activate();
   assert(portablePath(build.window.options.icon).endsWith('/public/symbiote/3f.png'));
   const packaged=await mainHarness(platform,'','',null,{packaged:true});

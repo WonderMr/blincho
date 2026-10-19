@@ -146,5 +146,6 @@
   "release.1.8.0": "Comprobaciones locales opcionales de presencia con la cámara y bloqueo del equipo, con imágenes procesadas en el dispositivo que nunca se guardan ni se suben. En versiones posteriores, la comprobación se realiza solo al finalizar una pausa cronometrada.",
   "release.1.8.14": "MCP local opcional conecta clientes de IA con el estado del temporizador, los ajustes, los totales de hoy y las acciones del temporizador. Las comprobaciones de presencia con la cámara se realizan solo al finalizar la pausa cronometrada.",
   "release.1.8.15": "MCP local ahora ofrece estadísticas por día, semana natural o intervalo de fechas, con las fechas de los datos disponibles y los huecos visibles. La posición y el tamaño de la ventana se conservan después de bloqueos, suspensiones y pausas.",
-  "release.1.10.0": "El aspecto y el nombre dependen de las funciones que actives. El acceso directo del escritorio se adapta a tu configuración."
+  "release.1.10.0": "El aspecto y el nombre dependen de las funciones que actives. El acceso directo del escritorio se adapta a tu configuración.",
+  "release.1.10.1": "El aspecto y el nombre dependen de las funciones que actives. El acceso directo del escritorio se adapta a tu configuración. Un indicador de cámara en el icono de Blincho muestra cuándo usa la cámara y desaparece al terminar la captura."
 }

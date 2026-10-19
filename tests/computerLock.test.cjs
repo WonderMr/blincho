@@ -189,7 +189,7 @@ test('Tauri compatibility bridge invokes lock_computer and preserves success and
   vm.runInNewContext(code, context);
   await context.module.exports.initializeTauriBridge();
   assert.equal(await window.electronAPI.lockComputer(), true);
-  assert.deepEqual(calls, ['desktop_info', 'lock_computer']);
+  assert.deepEqual(calls, ['desktop_info', 'camera_activity_generation', 'lock_computer']);
   failure = new Error('Native lock failure');
   await assert.rejects(window.electronAPI.lockComputer(), error => error === failure);
 });

@@ -29,6 +29,8 @@ Website: https://blincho.app
 
 Blincho is a general wellness tool. It does not diagnose or treat eye conditions. Windows and Linux lock/sleep behavior has automated coverage but has not yet been validated on physical hardware. The download page identifies each package's signing and update support. Operating systems can show publisher warnings for unsigned packages.
 
+Camera use is identified by a camera badge on Blincho's tray icon and a localized label. It follows live capture, including presence checks and permission probes, and clears when the final stream is released.
+
 ## Development
 
 Use Node.js 22.12 or newer. Desktop builds need Rust and CMake. macOS also needs Xcode Command Line Tools. Windows needs the MSVC build tools and WebView2. With Visual Studio 2026 on Windows ARM64, install Ninja and set `CMAKE_GENERATOR=Ninja` when using the pinned CMake version. Linux needs Clang, WebKitGTK 4.1, GTK 3, AppIndicator, X11/Xss and D-Bus development libraries. Linux packages use the Ubuntu 24.04 build baseline. Portable Windows packages require an installed WebView2 runtime. CI pins Rust 1.92.0 and CMake 3.31.10; CMake 4 is incompatible with the bundled LevelDB history migration dependency. The macOS bundle targets macOS 14 or newer. Release builds select `aarch64-apple-darwin` for ARM64 or `x86_64-apple-darwin` for Intel explicitly and verify the packaged executable architecture.

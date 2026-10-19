@@ -146,5 +146,6 @@
   "release.1.8.0": "Optionele lokale aanwezigheidscontroles met de camera en computervergrendeling, waarbij beelden op het apparaat worden verwerkt en nooit opgeslagen of geüpload. Latere versies voeren de controle alleen uit nadat een pauze met timer is afgelopen.",
   "release.1.8.14": "Optionele lokale MCP verbindt AI-clients met de timerstatus, instellingen, dagtotalen en timeracties. Aanwezigheidscontroles met de camera worden alleen uitgevoerd nadat de pauze met timer is afgelopen.",
   "release.1.8.15": "Lokale MCP rapporteert nu statistieken per dag, kalenderweek of datumbereik, met datums waarvoor gegevens beschikbaar zijn en zichtbare hiaten. Vensterpositie en -grootte blijven behouden na vergrendeling, slaapstand en pauzes.",
-  "release.1.10.0": "Het uiterlijk en de naam hangen af van de ingeschakelde functies. De snelkoppeling op het bureaublad volgt je configuratie."
+  "release.1.10.0": "Het uiterlijk en de naam hangen af van de ingeschakelde functies. De snelkoppeling op het bureaublad volgt je configuratie.",
+  "release.1.10.1": "Het uiterlijk en de naam hangen af van de ingeschakelde functies. De snelkoppeling op het bureaublad volgt je configuratie. Een camerateken op het Blincho-pictogram toont wanneer de camera wordt gebruikt en verdwijnt zodra de opname stopt."
 }

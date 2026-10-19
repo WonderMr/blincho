@@ -87,3 +87,36 @@ mod tests {
         assert_eq!(pixel(&active, 4, 4), pixel(&original, 4, 4));
     }
 }
+
+// The camera occupies the upper corner; the call handset stays below it.
+const CAMERA: [&str; 8] = [
+    "........", ".#####..", ".#...#.#", ".#.o.###", ".#...###", ".#####.#", "........", "........",
+];
+
+pub(super) fn with_camera_badge(original: &Image<'_>) -> Image<'static> {
+    let (width, height) = (original.width(), original.height());
+    let mut rgba = original.rgba().to_vec();
+    let unit = (width.min(height) / 16).max(1);
+    let left = width.saturating_sub(8 * unit);
+    let center = (left as f64 + 3.5 * unit as f64, 3.5 * unit as f64);
+    for y in 0..(8 * unit).min(height) {
+        for x in left.saturating_sub(unit)..width {
+            let pixel = &mut rgba[((y * width + x) * 4) as usize..][..4];
+            if (x as f64 + 0.5 - center.0).powi(2) + (y as f64 + 0.5 - center.1).powi(2)
+                <= (4.5 * unit as f64).powi(2)
+            {
+                pixel.copy_from_slice(&[32, 47, 32, 255]);
+            }
+            if x >= left {
+                let glyph = CAMERA[(y / unit) as usize].as_bytes()[((x - left) / unit) as usize];
+                if glyph == b'#' {
+                    pixel.copy_from_slice(&[255, 255, 255, 255]);
+                }
+                if glyph == b'o' {
+                    pixel.copy_from_slice(&[38, 210, 38, 255]);
+                }
+            }
+        }
+    }
+    Image::new_owned(rgba, width, height)
+}
