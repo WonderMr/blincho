@@ -1023,7 +1023,14 @@ fn main() {
     let autostart_builder =
         autostart_builder.macos_launcher(tauri_plugin_autostart::MacosLauncher::LaunchAgent);
     startup_trace("app-build-start");
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.on_web_content_process_terminate(|webview| {
+        if webview.label() == "main" {
+            camera_activity::reset(webview.app_handle());
+        }
+    });
+    let app = builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             let autostart = args.iter().any(|arg| arg == "--autostart");
             let handle = app.clone();

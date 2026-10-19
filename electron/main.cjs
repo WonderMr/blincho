@@ -412,7 +412,9 @@ function createWindow() {
     }
   });
 
-  mainWindow.webContents.on('did-start-navigation', (_event, _url, inPlace, isMainFrame) => { if (isMainFrame && !inPlace) resetCameraActivity(); });
+  // Only a committed main-document navigation releases the old capture.
+  // Provisional or canceled navigation can leave its stream and preload alive.
+  mainWindow.webContents.on('did-navigate', resetCameraActivity);
   mainWindow.webContents.on('render-process-gone', resetCameraActivity);
   mainWindow.on('closed', () => {
     resetCameraActivity();

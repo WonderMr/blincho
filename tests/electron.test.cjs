@@ -174,8 +174,12 @@ async function mainHarness(platform='darwin',assertion='',host='',hostError=null
   assert(portablePath(build.tray.icon.path).endsWith('/public/symbiote/05.png'));
   build.handlers['camera-activity-update'](event,{...cameraInput,revision:3});
   build.window.webContents.emit('did-start-navigation',{},'tauri://localhost',false,true);
+  build.window.webContents.emit('did-fail-provisional-load',{},-3,'ERR_ABORTED','tauri://localhost',true);
+  assert.equal(build.tray.icon.path,'camera-active','an aborted navigation leaves the live document and its camera visible');
+  build.handlers['camera-activity-update'](event,{...cameraInput,revision:4});
+  build.window.webContents.emit('did-navigate',{},'tauri://localhost',200,'OK');
   assert(portablePath(build.tray.icon.path).endsWith('/public/symbiote/05.png'));
-  assert.throws(()=>build.handlers['camera-activity-update'](event,{...cameraInput,revision:4}),/obsolete/);
+  assert.throws(()=>build.handlers['camera-activity-update'](event,{...cameraInput,revision:5}),/obsolete/);
   const nextGeneration=build.handlers['camera-activity-generation'](event);
   build.handlers['camera-activity-update'](event,{...cameraInput,generation:nextGeneration});
   build.window.webContents.emit('render-process-gone',{},{});
