@@ -1,0 +1,21 @@
+.symbiote-icon { display: block; flex: 0 0 auto; max-width: 100%; height: auto; overflow: visible; }
+.symbiote-module { animation: symbiote-install 240ms ease-out both; transform-box: fill-box; transform-origin: center; }
+.nav-bar .nav-logo-badge { width: 48px; height: 48px; align-self: flex-start; }
+.nav-bar .nav-logo-badge .symbiote-icon { width: 48px; height: 48px; }
+.nav-build-name { display: block; color: var(--text-secondary); font-size: .74rem; line-height: 1.4; margin-top: 3px; overflow-wrap: anywhere; }
+.symbiote-build-card { display: flex; flex-direction: row; align-items: center; gap: 22px; }
+.symbiote-build-card > .symbiote-icon { width: 128px; height: 128px; }
+.symbiote-build-copy { min-width: 0; }
+.symbiote-build-name { color: var(--text-primary); margin: 5px 0 6px; font-size: 1.2rem; line-height: 1.35; overflow-wrap: anywhere; }
+.symbiote-build-count { color: var(--text-secondary); font-size: .8rem; margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+.symbiote-perk-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 12px 0 0; list-style: none; }
+.symbiote-perk-list li { background: var(--bg-secondary); color: var(--text-secondary); border-radius: 8px; padding: 4px 8px; font-size: .73rem; line-height: 1.4; overflow-wrap: anywhere; }
+.symbiote-build-base { color: var(--text-muted); font-size: .8rem; margin: 10px 0 0; }
+@keyframes symbiote-install { from { opacity: 0; transform: translateY(5px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 440px) {
+  .nav-bar .nav-logo-badge, .nav-bar .nav-logo-badge .symbiote-icon { width: 40px; height: 40px; }
+  .symbiote-build-card { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .symbiote-build-card > .symbiote-icon { width: 104px; height: 104px; }
+}
+@media (prefers-reduced-motion: reduce) { .symbiote-module { animation: none; } }
+@media (forced-colors: active) { .symbiote-perk-list li { border: 1px solid CanvasText; } }

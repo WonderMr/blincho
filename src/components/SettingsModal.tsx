@@ -14,9 +14,13 @@ import { soundSynth } from '../audio/soundSynth';
 import { showEyeBreakNotification, requestNotificationPermission } from '../utils/notifications';
 import { requestCameraAccess } from '../utils/cameraAccess';
 import { hasNativeTimer, readNativeTimer } from '../utils/tauriBridge';
+import { getSymbioteBuild, readSymbioteCapabilities } from '../utils/symbiote';
+import type { SymbioteBuild } from '../utils/symbiote';
+import { SymbioteBuildCard } from './SymbioteBuildCard';
 import { X, Volume2, Shield, Check, Clock, Monitor } from 'lucide-react';
 
 interface SettingsModalProps {
+  symbioteBuild?: SymbioteBuild;
   settings: AppSettings;
   onUpdateSettings: (newSettings: AppSettings) => void;
   onClose: () => void;
@@ -53,7 +57,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ id, title, description, checked, 
   </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, onCameraAccessPendingChange, updates, meetingHistoryControls, inputActivityControls }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, onCameraAccessPendingChange, updates, meetingHistoryControls, inputActivityControls, symbioteBuild }) => {
   const { preference, suggestedLocale, SUPPORTED_LANGUAGES, setLanguagePreference } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -243,6 +247,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
     }
   };
 
+  const build = symbioteBuild ?? getSymbioteBuild(settings, readSymbioteCapabilities(inputActivityControls?.status === 'active'), cameraPending);
+
   return (
     <div className="modal-backdrop settings-backdrop" onClick={e => { if (e.target === e.currentTarget) closeSettings(); }}>
       <div ref={dialogRef} className="modal-box settings-dialog" role="dialog" aria-modal="true"
@@ -261,6 +267,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
           {updates && <button type="button" onClick={() => showSection('updates-title')}>{t('Обновления')}</button>}
         </nav>
         <div className="settings-scroll-body">
+          <SymbioteBuildCard build={build} />
           <section className="settings-section-card" aria-labelledby="language-title">
             <h3 id="language-title" tabIndex={-1} className="settings-section-title">{t('Язык и регион')}</h3>
             <LanguagePicker value={preference} languages={[...SUPPORTED_LANGUAGES]} detectedLanguage={suggestedLocale}
