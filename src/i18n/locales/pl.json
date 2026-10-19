@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Nie udało się skopiować. Zaznacz ustawienia połączenia poniżej.",
   "Подключение AI-клиентов": "Łączenie klientów AI",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Umożliwia odczytywanie stanu, ustawień i podsumowań dnia, rozpoczynanie przerw oraz sterowanie minutnikiem. Dostęp jest możliwy tylko z tego komputera przy użyciu tokenu. Wyłączenie zatrzymuje serwer.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Token umożliwia sterowanie Blincho. Zmienia się po ponownym włączeniu MCP."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Token umożliwia sterowanie Blincho. Zmienia się po ponownym włączeniu MCP.",
+  "Уточнять присутствие камерой": "Sprawdzaj obecność za pomocą kamery",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "Po minucie bez aktywności urządzeń wejściowych, jeśli nie trwa połączenie, kamera sprawdza obecność. Czytanie liczy się jako praca. Klatki są przetwarzane wyłącznie na urządzeniu.",
+  "Блокировать при подтверждённом отсутствии": "Blokuj po potwierdzeniu nieobecności",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Blokada następuje tylko po sprawdzeniu kamerą oraz ponownym sprawdzeniu aktywności urządzeń wejściowych i trwających połączeń. W razie błędu kamery blokada jest pomijana.",
+  "Собирать счётчики ввода": "Zliczaj zdarzenia wejściowe",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Tylko lokalne liczniki zdarzeń w przedziałach pięciominutowych. Bez tekstu, aplikacji i współrzędnych. Częstotliwość zdarzeń zależy od urządzenia. Te dane nie służą do stawiania diagnozy.",
+  "Нажатия клавиш": "Naciśnięcia klawiszy",
+  "Клики": "Kliknięcia",
+  "Прокрутки": "Przewinięcia",
+  "Движения мыши": "Ruchy myszy",
+  "Профиль активности ввода": "Profil aktywności urządzeń wejściowych",
+  "Скачать CSV": "Pobierz CSV",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Zezwól na monitorowanie urządzeń wejściowych w ustawieniach systemu i ponownie włącz zbieranie danych.",
+  "Системный сбор ввода недоступен в этой среде.": "Zbieranie zdarzeń wejściowych z całego systemu jest niedostępne w tym środowisku.",
+  "Удалить статистику ввода": "Usuń statystyki aktywności wejściowej",
+  "Не удалось удалить статистику ввода.": "Nie udało się usunąć statystyk aktywności wejściowej."
 }

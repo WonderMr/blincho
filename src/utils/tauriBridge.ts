@@ -51,6 +51,8 @@ export function synchronizeNativeTimer(session: TimerSession, settings: AppSetti
     idleEnabled: settings.idleDetectionEnabled, idleThresholdSeconds: settings.idleThresholdMinutes * 60,
     meetingEnabled: settings.meetingDetectionEnabled, meetingHistoryEnabled: settings.meetingHistoryEnabled,
     cameraLockEnabled: settings.cameraLockEnabled,
+    enhancedPresenceEnabled: settings.enhancedPresenceEnabled,
+    absenceLockEnabled: settings.absenceLockEnabled,
     autoTakeover: settings.autoTakeoverModal };
   commandQueue = commandQueue.then(async () => {
     latest = await window.__TAURI__!.core.invoke<NativeTimerSnapshot>('configure_timer', { input });

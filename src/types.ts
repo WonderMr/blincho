@@ -48,6 +48,9 @@ export interface AppSettings {
   meetingDetectionEnabled: boolean;
   meetingHistoryEnabled: boolean;
   cameraLockEnabled: boolean;
+  enhancedPresenceEnabled: boolean;
+  absenceLockEnabled: boolean;
+  inputActivityEnabled: boolean;
   localMcpEnabled: boolean;
   strictMode: boolean;
 }
@@ -77,6 +80,17 @@ export interface DayStats {
   activity?: ActivitySpan[];
   // Missing in history recorded before meeting observations were introduced.
   meetings?: MeetingSpan[];
+  inputActivity?: InputActivityBucket[];
+  inputActivityCursor?: { source: string; buckets: InputActivityBucket[] };
+}
+
+// Counts only, grouped into local five-minute intervals. No event payloads.
+export interface InputActivityBucket {
+  start: number;
+  keyPresses: number;
+  clicks: number;
+  scrolls: number;
+  mouseMoves: number;
 }
 
 export interface CVSSurveyQuestion {

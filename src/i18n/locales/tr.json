@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Kopyalanamadı. Aşağıdaki bağlantı ayarlarını seçin.",
   "Подключение AI-клиентов": "AI istemcilerini bağlama",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Durumu, ayarları ve günlük özetleri okumaya, mola başlatmaya ve zamanlayıcıyı yönetmeye izin verir. Erişim yalnızca bu bilgisayardan bir belirteç ile mümkündür. Devre dışı bırakıldığında sunucu durur.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Belirteç, Blincho'yu yönetme erişimi sağlar. MCP yeniden etkinleştirildiğinde değişir."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Belirteç, Blincho'yu yönetme erişimi sağlar. MCP yeniden etkinleştirildiğinde değişir.",
+  "Уточнять присутствие камерой": "Varlığı kamerayla doğrula",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "Bir dakika boyunca giriş olmadığında ve devam eden bir arama yoksa kamera, bilgisayarın başında olup olmadığınızı kontrol eder. Okuma, çalışma süresine sayılır. Kareler yalnızca cihazınızda işlenir.",
+  "Блокировать при подтверждённом отсутствии": "Yokluk doğrulandığında kilitle",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Kilitleme yalnızca kamera kontrolünden ve giriş ile arama durumunun yeniden kontrolünden sonra yapılır. Kamera hatası oluşursa kilitleme atlanır.",
+  "Собирать счётчики ввода": "Giriş olaylarını say",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Yalnızca beş dakikalık aralıklarla yerel olay sayıları tutulur. Metin, uygulama veya koordinat bilgisi toplanmaz. Olay sıklığı cihaza bağlıdır. Bu veriler tanı koymaz.",
+  "Нажатия клавиш": "Tuş basımları",
+  "Клики": "Tıklamalar",
+  "Прокрутки": "Kaydırmalar",
+  "Движения мыши": "Fare hareketleri",
+  "Профиль активности ввода": "Giriş etkinliği profili",
+  "Скачать CSV": "CSV indir",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Sistem ayarlarında giriş izlemeye izin verin ve veri toplamayı yeniden etkinleştirin.",
+  "Системный сбор ввода недоступен в этой среде.": "Bu ortamda sistem genelinde giriş olayı toplama kullanılamıyor.",
+  "Удалить статистику ввода": "Giriş istatistiklerini sil",
+  "Не удалось удалить статистику ввода.": "Giriş istatistikleri silinemedi."
 }

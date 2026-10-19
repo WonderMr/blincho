@@ -45,7 +45,7 @@ fs.writeFileSync(path.join(contents, 'Info.plist'), `<?xml version="1.0" encodin
 <key>CFBundleIconFile</key><string>icon.icns</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
-<key>NSCameraUsageDescription</key><string>Blincho checks for a person at the end of a break and can lock the computer when nobody is detected. Camera frames stay on this device and are not saved.</string>
+<key>NSCameraUsageDescription</key><string>Blincho checks presence after input inactivity or a timed break when you enable the corresponding option. It can lock the computer after confirmed absence. Camera frames stay on this device and are not saved.</string>
 </dict></plist>`);
 fs.writeFileSync(path.join(contents, 'Resources/blincho-runtime.json'), JSON.stringify({schemaVersion:1,runtime:'tauri',platform:'darwin',arch:process.arch,version,identifier:'com.myeyes.app',packageType:'manual',signed:false,notarized:false,updaterConfig:false}));
 execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', bundle], { stdio: 'inherit' });

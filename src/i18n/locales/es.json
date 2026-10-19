@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "No se ha podido copiar. Selecciona los ajustes de conexión de abajo.",
   "Подключение AI-клиентов": "Conexión de clientes de IA",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Permite leer el estado, los ajustes y los resúmenes diarios, iniciar un descanso y controlar el temporizador. El acceso solo está disponible desde este ordenador y requiere un token. Al desactivarlo, se detiene el servidor.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "El token permite controlar Blincho. Cambia cada vez que se vuelve a activar MCP."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "El token permite controlar Blincho. Cambia cada vez que se vuelve a activar MCP.",
+  "Уточнять присутствие камерой": "Usar la cámara para confirmar la presencia",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "Tras un minuto sin actividad de entrada y si no hay una llamada en curso, la cámara comprueba si estás presente. La lectura cuenta como trabajo. Los fotogramas se procesan solo en tu dispositivo.",
+  "Блокировать при подтверждённом отсутствии": "Bloquear cuando se confirme la ausencia",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "El bloqueo solo se realiza tras una comprobación con la cámara y una segunda comprobación de la actividad de entrada y las llamadas. Si la cámara falla, no se bloquea el equipo.",
+  "Собирать счётчики ввода": "Recopilar recuentos de eventos de entrada",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Solo recuentos locales de eventos en intervalos de cinco minutos. Sin texto, aplicaciones ni coordenadas. La frecuencia de los eventos depende del dispositivo. Estos datos no permiten establecer un diagnóstico.",
+  "Нажатия клавиш": "Pulsaciones de teclas",
+  "Клики": "Clics",
+  "Прокрутки": "Desplazamientos",
+  "Движения мыши": "Movimientos del ratón",
+  "Профиль активности ввода": "Perfil de actividad de entrada",
+  "Скачать CSV": "Descargar CSV",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Permite la monitorización de entrada en los ajustes del sistema y vuelve a activar la recopilación.",
+  "Системный сбор ввода недоступен в этой среде.": "La recopilación de eventos de entrada de todo el sistema no está disponible en este entorno.",
+  "Удалить статистику ввода": "Eliminar estadísticas de entrada",
+  "Не удалось удалить статистику ввода.": "No se pudieron eliminar las estadísticas de entrada."
 }

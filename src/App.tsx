@@ -7,13 +7,15 @@ import {
 } from './types';
 import {
   loadSettings, saveSettings, loadTodayStats, loadAllStats,
-  loadCVSResult, recordBreakCompleted, recordExerciseCompleted, recordTimerProgress, getTodayDateString, clearMeetingHistory
+  loadCVSResult, recordBreakCompleted, recordExerciseCompleted, recordTimerProgress, getTodayDateString, clearMeetingHistory, recordInputActivity, clearInputActivity
 } from './utils/storage';
 import { soundSynth } from './audio/soundSynth';
 import { showEyeBreakNotification } from './utils/notifications';
 import { MEDICAL_TECHNIQUES } from './data/medicalTechniques';
 import { getSystemIdleSeconds, detectActiveMeeting, hasSystemIdleDetection, hasMeetingDetection, markPageActivity } from './utils/detector';
 import { checkCameraPresence } from './utils/cameraPresence';
+import { configureInputActivity } from './utils/inputActivity';
+import type { InputActivitySnapshot } from './utils/inputActivity';
 import { TimerSession, PresenceReason, normalizeTimerSettings } from './utils/timerSession';
 import { normalizeMeetingApplications, splitMeetingsByDay } from './utils/meetings';
 
@@ -88,6 +90,7 @@ export const App: React.FC = () => {
   const clearingMeetingsRef = useRef(false);
   const applyNativeRef = useRef<(snapshot: NativeTimerSnapshot) => void>(() => {});
   const [meetingHistoryPending, setMeetingHistoryPending] = useState(false);
+  const [inputStatus, setInputStatus] = useState<InputActivitySnapshot['status']>('disabled');
   const [meetingHistoryFeedback, setMeetingHistoryFeedback] = useState<'deleted' | 'failed' | null>(null);
   const [, publish] = useState(0);
   const breakIdRef = useRef<string | null>(null);
@@ -107,7 +110,7 @@ export const App: React.FC = () => {
     cameraAccessPendingRef.current = pending;
     if (pending) cameraAbortRef.current?.abort();
     // A crash during a system prompt must not turn a temporary grant into opt-in.
-    saveSettings(pending ? { ...settingsRef.current, cameraLockEnabled: false } : settingsRef.current);
+    saveSettings(pending ? { ...settingsRef.current, cameraLockEnabled: false, enhancedPresenceEnabled: false } : settingsRef.current);
     // Modal cleanup can run after App's own unmount guard has closed sync().
     if (!pending && hasNativeTimer()) synchronizeTimer();
   };
@@ -234,12 +237,37 @@ export const App: React.FC = () => {
     finishReturn();
     sync();
   };
+  const confirmPendingBreak = (present: boolean, idle: number, sampledMonotonicAt: number) => {
+    const pendingBreak = pendingBreakRef.current;
+    if (!pendingBreak) return;
+    // A short return window avoids crediting a break after a later return
+    // within the much longer work-idle grace period.
+    if (performance.now() - pendingBreak.deadlineMonotonicAt > 15_000) pendingBreakRef.current = null;
+    else if (present && Number.isFinite(idle) && idle >= 0 && sampledMonotonicAt - (idle + 1) * 1000 > pendingBreak.deadlineMonotonicAt) {
+      // Native idle is rounded down to seconds. Subtract another second
+      // and use the query start time, so earlier input and slow IPC cannot
+      // masquerade as activity after the rest deadline.
+      pendingBreakRef.current = null;
+      recordBreakCompleted(0, pendingBreak.eventId);
+      refreshStats();
+      setNoticeMessage("Перерыв записан. Рабочий цикл продолжается.");
+    }
+  };
   const samplePresence = (refresh = false): Promise<boolean> => {
     if (presenceInFlightRef.current) {
       if (refresh) presenceRefreshRef.current = true;
       return presenceInFlightRef.current;
     }
     const query = async (): Promise<boolean> => {
+      if (hasNativeTimer() && settingsRef.current.enhancedPresenceEnabled) {
+        const sampledMonotonicAt = performance.now();
+        const snapshot = await readNativeTimer();
+        if (!snapshot || !mountedRef.current) return false;
+        applyNativeRef.current(snapshot);
+        const present = snapshot.reasons.length === 0;
+        confirmPendingBreak(present, snapshot.idleSeconds, sampledMonotonicAt);
+        return present;
+      }
       for (let attempt = 0; mountedRef.current && attempt < 2; attempt += 1) {
         presenceRefreshRef.current = false;
         const sampledVersion = session.version;
@@ -323,21 +351,7 @@ export const App: React.FC = () => {
           if (hidden !== session.reasons.has('hidden')) setPresenceReason('hidden', hidden);
         }
         finishReturn();
-        const pendingBreak = pendingBreakRef.current;
-        if (pendingBreak) {
-          // A short return window avoids crediting a break after a later return
-          // within the much longer work-idle grace period.
-          if (performance.now() - pendingBreak.deadlineMonotonicAt > 15_000) pendingBreakRef.current = null;
-          else if (session.present && sampledMonotonicAt - (idle + 1) * 1000 > pendingBreak.deadlineMonotonicAt) {
-            // Native idle is rounded down to seconds. Subtract another second
-            // and use the query start time, so earlier input and slow IPC cannot
-            // masquerade as activity after the rest deadline.
-            pendingBreakRef.current = null;
-            recordBreakCompleted(0, pendingBreak.eventId);
-            refreshStats();
-            setNoticeMessage("Перерыв записан. Рабочий цикл продолжается.");
-          }
-        }
+        confirmPendingBreak(session.present, idle, sampledMonotonicAt);
         return session.present;
       }
       return false;
@@ -520,10 +534,11 @@ export const App: React.FC = () => {
     session.advance(Date.now());
     flushFocus();
     settingsRef.current = updated;
-    if (!updated.cameraLockEnabled) cameraAbortRef.current?.abort();
+    if (updated.cameraLockEnabled !== previous.cameraLockEnabled || updated.enhancedPresenceEnabled !== previous.enhancedPresenceEnabled
+      || updated.absenceLockEnabled !== previous.absenceLockEnabled) cameraAbortRef.current?.abort();
     setSettings(updated);
     if (!updated.meetingHistoryEnabled) setCurrentMeetingApplications([]);
-    saveSettings(cameraAccessPendingRef.current ? { ...updated, cameraLockEnabled: false } : updated);
+    saveSettings(cameraAccessPendingRef.current ? { ...updated, cameraLockEnabled: false, enhancedPresenceEnabled: false } : updated);
     if (updated.workMinutes !== previous.workMinutes || updated.timerPreset !== previous.timerPreset) {
       setNoticeMessage(null);
       pendingBreakRef.current = null;
@@ -677,6 +692,63 @@ export const App: React.FC = () => {
     soundSynth.volume = settings.soundVolume / 100;
   }, [settings.soundEnabled, settings.soundVolume]);
   useEffect(() => watchAppearance(settings.theme, settings.colorPalette), [settings.theme, settings.colorPalette]);
+  useEffect(() => {
+    let stopped = false, busy = false;
+    const poll = async () => {
+      if (stopped || busy) return;
+      busy = true;
+      try {
+        const snapshot = await window.__TAURI__!.core.invoke<InputActivitySnapshot>('input_activity_snapshot');
+        if (stopped || !settingsRef.current.inputActivityEnabled) return;
+        setInputStatus(snapshot.status);
+        if (snapshot.status === 'active') {
+          if (recordInputActivity(snapshot)) refreshStats();
+          else setInputStatus('unavailable');
+        }
+      } catch (error) { if (!stopped) setInputStatus('unavailable'); console.warn('Blincho: Input activity read failed:', error); }
+      finally { busy = false; }
+    };
+    void configureInputActivity(settings.inputActivityEnabled, false, snapshot => {
+      if (!settings.inputActivityEnabled && snapshot.status === 'active') recordInputActivity(snapshot);
+    }).then(snapshot => {
+      if (!stopped) { setInputStatus(settings.inputActivityEnabled ? snapshot.status : 'disabled'); refreshStats(); }
+      if (!stopped && settings.inputActivityEnabled && hasNativeTimer()) void poll();
+    }).catch(error => { if (!stopped) setInputStatus('unavailable'); console.warn('Blincho: Input activity configuration failed:', error); });
+    const timer = settings.inputActivityEnabled && hasNativeTimer() ? setInterval(() => { void poll(); }, 5000) : undefined;
+    return () => { stopped = true; clearInterval(timer); };
+  }, [settings.inputActivityEnabled]);
+  useEffect(() => {
+    if (!hasNativeTimer() || !settings.enhancedPresenceEnabled) return;
+    let stopped = false, busy = false, nextCheck = 0;
+    let ownedController: AbortController | null = null;
+    const check = async () => {
+      if (stopped || busy || Date.now() < nextCheck || cameraAbortRef.current || cameraAccessPendingRef.current) return;
+      busy = true;
+      try {
+        const token = await window.__TAURI__!.core.invoke<{ epoch: number; startedAt: number } | null>('presence_check_begin');
+        if (!token || stopped || cameraAbortRef.current || cameraAccessPendingRef.current) { nextCheck = Date.now() + 3000; return; }
+        const controller = new AbortController();
+        ownedController = controller;
+        cameraAbortRef.current = controller;
+        const result = await checkCameraPresence(controller.signal);
+        if (stopped || controller.signal.aborted || !settingsRef.current.enhancedPresenceEnabled) return;
+        const outcome = await window.__TAURI__!.core.invoke<{ accepted: boolean; locked: boolean }>('presence_check_finish', {
+          ...token, present: result === 'unavailable' ? null : result === 'present',
+        });
+        if (!stopped && outcome.locked) setNoticeMessage("Камера не обнаружила человека. Компьютер заблокирован.");
+        nextCheck = Date.now() + 25_000;
+      } catch (error) {
+        console.warn('Blincho: Enhanced presence check failed:', error);
+        nextCheck = Date.now() + 30_000;
+      } finally {
+        if (cameraAbortRef.current === ownedController) cameraAbortRef.current = null;
+        ownedController = null;
+        busy = false;
+      }
+    };
+    const timer = setInterval(() => { void check(); }, 1000);
+    return () => { stopped = true; clearInterval(timer); ownedController?.abort(); };
+  }, [settings.enhancedPresenceEnabled, settings.absenceLockEnabled]);
   useEffect(() => {
     if (!hasNativeTimer()) return;
     const summary = {
@@ -976,7 +1048,7 @@ export const App: React.FC = () => {
 
           {/* Tab 5: Statistics & Streaks */}
           {activeTab === 'stats' && (
-            <StatisticsView
+          <StatisticsView
               todayStats={todayStats}
               allStats={allStats}
               cvsResult={cvsResult}
@@ -1035,6 +1107,14 @@ export const App: React.FC = () => {
           onCameraAccessPendingChange={handleCameraAccessPendingChange}
           onClose={() => setIsSettingsOpen(false)}
           meetingHistoryControls={meetingHistoryControls}
+          inputActivityControls={{ enabled: settings.inputActivityEnabled, status: inputStatus,
+            hasHistory: allStats.some(day => (day.inputActivity?.length ?? 0) > 0),
+            onEnabledChange: enabled => handleUpdateSettings({ ...settingsRef.current, inputActivityEnabled: enabled }),
+            onDelete: async () => {
+              handleUpdateSettings({ ...settingsRef.current, inputActivityEnabled: false });
+              await configureInputActivity(false);
+              const ok = clearInputActivity(); refreshStats(); return ok;
+            } }}
         />
       )}
     </div>

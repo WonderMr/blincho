@@ -61,9 +61,19 @@ pub fn power_source() -> &'static str {
     native::power_source()
 }
 pub fn lock_computer(test_profile: bool) -> Result<bool, String> {
+    request_computer_lock(test_profile)?;
+    confirm_computer_lock(test_profile)
+}
+pub fn request_computer_lock(test_profile: bool) -> Result<(), String> {
+    if test_profile || std::env::var_os("BLINCHO_PROTOTYPE_TEST_DIR").is_some() {
+        return Err("Computer locking is disabled in test profiles".into());
+    }
+    native::request_lock()
+}
+pub fn confirm_computer_lock(test_profile: bool) -> Result<bool, String> {
     lock_computer_with(
         test_profile || std::env::var_os("BLINCHO_PROTOTYPE_TEST_DIR").is_some(),
-        native::request_lock,
+        || Ok(()),
         native::lock_confirmed,
         || std::thread::sleep(Duration::from_millis(50)),
     )

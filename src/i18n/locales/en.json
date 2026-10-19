@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Could not copy. Select the connection settings below.",
   "Подключение AI-клиентов": "AI client connections",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Allows reading status, settings and daily summaries, starting a break and controlling the timer. Access is limited to this computer and requires a token. Turning it off stops the server.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "The token grants control of Blincho. It changes when MCP is enabled again."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "The token grants control of Blincho. It changes when MCP is enabled again.",
+  "Уточнять присутствие камерой": "Use camera to confirm presence",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "After one minute without input and when no call is in progress, the camera checks whether you are present. Reading counts as work. Frames are processed only on your device.",
+  "Блокировать при подтверждённом отсутствии": "Lock when absence is confirmed",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Lock only after a camera check and a second check for input and an ongoing call. If the camera fails, locking is skipped.",
+  "Собирать счётчики ввода": "Collect input event counts",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Only local event counts in five-minute intervals. No text, apps or coordinates. Event frequency varies by device. These data do not provide a diagnosis.",
+  "Нажатия клавиш": "Keystrokes",
+  "Клики": "Clicks",
+  "Прокрутки": "Scrolls",
+  "Движения мыши": "Mouse movements",
+  "Профиль активности ввода": "Input activity profile",
+  "Скачать CSV": "Download CSV",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Allow input monitoring in system settings, then enable collection again.",
+  "Системный сбор ввода недоступен в этой среде.": "System-wide input collection is unavailable in this environment.",
+  "Удалить статистику ввода": "Delete input statistics",
+  "Не удалось удалить статистику ввода.": "Could not delete input statistics."
 }

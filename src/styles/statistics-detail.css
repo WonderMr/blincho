@@ -120,3 +120,8 @@
 .meeting-history-confirm p { margin-block: 0 .75rem; }
 .meeting-history-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
 .meeting-history-delete { margin-block-start: .35rem; }
+.statistics-input { border-top: 1px solid var(--border-subtle); padding-block: 1.25rem; }
+.input-activity-chart { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; height: 110px; margin: 1.5rem 0 2rem; }
+.input-activity-chart > div { position: relative; display: flex; align-items: flex-end; height: 100%; }
+.input-activity-chart i { display: block; width: 100%; background: var(--primary-color, #568b78); border-radius: 3px 3px 0 0; min-height: 1px; }
+.input-activity-chart span { position: absolute; top: 100%; font-size: .65rem; color: var(--text-muted); padding-top: .25rem; }

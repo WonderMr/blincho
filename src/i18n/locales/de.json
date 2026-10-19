@@ -556,5 +556,21 @@
   "Не удалось скопировать. Выделите настройки подключения ниже.": "Kopieren fehlgeschlagen. Markiere die Verbindungseinstellungen unten.",
   "Подключение AI-клиентов": "KI-Clients verbinden",
   "Позволяет читать состояние, настройки и итоги дня, запускать перерыв и управлять таймером. Доступ только с этого компьютера по токену. Выключение закрывает сервер.": "Ermöglicht das Lesen von Status, Einstellungen und Tagesübersichten sowie das Starten einer Pause und die Steuerung des Timers. Der Zugriff ist nur von diesem Computer aus mit einem Token möglich. Beim Ausschalten wird der Server beendet.",
-  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Das Token ermöglicht die Steuerung von Blincho. Es ändert sich, wenn MCP erneut eingeschaltet wird."
+  "Токен даёт доступ к управлению Blincho. При повторном включении он меняется.": "Das Token ermöglicht die Steuerung von Blincho. Es ändert sich, wenn MCP erneut eingeschaltet wird.",
+  "Уточнять присутствие камерой": "Anwesenheit mit der Kamera prüfen",
+  "После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.": "Nach einer Minute ohne Eingabe prüft die Kamera Ihre Anwesenheit, sofern kein Anruf läuft. Lesen zählt als Arbeit. Die Bilder werden ausschließlich auf Ihrem Gerät verarbeitet.",
+  "Блокировать при подтверждённом отсутствии": "Bei bestätigter Abwesenheit sperren",
+  "Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.": "Die Sperre erfolgt erst nach der Kameraprüfung und einer erneuten Prüfung auf Eingaben und laufende Anrufe. Bei einem Kamerafehler wird die Sperre übersprungen.",
+  "Собирать счётчики ввода": "Eingabeereignisse zählen",
+  "Только локальные счётчики событий по 5 минут. Без текста, приложений и координат. Частота событий зависит от устройства. Эти данные не устанавливают диагноз.": "Nur lokale Ereigniszähler in Fünf-Minuten-Intervallen. Keine Texte, Anwendungen oder Koordinaten. Die Ereignishäufigkeit hängt vom Gerät ab. Diese Daten ermöglichen keine Diagnose.",
+  "Нажатия клавиш": "Tastenanschläge",
+  "Клики": "Klicks",
+  "Прокрутки": "Scrollvorgänge",
+  "Движения мыши": "Mausbewegungen",
+  "Профиль активности ввода": "Eingabeaktivitätsprofil",
+  "Скачать CSV": "CSV herunterladen",
+  "Разрешите мониторинг ввода в настройках системы и включите сбор снова.": "Erlauben Sie die Eingabeüberwachung in den Systemeinstellungen und aktivieren Sie die Erfassung erneut.",
+  "Системный сбор ввода недоступен в этой среде.": "Die systemweite Erfassung von Eingabeereignissen ist in dieser Umgebung nicht verfügbar.",
+  "Удалить статистику ввода": "Eingabestatistik löschen",
+  "Не удалось удалить статистику ввода.": "Die Eingabestatistik konnte nicht gelöscht werden."
 }
