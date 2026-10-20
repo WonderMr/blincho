@@ -34,6 +34,9 @@ import { TransientNotice } from './components/TransientNotice';
 import { UpdateNotice } from './components/UpdateSettings';
 import { useUpdates } from './utils/updates';
 import { useLocalMcp } from './utils/localMcp';
+import { useAccountSync } from './utils/accountSync';
+import type { SharedBreak } from './utils/accountSync';
+import { applySyncSettings, mergeSyncStats } from './utils/syncData';
 import { buildMcpStats } from './utils/mcpStats';
 import { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities } from './utils/symbiote';
 import { updateDocumentSymbioteIcon } from './utils/symbioteIcons';
@@ -50,6 +53,7 @@ export const App: React.FC = () => {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const [allStats, setAllStats] = useState<DayStats[]>(loadAllStats);
+  const remoteStatsRef = useRef<DayStats[][]>([]);
   const mcpStats = useMemo(() => settings.localMcpEnabled ? buildMcpStats(allStats) : null, [allStats, settings.localMcpEnabled]);
   const [todayStats, setTodayStats] = useState<DayStats>(() => loadTodayStats(allStats));
   const [cvsResult, setCvsResult] = useState<CVSSurveyResult | null>(loadCVSResult);
@@ -96,6 +100,8 @@ export const App: React.FC = () => {
   const [meetingHistoryFeedback, setMeetingHistoryFeedback] = useState<'deleted' | 'failed' | null>(null);
   const [, publish] = useState(0);
   const breakIdRef = useRef<string | null>(null);
+  const sharedBreakRef = useRef<SharedBreak | null>(null);
+  const sharedRequestRef = useRef(false);
   const pendingBreakRef = useRef<{ eventId: string; deadlineMonotonicAt: number } | null>(null);
   const exerciseIdRef = useRef<string | null>(null);
   const exerciseStartPendingRef = useRef(false);
@@ -159,7 +165,8 @@ export const App: React.FC = () => {
   }, [symbioteBuild.mask, symbioteName]);
 
   const refreshStats = () => {
-    const stats = loadAllStats();
+    const local = loadAllStats();
+    const stats = remoteStatsRef.current.length ? mergeSyncStats(local, remoteStatsRef.current) : local;
     setTodayStats(loadTodayStats(stats));
     setAllStats(stats);
   };
@@ -178,7 +185,7 @@ export const App: React.FC = () => {
   const synchronizeTimer = () => {
     const generation = nativeHistoryConsentGenerationRef.current;
     const historyEnabled = settingsRef.current.meetingHistoryEnabled;
-    synchronizeNativeTimer(session, settingsRef.current, snapshot => {
+    synchronizeNativeTimer(session, sharedBreakRef.current ? { ...settingsRef.current, strictMode: true } : settingsRef.current, snapshot => {
       // Only the acknowledgement of this consent generation can open recording.
       if (!mountedRef.current || !historyEnabled || !settingsRef.current.meetingHistoryEnabled ||
         generation !== nativeHistoryConsentGenerationRef.current) return;
@@ -218,6 +225,8 @@ export const App: React.FC = () => {
     session.advance(Date.now());
     flushFocus();
     session.breakActive = false;
+    session.breakDeadlineAt = null;
+    sharedBreakRef.current = null;
     breakIdRef.current = null;
     if (!preservePending) pendingBreakRef.current = null;
     setIsBreakActive(false);
@@ -389,24 +398,39 @@ export const App: React.FC = () => {
     presenceInFlightRef.current = pending;
     return pending;
   };
-  const beginBreak = () => {
+  const beginLocalBreak = (shared: SharedBreak | null = null) => {
     if (!session.present || session.breakActive || session.exercising) return;
+    const duration = shared ? (shared.endAt - Date.now()) / 1000 : settingsRef.current.breakSeconds;
+    if (duration < 1) return;
     cameraAbortRef.current?.abort();
     session.advance(Date.now());
     flushFocus();
     session.breakActive = true;
+    session.breakDeadlineAt = shared?.endAt ?? null;
+    sharedBreakRef.current = shared;
     session.expiryPending = false;
     session.version += 1;
-    breakIdRef.current = nextEventId('break');
+    breakIdRef.current = shared ? `sync:${shared.id}` : nextEventId('break');
     pendingBreakRef.current = null;
     setNoticeMessage(null);
-    setActiveBreakSeconds(settingsRef.current.breakSeconds);
+    setActiveBreakSeconds(duration);
     soundSynth.playZenBowl();
     setIsBreakActive(true);
     sendDesktopCommand('setBreakFullscreen', () => window.electronAPI?.setBreakFullscreen?.(true));
-    sendDesktopCommand('bringToFront', () => window.electronAPI?.bringToFront?.({ alwaysOnTop: settingsRef.current.strictMode }));
-    sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(settingsRef.current.strictMode));
+    sendDesktopCommand('bringToFront', () => window.electronAPI?.bringToFront?.({ alwaysOnTop: !!shared || settingsRef.current.strictMode }));
+    sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(!!shared || settingsRef.current.strictMode));
     sync();
+  };
+  const beginBreak = () => {
+    if (sharedRequestRef.current || !session.present || session.breakActive || session.exercising) return;
+    sharedRequestRef.current = true;
+    const version = session.version;
+    void accountSync.startBreak(settingsRef.current.breakSeconds).then(sent => {
+      if (!sent && mountedRef.current && version === session.version) beginLocalBreak();
+    }).catch(() => {
+      // An unavailable relay must never disable this device's local break.
+      if (mountedRef.current && version === session.version) beginLocalBreak();
+    }).finally(() => { sharedRequestRef.current = false; });
   };
   const checkCameraAndLock = async (version: number, requireExpiry = false): Promise<boolean> => {
     const controller = new AbortController();
@@ -516,11 +540,11 @@ export const App: React.FC = () => {
     completeBreak(eventId, deadlineMonotonicAt);
   };
   const handleCloseBreakOverlay = async (eventId = breakIdRef.current) => {
-    if (settingsRef.current.strictMode || !eventId || breakIdRef.current !== eventId) return;
+    if (sharedBreakRef.current || settingsRef.current.strictMode || !eventId || breakIdRef.current !== eventId) return;
     if (mountedRef.current && breakIdRef.current === eventId) endBreak();
   };
   const handlePostponeBreak = async (minutes: number, eventId: string | null) => {
-    if (settingsRef.current.strictMode || !eventId || breakIdRef.current !== eventId || !session.breakActive) return;
+    if (sharedBreakRef.current || settingsRef.current.strictMode || !eventId || breakIdRef.current !== eventId || !session.breakActive) return;
     if (!mountedRef.current || breakIdRef.current !== eventId || !session.breakActive) return;
     session.advance(Date.now());
     flushFocus();
@@ -562,7 +586,7 @@ export const App: React.FC = () => {
     setNoticeMessage("Сброс отменён: прежний отсчёт восстановлен.");
     sync();
   };
-  const handleUpdateSettings = (nextSettings: AppSettings) => {
+  const handleUpdateSettings = (nextSettings: AppSettings, fromSync = false) => {
     const previous = settingsRef.current;
     let updated = { ...nextSettings };
     if (updated.timerPreset === previous.timerPreset &&
@@ -587,6 +611,7 @@ export const App: React.FC = () => {
     setSettings(updated);
     if (!updated.meetingHistoryEnabled) setCurrentMeetingApplications([]);
     saveSettings(cameraAccessPendingRef.current ? { ...updated, cameraLockEnabled: false, enhancedPresenceEnabled: false } : updated);
+    if (!fromSync) accountSync.settingsChanged(updated);
     if (updated.workMinutes !== previous.workMinutes || updated.timerPreset !== previous.timerPreset) {
       setNoticeMessage(null);
       pendingBreakRef.current = null;
@@ -596,7 +621,7 @@ export const App: React.FC = () => {
     }
     if (!updated.idleDetectionEnabled) setPresenceReason('idle', false);
     void samplePresence();
-    if (session.breakActive) sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(updated.strictMode));
+    if (session.breakActive) sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(!!sharedBreakRef.current || updated.strictMode));
     sync();
   };
   const handleClearMeetingHistory = async () => {
@@ -711,9 +736,30 @@ export const App: React.FC = () => {
   const handlersRef = useRef({ handleTriggerInstantBreak, handleTimerExpired, samplePresence, setPresenceReason, closeTechnique, handleCloseBreakOverlay, handleResetTimer, handleTogglePlay });
   handlersRef.current = { handleTriggerInstantBreak, handleTimerExpired, samplePresence, setPresenceReason, closeTechnique, handleCloseBreakOverlay, handleResetTimer, handleTogglePlay };
 
+  const accountSync = useAccountSync(settings.syncEnabled, {
+    snapshot: () => ({ settings: settingsRef.current, stats: loadAllStats() }),
+    settings: incoming => handleUpdateSettings(applySyncSettings(settingsRef.current, incoming), true),
+    stats: snapshots => {
+      const local = loadAllStats();
+      const stats = snapshots.length ? mergeSyncStats(local, snapshots) : local;
+      remoteStatsRef.current = snapshots;
+      if (mountedRef.current) { setTodayStats(loadTodayStats(stats)); setAllStats(stats); }
+    },
+    break: async (event, isCurrent) => {
+      sharedRequestRef.current = false;
+      if (!isCurrent() || !mountedRef.current || !settingsRef.current.syncEnabled || session.breakActive || session.exercising) return;
+      if (!await samplePresence(true) || !isCurrent() || !mountedRef.current || !settingsRef.current.syncEnabled) return;
+      if (settingsRef.current.meetingDetectionEnabled && hasMeetingDetection()) {
+        const meeting = await detectActiveMeeting();
+        if (meeting.inMeeting || !meeting.supported) return;
+      }
+      if (isCurrent() && mountedRef.current && settingsRef.current.syncEnabled && !session.exercising && event.endAt > Date.now()) beginLocalBreak(event);
+    },
+  });
+
   useLocalMcp(settings.localMcpEnabled, () => ({
     status: { isRunning: session.counting, isBreakActive: session.breakActive, breakElapsed: false,
-      strictMode: settingsRef.current.strictMode, isIdlePaused: !session.present, exercising: session.exercising,
+      strictMode: !!sharedBreakRef.current || settingsRef.current.strictMode, isIdlePaused: !session.present, exercising: session.exercising,
       secondsRemaining: Math.ceil(session.remainingMs / 1000), presenceReasons: [...session.reasons],
       cameraChecking: !!cameraAbortRef.current, timerVersion: session.version, breakEventId: breakIdRef.current },
     settings: { ...settingsRef.current },
@@ -1139,13 +1185,14 @@ export const App: React.FC = () => {
       {isBreakActive && (
         <BreakOverlay
           initialSeconds={activeBreakSeconds}
-          strictMode={settings.strictMode}
+          strictMode={!!sharedBreakRef.current || settings.strictMode}
           waitForNativeCompletion={hasNativeTimer()}
           onElapsed={deadlineMonotonicAt => handleBreakElapsed(breakEventId, deadlineMonotonicAt)}
           onClose={() => handleCloseBreakOverlay(breakEventId)}
           onPostpone={minutes => handlePostponeBreak(minutes, breakEventId)}
           onOpenExercises={async () => {
             if (!breakEventId || breakIdRef.current !== breakEventId) return;
+            if (sharedBreakRef.current) return;
             if (!settingsRef.current.strictMode) await handleCloseBreakOverlay(breakEventId);
             if (!mountedRef.current) return;
             await handleStartFullRoutine();
@@ -1169,6 +1216,7 @@ export const App: React.FC = () => {
           symbioteBuild={symbioteBuild}
           updates={updates}
           settings={settings}
+          accountSync={accountSync}
           onUpdateSettings={handleUpdateSettings}
           onCameraAccessPendingChange={handleCameraAccessPendingChange}
           onClose={() => setIsSettingsOpen(false)}

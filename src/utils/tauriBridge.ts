@@ -56,6 +56,9 @@ export function synchronizeNativeTimer(session: TimerSession, settings: AppSetti
     absenceLockEnabled: settings.absenceLockEnabled,
     autoTakeover: settings.autoTakeoverModal };
   commandQueue = commandQueue.then(async () => {
+    if (input.breakActive && session.breakDeadlineAt !== null) {
+      input.breakSeconds = Math.max(1, Math.min(1800, (session.breakDeadlineAt - Date.now()) / 1000));
+    }
     latest = await window.__TAURI__!.core.invoke<NativeTimerSnapshot>('configure_timer', { input });
     onConfigured?.(latest);
   }).catch(error => console.warn('Blincho: Native timer update failed:', error));

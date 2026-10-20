@@ -1,0 +1,188 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const { once } = require('node:events');
+const { createProtocolServer } = require('./support/syncProtocolServer.cjs');
+// Operators with the private backend checked out can also run the same client
+// suite against its real factory by supplying an absolute server.cjs path.
+const createSyncServer = process.env.BLINCHO_BACKEND_SOURCE
+  ? require(path.resolve(process.env.BLINCHO_BACKEND_SOURCE)).createSyncServer : createProtocolServer;
+
+const root = path.resolve(__dirname, '..');
+const cache = path.join(root, 'node_modules', '.cache');
+fs.mkdirSync(cache, { recursive: true });
+const build = fs.mkdtempSync(path.join(cache, 'sync-client-test-'));
+const config = path.join(build, 'tsconfig.json');
+fs.writeFileSync(config, JSON.stringify({ files: [path.join(root, 'src/utils/accountSync.ts'), path.join(root, 'src/utils/storage.ts')],
+  compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true,
+    skipLibCheck: true, esModuleInterop: true, rootDir: path.join(root, 'src'), outDir: build } }));
+execFileSync(process.execPath, [path.join(path.dirname(require.resolve('typescript/package.json')), 'bin/tsc'), '-p', config], { stdio: 'inherit' });
+const { AccountSyncSession, validateSharedBreak } = require(path.join(build, 'utils/accountSync.js'));
+const { generateRecoveryKey, deriveSyncKey, encryptSync, decryptSync } = require(path.join(build, 'utils/syncCrypto.js'));
+const { applySyncSettings, mergeSyncStats } = require(path.join(build, 'utils/syncData.js'));
+const { DEFAULT_SETTINGS, loadSettings } = require(path.join(build, 'utils/storage.js'));
+process.on('exit', () => fs.rmSync(build, { recursive: true, force: true }));
+const invitation = 'test-registration-code-for-local-only';
+const password = 'test password for account sync';
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function until(check) {
+  const end = Date.now() + 7000;
+  while (!check()) { assert(Date.now() < end, 'condition timed out'); await sleep(30); }
+}
+function storage() {
+  const values = new Map();
+  return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)), removeItem: key => values.delete(key), clear: () => values.clear(), key: i => [...values.keys()][i] ?? null, get length() { return values.size; } };
+}
+function device(url, store, settings = {}, stats = []) {
+  const state = { settings: { ...DEFAULT_SETTINGS, ...settings }, stats, remote: [], breaks: [], statuses: [], applied: 0 };
+  const requests = [];
+  const client = new AccountSyncSession({ snapshot: () => ({ settings: state.settings, stats: state.stats }),
+    settings: value => { state.settings = applySyncSettings(state.settings, value); state.applied++; },
+    stats: values => { state.remote = values; }, break: event => { state.breaks.push({ event, at: Date.now() }); }, status: value => state.statuses.push(value),
+  }, store, url, async (input, init) => { requests.push({ input, body: init?.body }); return fetch(input, init); });
+  return { client, state, requests };
+}
+
+test('sync is default off and malformed stored preferences cannot opt in', () => {
+  const previous = global.localStorage; global.localStorage = storage();
+  try {
+    assert.equal(loadSettings().syncEnabled, false);
+    for (const value of [null, 1, 'true', {}, []]) {
+      global.localStorage.setItem('myeyes_settings_v1', JSON.stringify({ syncEnabled: value }));
+      assert.equal(loadSettings().syncEnabled, false);
+    }
+  } finally { global.localStorage = previous; }
+});
+
+test('both document and Tauri CSP permit only the intended sync service', () => {
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const policy = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
+  const nativePolicy = JSON.parse(fs.readFileSync(path.join(root, 'src-tauri/tauri.conf.json'))).app.security.csp;
+  for (const csp of [policy, nativePolicy]) {
+    const sources = csp.split(';').map(directive => directive.trim()).find(directive => directive.startsWith('connect-src ')).split(/\s+/).slice(1);
+    assert(sources.includes('https://back.blincho.app'));
+    assert(!sources.includes('*') && !sources.includes('https:') && !sources.includes('http:'));
+  }
+});
+
+test('break messages reject stale, malformed, future and excessive locks', () => {
+  const now = Date.now();
+  const event = { v: 1, id: 'a'.repeat(32), deviceId: 'b'.repeat(32), createdAt: now, startAt: now + 2500, endAt: now + 22_500 };
+  assert.deepEqual(validateSharedBreak(event, now), event);
+  for (const patch of [{ endAt: now }, { startAt: now + 6000 }, { endAt: now + 1_900_000 }, { createdAt: now - 700000 }, { id: '../lock' }, { extra: 1 }, { startAt: NaN }]) {
+    assert.throws(() => validateSharedBreak({ ...event, ...patch }, now));
+  }
+});
+
+test('a successful but expired relay acknowledgement rejects so App can fall back locally', async () => {
+  const accountId = 'c'.repeat(32), secret = generateRecoveryKey();
+  const key = await deriveSyncKey(secret, accountId);
+  const keyCheck = await encryptSync(key, accountId, 'key-check', { check: 'blincho-sync-v1' });
+  const originalNow = Date.now;
+  let now = originalNow(), callbacks = 0;
+  const client = new AccountSyncSession({ snapshot: () => ({ settings: DEFAULT_SETTINGS, stats: [] }), settings() {}, stats() {},
+    break() { callbacks++; }, status() {} }, storage(), 'http://127.0.0.1:47832', async (url, init) => {
+      let payload = {};
+      if (url.endsWith('/v1/login')) payload = { accountId, token: 'a'.repeat(43), keyCheck };
+      else if (url.endsWith('/v1/state')) payload = { documents: [] };
+      else if (init.method === 'PUT') payload = { revision: 1 };
+      else if (url.includes('/v1/events?')) payload = { instance: 'test', events: [], cursor: 0 };
+      else if (url.endsWith('/v1/events')) { now += 4000; payload = { seq: 1 }; }
+      return new Response(JSON.stringify(payload), { status: 200 });
+    });
+  try {
+    Date.now = () => now;
+    await client.connect('login', 'owner@example.test', password, secret, '');
+    await assert.rejects(() => client.publishBreak(1), /delivery expired/);
+    assert.equal(callbacks, 0);
+  } finally { client.close(); Date.now = originalNow; }
+});
+
+test('two account devices converge encrypted settings and snapshots, schedule one shared break, and retain local consent', async () => {
+  const server = createSyncServer({ registrationCode: invitation, limits: { authEmailRate: 100, authIpRate: 100 } });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const secret = generateRecoveryKey();
+  const localA = [{ date: '2026-10-20', breaksCompleted: 2, exercisesCompleted: 1, focusMinutes: 5, techniqueCounts: {}, meetings: [{ start: 1, end: 2, app: 'private' }] }];
+  const localB = [{ date: '2026-10-20', breaksCompleted: 1, exercisesCompleted: 0, focusMinutes: 3, techniqueCounts: {} }];
+  const aStore = storage(), bStore = storage();
+  const a = device(url, aStore, { colorPalette: 'ocean' }, localA);
+  const b = device(url, bStore, { cameraLockEnabled: true, strictMode: true, meetingHistoryEnabled: true }, localB);
+  const clients = [a.client, b.client];
+  let token;
+  try {
+    await a.client.connect('register', 'owner@example.test', password, secret, invitation);
+    await a.client.tick();
+    await b.client.connect('login', 'owner@example.test', password, secret, '');
+    await until(() => b.state.settings.colorPalette === 'ocean');
+    assert.equal(b.state.settings.cameraLockEnabled, true);
+    assert.equal(b.state.settings.strictMode, true);
+    assert.equal(b.state.settings.meetingHistoryEnabled, true);
+    assert.equal(mergeSyncStats(b.state.stats, b.state.remote)[0].focusMinutes, 8);
+    assert.equal(mergeSyncStats(b.state.stats, b.state.remote)[0].breaksCompleted, 3);
+    assert.equal(b.state.remote[0][0].meetings, undefined);
+    const before = JSON.stringify(b.state.stats);
+    await b.client.tick();
+    assert.equal(mergeSyncStats(b.state.stats, b.state.remote)[0].focusMinutes, 8);
+    assert.equal(JSON.stringify(b.state.stats), before, 'display merging never rewrites local counters');
+
+    const login = await fetch(url + '/v1/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'owner@example.test', password }) }).then(r => r.json());
+    token = login.token;
+    const state = await fetch(url + '/v1/state', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
+    const key = await deriveSyncKey(secret, login.accountId);
+    for (const doc of state.documents) {
+      const value = await decryptSync(key, login.accountId, doc.id === 'settings' ? 'settings' : doc.id.replace('_', '-'), doc.envelope);
+      assert(!JSON.stringify(value).includes('private'));
+    }
+    assert(!JSON.stringify(a.requests).includes(secret), 'recovery secret never reaches the server');
+    assert(!JSON.stringify(b.requests).includes(secret));
+    const settingsWrites = target => target.requests.filter(r => r.input.endsWith('/v1/state/settings') && r.body).length;
+    const beforePrivacy = settingsWrites(a);
+    a.state.settings = { ...a.state.settings, cameraLockEnabled: true };
+    a.client.settingsChanged(a.state.settings); await a.client.tick();
+    assert.equal(settingsWrites(a), beforePrivacy, 'privacy-only local changes never publish stale preferences');
+    b.state.settings = { ...b.state.settings, colorPalette: 'lavender' }; b.client.settingsChanged(b.state.settings);
+    await b.client.tick(); await until(() => settingsWrites(b) > 0);
+    a.state.settings = { ...a.state.settings, soundVolume: 40 }; a.client.settingsChanged(a.state.settings);
+    await a.client.tick(); await until(() => a.state.settings.colorPalette === 'lavender');
+    assert.equal(a.state.settings.soundVolume, 40, 'local changed field survives merging with remote fields');
+    const mergedState = await fetch(url + '/v1/state', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
+    const prefs = await decryptSync(key, login.accountId, 'settings', mergedState.documents.find(doc => doc.id === 'settings').envelope);
+    assert.equal(prefs.colorPalette, 'lavender'); assert.equal(prefs.soundVolume, 40);
+    await a.client.publishBreak(2);
+    await a.client.publishBreak(2);
+    await until(() => a.state.breaks.length && b.state.breaks.length);
+    assert.equal(a.state.breaks.length, 1);
+    assert.equal(b.state.breaks.length, 1);
+    assert.equal(a.state.breaks[0].event.id, b.state.breaks[0].event.id);
+    assert.equal(a.state.breaks[0].event.endAt, b.state.breaks[0].event.endAt);
+    assert(Math.abs(a.state.breaks[0].at - b.state.breaks[0].at) < 1200);
+    assert(a.state.breaks[0].at >= a.state.breaks[0].event.startAt - 20);
+    const wrong = device(url, storage()); clients.push(wrong.client);
+    await assert.rejects(() => wrong.client.connect('login', 'owner@example.test', password, generateRecoveryKey(), ''), /key mismatch/);
+    wrong.client.close();
+    assert.equal(wrong.state.remote.length, 0);
+    assert.equal(wrong.state.applied, 0);
+
+    b.client.close();
+    const reconnected = device(url, bStore, {}, localB); clients.push(reconnected.client);
+    await reconnected.client.connect('login', 'owner@example.test', password, secret, '');
+    await reconnected.client.tick();
+    await sleep(100);
+    assert.equal(reconnected.state.breaks.length, 0, 'a remembered command is not replayed after reconnect');
+    assert.equal(mergeSyncStats(reconnected.state.stats, reconnected.state.remote)[0].focusMinutes, 8);
+
+    await a.client.publishBreak(2);
+    await until(() => a.requests.filter(r => r.input.endsWith('/v1/events') && r.body).length >= 2);
+    a.client.close();
+    await sleep(2600);
+    assert.equal(a.state.breaks.length, 1, 'logout cancels queued remote locks');
+    await reconnected.client.deleteAccount(password);
+  } finally {
+    for (const client of clients) client.close();
+    if (token) await fetch(url + '/v1/logout', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: '{}' }).catch(() => {});
+    server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+  }
+});

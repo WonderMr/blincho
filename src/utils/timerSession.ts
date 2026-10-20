@@ -30,6 +30,7 @@ export function normalizeTimerSettings(settings: AppSettings): AppSettings {
     absenceLockEnabled: boolean(settings.absenceLockEnabled, false),
     inputActivityEnabled: boolean(settings.inputActivityEnabled, false),
     localMcpEnabled: boolean(settings.localMcpEnabled, false),
+    syncEnabled: boolean(settings.syncEnabled, false),
     strictModeIgnoreIdle: false,
   };
 }
@@ -45,6 +46,8 @@ export class TimerSession {
   remainingMs: number;
   manualPaused = false;
   breakActive = false;
+  // An opt-in shared break carries one wall-clock deadline across devices.
+  breakDeadlineAt: number | null = null;
   exercising = false;
   expiryPending = false;
   version = 0;
