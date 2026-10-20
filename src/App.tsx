@@ -430,6 +430,10 @@ export const App: React.FC = () => {
   const beginBreak = () => {
     if (sharedRequestRef.current && sharedRequestRef.current.version !== session.version) clearSharedRequest();
     if (sharedRequestRef.current || !session.present || session.breakActive || session.exercising) return;
+    if (!settingsRef.current.syncEnabled || accountSync.account === null || accountSync.status === 'connecting') {
+      beginLocalBreak();
+      return;
+    }
     const request = { version: session.version, fallback: null as ReturnType<typeof setTimeout> | null };
     sharedRequestRef.current = request;
     let fallingBack = false;
