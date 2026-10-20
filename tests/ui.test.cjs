@@ -74,7 +74,11 @@ navigatorStub.mediaDevices = { getUserMedia() { throw new Error('Settings must n
 window.electronAPI = undefined;
 render(settingsElement());
 assert.equal(reactProps(cameraToggle()).disabled, true, 'camera support alone cannot enable OS locking');
-window.electronAPI = { lockComputer() { throw new Error('Settings must not lock the computer'); } };
+window.electronAPI = { isElectron: true, meetingDetectionSupported: false, lockComputer() { throw new Error('Settings must not lock the computer'); } };
+render(settingsElement());
+assert.equal(reactProps(cameraToggle()).disabled, true, 'camera locking requires call-detection capability');
+assert(host.textContent.includes('Детекция встреч недоступна'));
+window.electronAPI.meetingDetectionSupported = true;
 render(settingsElement());
 assert.equal(reactProps(cameraToggle()).disabled, false);
 assert.equal(reactProps(cameraToggle()).checked, false);
@@ -92,7 +96,7 @@ render(null); render(settingsElement());
 assert.equal(reactProps(cameraToggle()).checked, false, 'saved camera opt-out survives modal reopening');
 window.electronAPI = undefined; navigatorStub.mediaDevices = undefined;
 render(null);
-results.push('camera locking requires desktop and camera capabilities, explains local privacy and permissions, and preserves the opt-out without requesting camera access');
+results.push('camera locking requires desktop, camera and call-detection capabilities, explains local privacy and permissions, and preserves the opt-out without requesting camera access');
 
 let selected;
 render(React.createElement(ExerciseLibrary, { onSelectTechnique: item => { selected = item; }, onStartFullRoutine: noop }));
