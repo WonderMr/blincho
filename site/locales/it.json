@@ -147,5 +147,6 @@
   "release.1.8.14": "MCP locale facoltativo collega i client IA allo stato del timer, alle impostazioni, ai totali di oggi e alle azioni sul timer. I controlli di presenza con la videocamera vengono eseguiti solo dopo la fine della pausa a tempo.",
   "release.1.8.15": "MCP locale ora fornisce statistiche per giorno, settimana di calendario o intervallo di date, con le date dei dati disponibili e le lacune visibili. La posizione e le dimensioni della finestra vengono conservate dopo blocco, sospensione e pause.",
   "release.1.10.0": "L’aspetto e il nome dipendono dalle funzioni attivate. Il collegamento sul desktop segue la tua configurazione.",
-  "release.1.10.1": "L’aspetto e il nome dipendono dalle funzioni attivate. Il collegamento sul desktop segue la tua configurazione. Un indicatore della fotocamera sull’icona di Blincho mostra quando è in uso e scompare al termine dell’acquisizione."
+  "release.1.10.1": "L’aspetto e il nome dipendono dalle funzioni attivate. Il collegamento sul desktop segue la tua configurazione. Un indicatore della fotocamera sull’icona di Blincho mostra quando è in uso e scompare al termine dell’acquisizione.",
+  "release.1.10.2": "I controlli automatici con la fotocamera vengono saltati durante le chiamate rilevate e si interrompono se viene rilevata una chiamata durante il controllo."
 }

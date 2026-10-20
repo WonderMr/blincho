@@ -629,30 +629,34 @@ function invalidateMeetingCache() {
 function runMeetingProbe(file, args, matches) {
   return new Promise(resolve => {
     execFile(file, args, { timeout: 1000, maxBuffer: 256 * 1024, encoding: 'utf8' }, (error, stdout) => {
-      resolve(!error && matches(stdout || ''));
+      const noMatch = file === '/usr/bin/pgrep' && error?.code === 1;
+      resolve(error && !noMatch ? null : matches(stdout || ''));
     });
   });
 }
 
-ipcMain.handle('check-meeting-active', async () => {
+ipcMain.handle('check-meeting-active', async (_event, options) => {
+  const fresh = options?.fresh === true;
   if (process.platform !== 'darwin') return { inMeeting: false, supported: false };
-  if (suspended || locked || isQuitting) return { inMeeting: false, supported: true };
-  if (meetingCache && performance.now() - meetingCache.at < MEETING_CACHE_MS) return meetingCache.value;
-  if (meetingCheck) return meetingCheck;
+  if (suspended || locked || isQuitting) return { inMeeting: false, supported: !fresh };
+  if (!fresh && meetingCache && performance.now() - meetingCache.at < MEETING_CACHE_MS) return meetingCache.value;
+  if (!fresh && meetingCheck) return meetingCheck;
   const generation = meetingGeneration;
-  meetingCheck = (async () => {
-    // No shell process; avoid a second native probe when an assertion suffices.
+  const check = (async () => {
     const activeAssertion = await runMeetingProbe('/usr/bin/pmset', ['-g', 'assertions'], hasActiveMeetingAssertion);
-    if (generation !== meetingGeneration || suspended || locked || isQuitting) return { inMeeting: false, supported: true };
-    const inMeeting = activeAssertion || await runMeetingProbe('/usr/bin/pgrep', ['-i', 'CptHost'], output => /^\d+$/m.test(output.trim()));
-    if (generation !== meetingGeneration || suspended || locked || isQuitting) return { inMeeting: false, supported: true };
-    const value = { inMeeting, supported: true,
+    if (generation !== meetingGeneration || suspended || locked || isQuitting) return { inMeeting: false, supported: !fresh };
+    const zoom = activeAssertion === true ? false : await runMeetingProbe('/usr/bin/pgrep', ['-i', 'CptHost'], output => /^\d+$/m.test(output.trim()));
+    if (generation !== meetingGeneration || suspended || locked || isQuitting) return { inMeeting: false, supported: !fresh };
+    const inMeeting = activeAssertion === true || zoom === true;
+    const value = { inMeeting, supported: inMeeting || (activeAssertion !== null && zoom !== null),
       details: inMeeting ? 'Обнаружен процесс встречи или активное удержание экрана' : undefined };
-    meetingCache = { at: performance.now(), value };
+    // Camera safety probes never reuse or replace the general UI cache.
+    if (!fresh) meetingCache = { at: performance.now(), value };
     return value;
   })();
-  try { return await meetingCheck; }
-  finally { meetingCheck = null; }
+  if (!fresh) meetingCheck = check;
+  try { return await check; }
+  finally { if (meetingCheck === check) meetingCheck = null; }
 });
 
 app.whenReady().then(() => {

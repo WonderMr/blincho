@@ -94,7 +94,7 @@ async function stop(app) {
   }
 }
 
-function installProbe(returnOutsideRenderer) {
+function installProbe(returnOutsideRenderer, holdFrames) {
   return `(()=>{window.cameraCompletionProbe={acquisitions:0,stops:0,frames:0,locks:0,frameHashes:[],stationaryEvents:0,inputEvents:[],inputEventsAfterAcquisition:0,idleReads:[]};
     const probe=window.cameraCompletionProbe;
     try{
@@ -110,7 +110,7 @@ function installProbe(returnOutsideRenderer) {
       });
       Object.defineProperty(HTMLMediaElement.prototype,'srcObject',{configurable:true,get(){return fakeVideos.get(this)||descriptor.get.call(this)},set(value){
         if(value?.blinchoSynthetic){fakeVideos.set(this,value);this.blinchoSynthetic=true;
-          Object.defineProperties(this,{videoWidth:{get:()=>640},videoHeight:{get:()=>480},readyState:{get:()=>4},currentTime:{get:()=>performance.now()/1000}});
+          Object.defineProperties(this,{videoWidth:{get:()=>640},videoHeight:{get:()=>480},readyState:{get:()=>${holdFrames}?0:4},currentTime:{get:()=>performance.now()/1000}});
           this.play=async()=>{};this.pause=()=>{};
         }else{fakeVideos.delete(this);descriptor.set.call(this,value)}
       }});
@@ -144,7 +144,7 @@ function installProbe(returnOutsideRenderer) {
   })()`;
 }
 
-async function scenario(base, { name, strictMode, returnOutsideRenderer = false }) {
+async function scenario(base, { name, strictMode, returnOutsideRenderer = false, meetingBefore = false, meetingDuring = false }) {
   const directory = fs.mkdtempSync(path.join(base, name + '-'));
   const source = path.join(directory, 'legacy.json');
   fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date().toISOString(), entries: {
@@ -171,7 +171,7 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
       'native renderer readiness');
     assert.equal(initial.pid, child.pid);
     assert.equal(initial.updates.currentVersion, expectedVersion, 'Executable version must match package.json');
-    await control(app, 'eval', { script: installProbe(returnOutsideRenderer) });
+    await control(app, 'eval', { script: installProbe(returnOutsideRenderer, meetingDuring) });
     const setup = await inspect(app);
     assert.equal(setup.probe.installed, true, JSON.stringify(setup));
     assert.equal(setup.settings.cameraLockEnabled, true);
@@ -183,6 +183,7 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
     countdown.startSnapshot = started;
     countdown.nativeDeadline = deadline;
     assert(deadline > Date.now(), 'Native countdown must still be active');
+    if (meetingBefore) await control(app, 'meeting', { active: true, applications: ['Zoom'] });
     const completed = await until(app, app.read, value => !value.timer.breakActive, 'real native break completion', 10_000);
     const completionObservedAt = Date.now();
     countdown.completionSnapshot = completed;
@@ -190,23 +191,36 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
     countdown.completionObservedMonotonicAt = performance.now();
     assert(completionObservedAt >= deadline, 'Camera capture must follow the native countdown');
     const end = Date.now() + 25_000;
-    let observed;
+    let observed, callInjected = false;
     do {
       observed = await inspect(app);
-      if (observed.probe.stops === 1) break;
+      if (meetingDuring && !callInjected && observed.probe.acquisitions === 1) {
+        await control(app, 'meeting', { active: true, applications: ['Zoom'] });
+        callInjected = true;
+      }
+      if (observed.probe.stops === 1 || (meetingBefore && Date.now() > completionObservedAt + 4000)) break;
       await sleep(150);
     } while (Date.now() < end);
-    assert.equal(observed.probe.acquisitions, 1, JSON.stringify(observed));
-    assert(observed.probe.acquiredWallAt >= deadline, 'Camera acquisition cannot precede the native deadline');
-    assert.equal(observed.probe.frames, 3, 'Bundled local detector must sample three frames');
-    assert.equal(new Set(observed.probe.frameHashes).size, 3, 'Every captured frame must have distinct pixels');
-    assert.equal(observed.probe.stops, 1, 'Synthetic camera track must be released');
-    await until(app, app.read, value => value.trayPreview?.cameraIndicatorActive === false && value.trayPreview.cameraIndicatorRestores === 1, 'native camera badge restoration', 5_000);
-    assert.equal(app.read().trayPreview.cameraIndicatorActivations, 1, 'The real native tray must show the camera badge during capture');
+    const captures = meetingBefore ? 0 : 1;
+    assert.equal(observed.probe.acquisitions, captures, JSON.stringify(observed));
+    if (captures) {
+      assert(observed.probe.acquiredWallAt >= deadline, 'Camera acquisition cannot precede the native deadline');
+      assert.equal(observed.probe.stops, 1, 'Synthetic camera track must be released');
+      assert.equal(observed.probe.trackState, 'ended');
+      if (meetingDuring) {
+        assert.equal(callInjected, true, 'Call must begin while the camera stream is live');
+        assert.equal(observed.probe.frames, 0, 'Call cancellation must release a pending stream without sampling');
+      } else {
+        assert.equal(observed.probe.frames, 3, 'Bundled local detector must sample three frames');
+        assert.equal(new Set(observed.probe.frameHashes).size, 3, 'Every captured frame must have distinct pixels');
+        assert.equal(observed.probe.dispatchedStationary, true, 'Stationary mousemove must occur during capture');
+        assert(observed.probe.stationaryEvents >= 1, 'Capture must survive the stationary mousemove');
+      }
+    }
+    await until(app, app.read, value => value.trayPreview?.cameraIndicatorActive === false
+      && value.trayPreview.cameraIndicatorRestores === captures, 'native camera badge restoration', 5_000);
+    assert.equal(app.read().trayPreview.cameraIndicatorActivations, captures, 'Native camera badge must match camera ownership');
     assert.equal(app.read().trayPreview.trayIconError, null, 'Camera badge application must succeed on macOS');
-    assert.equal(observed.probe.trackState, 'ended');
-    assert.equal(observed.probe.dispatchedStationary, true, 'Stationary mousemove must occur during capture');
-    assert(observed.probe.stationaryEvents >= 1, 'Capture must survive the stationary mousemove');
     assert.equal(observed.dialog, false, 'Completed break overlay must be removed');
     // Track cleanup precedes the final presence/idle reads. Observe subsequent
     // native ticks to prove the decision and its one-shot behavior have settled.
@@ -215,8 +229,8 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
     observed = await inspect(app);
     assert.equal(app.read().strict, false, 'Completed break must release the native strict guard');
     assert.equal(app.read().strictShieldCount, 0, 'Completed break must remove native strict shields');
-    assert.equal(observed.probe.acquisitions, 1, 'Later native ticks must not reopen the camera');
-    assert.equal(observed.probe.locks, returnOutsideRenderer ? 0 : 1, JSON.stringify(observed));
+    assert.equal(observed.probe.acquisitions, captures, 'Later native ticks must not reopen the camera');
+    assert.equal(observed.probe.locks, returnOutsideRenderer || meetingBefore || meetingDuring ? 0 : 1, JSON.stringify(observed));
     if (returnOutsideRenderer) {
       assert(observed.probe.returnedAt > observed.probe.acquiredAt + 1000, 'System input must occur after capture began');
       // Input during the preceding break cannot cancel a future camera check.
@@ -226,7 +240,7 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false 
       assert(observed.probe.idleReads.some(read => read.at >= observed.probe.returnedAt && read.idle < 1),
         'Fresh system idle must be read after the external return');
     }
-    result = { name, status: 'passed', strictMode, returnOutsideRenderer, version: initial.updates.currentVersion,
+    result = { name, status: 'passed', strictMode, returnOutsideRenderer, meetingBefore, meetingDuring, version: initial.updates.currentVersion,
       executable, profile: directory, pid: child.pid, nativeBreakDeadline: deadline, completionObservedAt, probe: observed.probe,
       cameraTray: app.read().trayPreview, realWKWebView: true, realNativeTimer: true, realLocalDetector: true };
   } catch (error) {
@@ -268,6 +282,8 @@ async function main() {
   console.log('Native camera completion artifacts: ' + base);
   const scenarios = [];
   for (const options of [
+    { name: 'call-before-completion', strictMode: false, meetingBefore: true },
+    { name: 'call-during-capture', strictMode: false, meetingDuring: true },
     { name: 'normal-completion', strictMode: false },
     { name: 'strict-completion', strictMode: true },
     { name: 'strict-outside-return', strictMode: true, returnOutsideRenderer: true },

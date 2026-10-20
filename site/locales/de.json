@@ -147,5 +147,6 @@
   "release.1.8.14": "Optionales lokales MCP verbindet KI-Clients mit Timerstatus, Einstellungen, heutigen Summen und Timeraktionen. Anwesenheitsprüfungen per Kamera laufen erst nach dem Ende der zeitgesteuerten Pause.",
   "release.1.8.15": "Lokales MCP liefert jetzt Statistiken nach Tag, Kalenderwoche oder Datumsbereich, mit Datumsangaben zu verfügbaren Daten und sichtbaren Lücken. Fensterposition und -größe bleiben nach Sperren, Ruhezustand und Pausen erhalten.",
   "release.1.10.0": "Aussehen und Name hängen von den aktivierten Funktionen ab. Die Desktop-Verknüpfung passt sich deiner Konfiguration an.",
-  "release.1.10.1": "Aussehen und Name hängen von den aktivierten Funktionen ab. Die Desktop-Verknüpfung passt sich deiner Konfiguration an. Ein Kamerasymbol im Infobereich zeigt, wann Blincho die Kamera verwendet, und verschwindet nach der Aufnahme."
+  "release.1.10.1": "Aussehen und Name hängen von den aktivierten Funktionen ab. Die Desktop-Verknüpfung passt sich deiner Konfiguration an. Ein Kamerasymbol im Infobereich zeigt, wann Blincho die Kamera verwendet, und verschwindet nach der Aufnahme.",
+  "release.1.10.2": "Automatische Kameraprüfungen werden bei erkannten Anrufen übersprungen und abgebrochen, wenn während der Prüfung ein Anruf erkannt wird."
 }

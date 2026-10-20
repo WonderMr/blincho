@@ -730,9 +730,11 @@ async fn check_meeting_active(app: tauri::AppHandle) -> Result<platform::Meeting
             || timer.snapshot.absence_epoch != absence_epoch
             || !timer.snapshot.reasons.is_empty()
         {
-            platform::MeetingStatus::inactive(status.supported)
-        } else {
+            platform::MeetingStatus::inactive(false)
+        } else if timer.observe_meeting_if_current(epoch, Utc::now().timestamp_millis(), &status) {
             status
+        } else {
+            platform::MeetingStatus::inactive(false)
         }
     })
     .await

@@ -57,7 +57,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSystemIdleTime: () => ipcRenderer.invoke('get-system-idle-time'),
   getPowerState: () => ipcRenderer.invoke('get-power-state'),
   lockComputer: () => ipcRenderer.invoke('lock-computer'),
-  checkMeetingActive: () => ipcRenderer.invoke('check-meeting-active'),
+  checkMeetingActive: options => ipcRenderer.invoke('check-meeting-active', options),
   setStrictLock: (flag) => {
     ipcRenderer.send('set-strict-lock', flag);
   },

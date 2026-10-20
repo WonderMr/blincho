@@ -147,5 +147,6 @@
   "release.1.8.14": "Opcjonalny lokalny MCP łączy klientów AI ze stanem minutnika, ustawieniami, dzisiejszymi sumami i działaniami minutnika. Kontrole obecności kamerą uruchamiają się dopiero po zakończeniu przerwy odmierzonej przez minutnik.",
   "release.1.8.15": "Lokalny MCP udostępnia teraz statystyki według dnia, tygodnia kalendarzowego lub zakresu dat, z datami dostępnych danych i widocznymi lukami. Pozycja i rozmiar okna są zachowywane po blokadzie, uśpieniu i przerwach.",
   "release.1.10.0": "Wygląd i nazwa zależą od włączonych funkcji. Skrót na pulpicie zmienia się wraz z konfiguracją.",
-  "release.1.10.1": "Wygląd i nazwa zależą od włączonych funkcji. Skrót na pulpicie zmienia się wraz z konfiguracją. Oznaczenie kamery na ikonie Blincho pokazuje, kiedy aplikacja używa kamery, i znika po zakończeniu przechwytywania."
+  "release.1.10.1": "Wygląd i nazwa zależą od włączonych funkcji. Skrót na pulpicie zmienia się wraz z konfiguracją. Oznaczenie kamery na ikonie Blincho pokazuje, kiedy aplikacja używa kamery, i znika po zakończeniu przechwytywania.",
+  "release.1.10.2": "Automatyczne kontrole kamerą są pomijane podczas wykrytych połączeń i przerywane, jeśli połączenie zostanie wykryte w trakcie kontroli."
 }
