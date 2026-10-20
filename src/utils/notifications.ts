@@ -21,7 +21,7 @@ declare global {
       setBreakFullscreen?: (flag: boolean) => void;
       minimizeToTray?: () => void;
       getSystemIdleTime?: () => Promise<number>;
-      checkMeetingActive?: () => Promise<{ inMeeting: boolean; details?: string; supported?: boolean }>;
+      checkMeetingActive?: (options?: { fresh?: boolean }) => Promise<{ inMeeting: boolean; details?: string; supported?: boolean }>;
       meetingDetectionSupported?: boolean;
       getPowerState?: () => Promise<{ suspended: boolean; locked: boolean }>;
       lockComputer?: () => Promise<boolean>;

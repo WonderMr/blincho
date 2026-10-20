@@ -162,6 +162,7 @@ impl Timer {
         if self.input.as_ref().is_none_or(|old| {
             old.enhanced_presence_enabled != input.enhanced_presence_enabled
                 || old.absence_lock_enabled != input.absence_lock_enabled
+                || old.camera_lock_enabled != input.camera_lock_enabled
         }) {
             self.invalidate_camera_presence();
             self.snapshot.live_meeting_status = None;
@@ -217,7 +218,8 @@ impl Timer {
         self.snapshot.exercising = input.exercising && self.snapshot.reasons.is_empty();
         self.snapshot.live_meeting_enabled = input.meeting_enabled
             || input.meeting_history_enabled
-            || input.enhanced_presence_enabled;
+            || input.enhanced_presence_enabled
+            || input.camera_lock_enabled;
         self.input = Some(input);
         self.last_at = now;
         Ok(())
@@ -746,6 +748,7 @@ mod tests {
         let mut timer = Timer::new(0);
         let mut settings = input();
         settings.meeting_history_enabled = true;
+        settings.camera_lock_enabled = false;
         settings.manual_paused = true;
         timer.configure(settings, 0).unwrap();
         timer
@@ -754,6 +757,7 @@ mod tests {
         let mut timer = Timer::new(0);
         let mut settings = input();
         settings.meeting_enabled = true;
+        settings.camera_lock_enabled = false;
         settings.manual_paused = true;
         timer.configure(settings, 0).unwrap();
         timer
@@ -1032,6 +1036,7 @@ mod tests {
         assert_eq!(meeting_intervals(&timer), [(250, 500, "Zoom")]);
 
         let mut settings = input();
+        settings.camera_lock_enabled = false;
         settings.meeting_enabled = true;
         settings.strict_mode = false;
         settings.remaining_ms = 0.;
@@ -1569,6 +1574,46 @@ mod tests {
         config.absence_lock_enabled = false;
         timer.configure(config, 5000).unwrap();
         assert!(!timer.claim_presence_lock());
+    }
+    #[test]
+    fn post_break_camera_keeps_live_call_safety_without_recording_history() {
+        let mut timer = Timer::new(0);
+        let mut config = input();
+        config.camera_lock_enabled = false;
+        timer.configure(config.clone(), 0).unwrap();
+        assert!(!timer.snapshot.live_meeting_enabled);
+        let old_epoch = timer.snapshot.presence_epoch;
+        config.camera_lock_enabled = true;
+        timer.configure(config.clone(), 100).unwrap();
+        assert_ne!(timer.snapshot.presence_epoch, old_epoch);
+        assert!(timer.meeting_probe_allowed());
+        assert!(!timer.meeting_sample_allowed());
+        timer.observe_meeting(200, &meeting_status(&["Zoom"]));
+        assert!(
+            timer
+                .snapshot
+                .live_meeting_status
+                .as_ref()
+                .unwrap()
+                .in_meeting
+        );
+        assert!(timer.snapshot.meeting_spans.is_empty());
+        assert!(timer.snapshot.meeting_applications.is_empty());
+        config.camera_lock_enabled = false;
+        timer.configure(config, 300).unwrap();
+        assert!(!timer.snapshot.live_meeting_enabled);
+        assert!(!timer.meeting_probe_allowed());
+        assert!(timer.snapshot.live_meeting_status.is_none());
+    }
+    #[test]
+    fn camera_lock_policy_change_invalidates_pending_presence_evidence() {
+        let mut timer = enhanced_timer();
+        let epoch = timer.snapshot.presence_epoch;
+        let mut config = timer.input.clone().unwrap();
+        config.camera_lock_enabled = true;
+        timer.configure(config, 1200).unwrap();
+        timer.observe_meeting(1300, &meeting_status(&[]));
+        assert!(!timer.observe_camera_presence(epoch, 1000, Some(false), 1500));
     }
     fn input() -> TimerInput {
         TimerInput {

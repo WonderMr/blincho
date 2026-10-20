@@ -79,7 +79,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   const nativeApi = window.electronAPI as (NonNullable<Window['electronAPI']> & { meetingDetectionSupported?: boolean; lockComputer?: () => Promise<boolean> }) | undefined;
   const isNative = nativeApi?.isElectron === true;
   const meetingSupported = isNative && nativeApi?.meetingDetectionSupported === true;
-  const cameraLockSupported = typeof nativeApi?.lockComputer === 'function' && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+  const cameraAccessSupported = typeof nativeApi?.lockComputer === 'function' && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
+  const cameraLockSupported = cameraAccessSupported && meetingSupported;
   const notificationsSupported = isNative || 'Notification' in window;
   const notificationsBlocked = !isNative && 'Notification' in window && Notification.permission === 'denied';
   const notificationsGranted = isNative || ('Notification' in window && Notification.permission === 'granted');
@@ -360,7 +361,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
               description={t("Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.")}
               checked={settings.absenceLockEnabled} onChange={value => handleChange('absenceLockEnabled', value)} />}
             <ToggleRow id="camera-lock-enabled" title={t("Блокировать компьютер, если никого нет")}
-              description={`${t("В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.")}${cameraLockSupported ? '' : ` ${t("Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.")}`}`}
+              description={`${t("В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.")}${!cameraAccessSupported ? ` ${t("Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.")}` : !meetingSupported ? ` ${t("Детекция встреч недоступна")}.` : ''}`}
               checked={cameraLockSupported && settings.cameraLockEnabled} disabled={!cameraLockSupported} onChange={value => { void handleCameraChange(value); }} />
             {cameraLockSupported && <p className="settings-description">{t("При включении проверяется доступ к камере. Если нужно, система запросит разрешение.")}</p>}
             {(cameraPending || cameraFeedback) && <p className="settings-feedback" role="status">{cameraPending ? t("Запрашиваем доступ к камере…") : t(cameraFeedback)}</p>}

@@ -147,5 +147,6 @@
   "release.1.8.14": "MCP cục bộ tùy chọn kết nối ứng dụng khách AI với trạng thái bộ hẹn giờ, cài đặt, tổng hôm nay và các thao tác với bộ hẹn giờ. Kiểm tra sự hiện diện bằng camera chỉ chạy sau khi lần nghỉ có hẹn giờ kết thúc.",
   "release.1.8.15": "MCP cục bộ hiện báo cáo thống kê theo ngày, tuần lịch hoặc khoảng ngày, kèm ngày có dữ liệu và khoảng trống dễ thấy. Vị trí và kích thước cửa sổ được giữ sau khi khóa máy, ngủ và nghỉ.",
   "release.1.10.0": "Diện mạo và tên phụ thuộc vào các tính năng được bật. Lối tắt trên màn hình thay đổi theo cấu hình của bạn.",
-  "release.1.10.1": "Diện mạo và tên phụ thuộc vào các tính năng được bật. Lối tắt trên màn hình thay đổi theo cấu hình của bạn. Biểu tượng camera trên khay hệ thống cho biết khi Blincho sử dụng camera và biến mất khi kết thúc thu hình."
+  "release.1.10.1": "Diện mạo và tên phụ thuộc vào các tính năng được bật. Lối tắt trên màn hình thay đổi theo cấu hình của bạn. Biểu tượng camera trên khay hệ thống cho biết khi Blincho sử dụng camera và biến mất khi kết thúc thu hình.",
+  "release.1.10.2": "Kiểm tra camera tự động được bỏ qua trong các cuộc gọi đã phát hiện và dừng lại nếu phát hiện cuộc gọi khi đang kiểm tra."
 }

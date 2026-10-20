@@ -269,6 +269,13 @@ impl MeetingMonitor {
     }
 }
 pub(super) fn bounded_probe(program: &str, args: &[&str]) -> Option<String> {
+    bounded_probe_with_exit(program, args, None)
+}
+pub(super) fn bounded_probe_with_exit(
+    program: &str,
+    args: &[&str],
+    no_match_exit: Option<i32>,
+) -> Option<String> {
     const LIMIT: u64 = 256 * 1024;
     let mut child = Command::new(program)
         .args(args)
@@ -299,10 +306,12 @@ pub(super) fn bounded_probe(program: &str, args: &[&str]) -> Option<String> {
         }
     };
     let output = reader.join().ok().flatten();
-    if status.is_some_and(|value| value.success()) {
-        output
-    } else {
-        None
+    match status {
+        Some(value) if value.success() => output,
+        Some(value) if no_match_exit.is_some() && value.code() == no_match_exit => {
+            output.map(|_| String::new())
+        }
+        _ => None,
     }
 }
 pub fn active_meeting_applications(output: &str) -> Vec<String> {
@@ -389,6 +398,27 @@ pub fn open_external(url: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn bounded_process_probe_distinguishes_no_match_from_failures() {
+        assert_eq!(
+            bounded_probe_with_exit("/bin/sh", &["-c", "printf '123\\n'"], Some(1)),
+            Some("123\n".into())
+        );
+        assert_eq!(
+            bounded_probe_with_exit("/bin/sh", &["-c", "exit 1"], Some(1)),
+            Some(String::new())
+        );
+        assert_eq!(
+            bounded_probe_with_exit("/bin/sh", &["-c", "exit 2"], Some(1)),
+            None
+        );
+        assert_eq!(bounded_probe("/bin/sh", &["-c", "exit 1"]), None);
+        assert_eq!(
+            bounded_probe_with_exit("/missing/blincho-probe", &[], Some(1)),
+            None
+        );
+    }
     #[test]
     fn test_profiles_never_issue_a_lock_request() {
         assert!(lock_computer_with(

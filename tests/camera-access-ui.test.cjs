@@ -6,10 +6,10 @@ const path = require('node:path');
 const { React, ReactDOMClient, ReactDOM, doc, DOMNode, transformer } = require('./support/syntheticDom.cjs');
 const repo = path.resolve(__dirname, '..');
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
-function createSettingsHarness({ media, native = false, nativeReady = Promise.resolve({}), onPending } = {}) {
+function createSettingsHarness({ media, native = false, nativeReady = Promise.resolve({}), onPending, meetingSupported = true, platform = 'darwin' } = {}) {
   const cache = new Map(), store = new Map(); const navigator = { mediaDevices: media };
   const localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) };
-  window.localStorage = localStorage; window.electronAPI = { isElectron: true, platform: 'darwin', lockComputer() { throw Error('Permission must not lock'); } };
+  window.localStorage = localStorage; window.electronAPI = { isElectron: true, platform, meetingDetectionSupported: meetingSupported, lockComputer() { throw Error('Permission must not lock'); } };
   localStorage.setItem('blincho-language-v1', JSON.stringify({ preference: 'ru', acknowledged: true }));
   let settings, updates = 0, closed = 0, nativeReads = 0, alive = true; const pending = [];
   function load(relative) {
@@ -113,4 +113,22 @@ test('cancel then reenable ignores the old response and only accepts the replace
     streams[0].resolve({ getTracks: () => [{ stop() { stopped++; } }] }); await h.settle(); assert(h.host.textContent.includes('Запрашиваем доступ к камере…')); assert.equal(h.pending.at(-1), true);
     streams[1].reject({ name: 'NotAllowedError' }); await h.settle(); assert.equal(stopped, 1); assert.equal(h.settings.cameraLockEnabled, false); assert.equal(h.pending.at(-1), false);
   } finally { h.destroy(); }
+});
+
+
+test('camera locking is explicitly unavailable without call detection, including legacy Windows and Linux', async () => {
+  for (const platform of ['win32', 'linux']) {
+    let calls = 0;
+    const h = createSettingsHarness({ platform, meetingSupported: false,
+      media: { getUserMedia: async () => { calls++; return { getTracks: () => [] }; } } });
+    try {
+      assert.equal(h.props(h.find('camera-lock-enabled')).disabled, true);
+      assert.equal(h.props(h.find('camera-lock-enabled')).checked, false);
+      assert(h.host.textContent.includes('Детекция встреч недоступна'));
+      h.change('camera-lock-enabled', true);
+      await h.settle();
+      assert.equal(calls, 0, 'unsupported configuration cannot request camera permission');
+      assert.equal(h.settings.cameraLockEnabled, false);
+    } finally { h.destroy(); }
+  }
 });

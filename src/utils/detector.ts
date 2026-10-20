@@ -30,12 +30,12 @@ export async function getSystemIdleSeconds(): Promise<number | null> {
   return Math.max(0, (Date.now() - lastPageActivity) / 1000);
 }
 
-export async function detectActiveMeeting(): Promise<MeetingStatus> {
+export async function detectActiveMeeting(options?: { fresh?: boolean }): Promise<MeetingStatus> {
   if (window.electronAPI?.checkMeetingActive) {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       const status: MeetingStatus = await Promise.race([
-        Promise.resolve().then(() => window.electronAPI!.checkMeetingActive!()),
+        Promise.resolve().then(() => window.electronAPI!.checkMeetingActive!(options)),
         new Promise<MeetingStatus>(resolve => {
           timeout = setTimeout(() => {
             console.warn('Blincho: Meeting detection timed out.');
