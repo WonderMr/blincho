@@ -16,6 +16,7 @@ export interface NativeTimerSnapshot {
   meetingSpans?: MeetingSpan[];
   meetingApplications?: string[];
   meetingHistoryEpoch?: number;
+  presenceEpoch?: number;
   liveMeetingEnabled?: boolean;
   liveMeetingStatus?: { inMeeting: boolean; supported: boolean; applications: string[] } | null;
 }

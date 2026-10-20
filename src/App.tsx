@@ -107,6 +107,8 @@ export const App: React.FC = () => {
   const presenceRefreshRef = useRef(false);
   const expiryInFlightRef = useRef(false);
   const cameraAbortRef = useRef<AbortController | null>(null);
+  const cameraEpochRef = useRef<{ controller: AbortController; epoch: number } | null>(null);
+  const nativePresenceEpochRef = useRef<number | null>(null);
   const cameraAccessPendingRef = useRef(false);
   const [cameraAccessPending, setCameraAccessPending] = useState(false);
   const handleCameraAccessPendingChange = (pending: boolean) => {
@@ -416,13 +418,33 @@ export const App: React.FC = () => {
     cameraAbortRef.current?.abort();
     cameraAbortRef.current = controller;
     try {
+      const meeting = await detectActiveMeeting({ fresh: true });
+      if (!isCurrent() || meeting.supported !== true || meeting.inMeeting) return false;
+      if (hasNativeTimer()) {
+        const snapshot = await readNativeTimer();
+        if (!snapshot || snapshot.version !== version || snapshot.manualPaused || snapshot.breakActive ||
+          snapshot.exercising || snapshot.reasons.length || snapshot.liveMeetingStatus?.inMeeting ||
+          snapshot.liveMeetingStatus?.supported === false ||
+          (cameraEpochRef.current?.controller === controller && snapshot.presenceEpoch !== undefined &&
+            cameraEpochRef.current.epoch !== snapshot.presenceEpoch) ||
+          (requireExpiry && !snapshot.expiryPending)) return false;
+        applyNativeRef.current(snapshot);
+        if (!isCurrent()) return false;
+        if (snapshot.presenceEpoch !== undefined) cameraEpochRef.current = { controller, epoch: snapshot.presenceEpoch };
+      }
       const camera = await checkCameraPresence(controller.signal);
       if (camera !== 'absent' || !isCurrent()) return false;
+      const finalMeeting = await detectActiveMeeting({ fresh: true });
+      if (!isCurrent() || finalMeeting.supported !== true || finalMeeting.inMeeting) return false;
       if (!(await samplePresence()) || !isCurrent()) return false;
       if (hasNativeTimer()) {
         const snapshot = await readNativeTimer();
         if (!snapshot || snapshot.version !== version || snapshot.manualPaused || snapshot.breakActive ||
-          snapshot.exercising || snapshot.reasons.length || (requireExpiry && !snapshot.expiryPending)) return false;
+          snapshot.exercising || snapshot.reasons.length || snapshot.liveMeetingStatus?.inMeeting ||
+          snapshot.liveMeetingStatus?.supported === false ||
+          (cameraEpochRef.current?.controller === controller && snapshot.presenceEpoch !== undefined &&
+            cameraEpochRef.current.epoch !== snapshot.presenceEpoch) ||
+          (requireExpiry && !snapshot.expiryPending)) return false;
       }
       const idle = await getSystemIdleSeconds();
       const sampledAt = performance.now();
@@ -445,6 +467,7 @@ export const App: React.FC = () => {
       if (isCurrent()) setNoticeMessage("Не удалось заблокировать компьютер.");
     } finally {
       if (cameraAbortRef.current === controller) cameraAbortRef.current = null;
+      if (cameraEpochRef.current?.controller === controller) cameraEpochRef.current = null;
     }
     return false;
   };
@@ -751,10 +774,14 @@ export const App: React.FC = () => {
       busy = true;
       try {
         const token = await window.__TAURI__!.core.invoke<{ epoch: number; startedAt: number } | null>('presence_check_begin');
-        if (!token || stopped || cameraAbortRef.current || cameraAccessPendingRef.current) { nextCheck = Date.now() + 3000; return; }
+        if (!token || stopped || cameraAbortRef.current || cameraAccessPendingRef.current ||
+          (nativePresenceEpochRef.current !== null && token.epoch !== nativePresenceEpochRef.current)) {
+          nextCheck = Date.now() + 3000; return;
+        }
         const controller = new AbortController();
         ownedController = controller;
         cameraAbortRef.current = controller;
+        cameraEpochRef.current = { controller, epoch: token.epoch };
         const result = await checkCameraPresence(controller.signal);
         if (stopped || controller.signal.aborted || !settingsRef.current.enhancedPresenceEnabled) return;
         const outcome = await window.__TAURI__!.core.invoke<{ accepted: boolean; locked: boolean }>('presence_check_finish', {
@@ -767,6 +794,7 @@ export const App: React.FC = () => {
         nextCheck = Date.now() + 30_000;
       } finally {
         if (cameraAbortRef.current === ownedController) cameraAbortRef.current = null;
+        if (cameraEpochRef.current?.controller === ownedController) cameraEpochRef.current = null;
         ownedController = null;
         busy = false;
       }
@@ -802,6 +830,11 @@ export const App: React.FC = () => {
     const applyNative = (snapshot: NativeTimerSnapshot) => {
       if (!mountedRef.current || snapshot.totalMs < 1000 || snapshot.tickCount <= nativeTickRef.current) return;
       nativeTickRef.current = snapshot.tickCount;
+      nativePresenceEpochRef.current = snapshot.presenceEpoch ?? null;
+      const cameraOwner = cameraEpochRef.current;
+      if (snapshot.liveMeetingStatus?.inMeeting || snapshot.liveMeetingStatus?.supported === false ||
+        (cameraOwner?.controller === cameraAbortRef.current && snapshot.presenceEpoch !== undefined &&
+          cameraOwner?.epoch !== snapshot.presenceEpoch)) cameraAbortRef.current?.abort();
       if (snapshot.version >= session.version) {
         session.totalMs = snapshot.totalMs;
         session.remainingMs = snapshot.remainingMs;
@@ -877,6 +910,11 @@ export const App: React.FC = () => {
           if (snapshot) applyNative(snapshot);
           await handlersRef.current.samplePresence();
           return;
+        }
+        const cameraController = cameraAbortRef.current;
+        if (cameraController) {
+          const meeting = await detectActiveMeeting({ fresh: true });
+          if (cameraAbortRef.current === cameraController && (meeting.supported !== true || meeting.inMeeting)) cameraController.abort();
         }
         const now = Date.now();
         if (now - session.lastUpdated > 5000) handlersRef.current.setPresenceReason('unconfirmed', true, session.lastUpdated);

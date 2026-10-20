@@ -238,6 +238,23 @@ async function mainHarness(platform='darwin',assertion='',host='',hostError=null
   assert.equal(sampled.handlers['get-power-state']().locked,true);assert.equal(sampled.window.fullscreen,false);assert.equal(sampled.window.alwaysOnTop,false);assert.equal(sampled.diagnostics.current.strictLockActive,false,'sampled native lock releases presentation even when its event was missed');
   sampled.power.emit('suspend');sampled.power.emit('resume');sampled.setState('active');assert.equal(sampled.handlers['get-power-state']().locked,true,'wake cannot erase a Windows/macOS lock before unlock');sampled.power.emit('unlock-screen');assert.equal(sampled.handlers['get-power-state']().locked,false);
  }
+ const cameraFresh=await mainHarness('darwin','PreventUserIdleDisplaySleep 0');
+ await cameraFresh.handlers['check-meeting-active']();
+ const cachedProbeCount=cameraFresh.execCalls.length;
+ await cameraFresh.handlers['check-meeting-active']();
+ assert.equal(cameraFresh.execCalls.length,cachedProbeCount,'general meeting checks retain their cache');
+ const cameraStatus=await cameraFresh.handlers['check-meeting-active']({}, {fresh:true});
+ assert.equal(cameraStatus.supported,true);
+ assert.equal(cameraFresh.execCalls.length,cachedProbeCount+2,'camera safety bypasses the cached negative');
+ assert.equal((await f.handlers['check-meeting-active']({}, {fresh:true})).supported,false,'probe failure is unknown for camera safety');
+ const noProcess=await mainHarness('darwin','PreventUserIdleDisplaySleep 0','',Object.assign(new Error('no process'),{code:1}));
+ assert.equal((await noProcess.handlers['check-meeting-active']({}, {fresh:true})).supported,true,'pgrep exit1 confirms no match');
+ const cameraRace=await mainHarness('darwin','', '',null,{deferProbes:true});
+ const ordinaryProbe=cameraRace.handlers['check-meeting-active']();
+ const safetyProbe=cameraRace.handlers['check-meeting-active']({}, {fresh:true});
+ assert.equal(cameraRace.pendingProbes.length,2,'fresh camera probe never shares a pre-existing UI probe');
+ for(let turn=0;turn<8;turn++){for(const finish of cameraRace.pendingProbes.splice(0))finish();await Promise.resolve();}
+ await Promise.all([ordinaryProbe,safetyProbe]);
  const config=JSON.parse(fs.readFileSync(repo+'/package.json','utf8'));assert.equal(config.build.appId,'com.myeyes.app');assert.equal(config.build.mac.icon,'assets/icon.icns');assert.equal(config.build.win.icon,'assets/icon.ico');assert.equal(config.build.linux.icon,'assets/512x512.png');assert.deepEqual(config.build.win.target,['nsis','portable']);assert.deepEqual(config.build.linux.target,['AppImage','tar.gz']);assert.equal(config.desktopName,'com.myeyes.app.desktop');assert.equal(config.build.linux.syncDesktopName,true);
  console.log('Passed Electron VM: previous lifecycle/absence/profile regressions plus macOS/Windows/Linux session placement, hidden/minimized restoration, overlapping lock/suspend, disconnected/rearranged displays, delayed macOS fullscreen exit, window, icon, tray, taskbar fallback, notification lock guard, single-instance and preload behavior. Probe counts: 100 concurrent positive requests = 1 execFile; negative = 2; cached repeat = 0; unsupported platforms = 0. Cache expiry, power invalidation and subprocess bounds passed. Native OS session behavior is not certified by this VM test.');
 })().catch(error=>{console.error(error);process.exitCode=1});
