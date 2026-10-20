@@ -16,7 +16,7 @@ fs.writeFileSync(stub, `export function useAccountSync(enabled, callbacks) {
 process.on('exit', () => fs.rmSync(directory, { recursive: true, force: true }));
 function harness(settings = {}) {
   window.syncCurrent = true; window.syncPublished = 0; window.syncPublishFails = false;
-  return createHarness({ syncEnabled: true, ...settings }, false, false, 1791712800000, { 'src/utils/accountSync.ts': stub });
+  return createHarness({ syncEnabled: true, ...settings }, false, false, 1791712800000, { [path.join('src', 'utils', 'accountSync.ts')]: stub });
 }
 function event(h, seconds = 20) {
   return { v: 1, id: 'a'.repeat(32), deviceId: 'b'.repeat(32), createdAt: h.now - 3000, startAt: h.now - 500, endAt: h.now + seconds * 1000 };
