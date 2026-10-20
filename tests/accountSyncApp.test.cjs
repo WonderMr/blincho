@@ -134,3 +134,44 @@ test('a late call postpones an expired local cycle while peers keep their runnin
     } finally { h.destroy(); }
   }
 });
+
+
+test('a canceled shared delivery falls back locally and reset cancels that fallback', async () => {
+  for (const reset of [false, true]) {
+    const h = harness({ timerPreset: 'custom', workMinutes: 1 / 60, strictMode: false });
+    try {
+      await h.settle(); await h.advance(1000);
+      assert.equal(window.syncPublished, 1);
+      if (reset) await h.call('TimerWidget', 'onReset');
+      window.syncCurrent = false;
+      await h.advance(6500);
+      assert.equal(h.active.has('BreakOverlay'), !reset);
+      if (!reset) assert.equal(h.captured.BreakOverlay.strictMode, false);
+    } finally { h.destroy(); }
+  }
+});
+
+test('unknown late call status keeps the local expiry policy while peers skip the command', async () => {
+  const h = harness({ meetingDetectionEnabled: true, timerPreset: 'custom', workMinutes: 1 / 60, strictMode: false });
+  try {
+    await h.settle(); window.syncSchedule = true;
+    h.electronAPI.checkMeetingActive = async () => ({ inMeeting: false, supported: false });
+    await h.advance(3500);
+    assert(h.active.has('BreakOverlay'));
+    assert.equal(h.captured.BreakOverlay.strictMode, false);
+    assert.equal(window.syncPublished, 1);
+  } finally { h.destroy(); }
+});
+
+
+test('a known call arriving before local delivery fallback postpones the expired cycle', async () => {
+  const h = harness({ meetingDetectionEnabled: true, timerPreset: 'custom', workMinutes: 1 / 60 });
+  try {
+    await h.settle(); let inMeeting = false;
+    h.electronAPI.checkMeetingActive = async () => ({ inMeeting, supported: true });
+    await h.advance(1000); assert.equal(window.syncPublished, 1);
+    inMeeting = true; await h.advance(6500);
+    assert(!h.active.has('BreakOverlay'));
+    assert(h.captured.TimerWidget.secondsRemaining >= 298);
+  } finally { h.destroy(); }
+});

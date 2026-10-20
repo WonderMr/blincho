@@ -101,7 +101,12 @@ export const App: React.FC = () => {
   const [, publish] = useState(0);
   const breakIdRef = useRef<string | null>(null);
   const sharedBreakRef = useRef<SharedBreak | null>(null);
-  const sharedRequestRef = useRef(false);
+  const sharedRequestRef = useRef<{ version: number; fallback: ReturnType<typeof setTimeout> | null } | null>(null);
+  const clearSharedRequest = (request = sharedRequestRef.current) => {
+    if (!request || sharedRequestRef.current !== request) return;
+    if (request.fallback !== null) clearTimeout(request.fallback);
+    sharedRequestRef.current = null;
+  };
   const pendingBreakRef = useRef<{ eventId: string; deadlineMonotonicAt: number } | null>(null);
   const exerciseIdRef = useRef<string | null>(null);
   const exerciseStartPendingRef = useRef(false);
@@ -215,6 +220,7 @@ export const App: React.FC = () => {
     sendDesktopCommand('setBreakFullscreen', () => window.electronAPI?.setBreakFullscreen?.(false));
   };
   const restartWork = (seconds = settingsRef.current.workMinutes * 60) => {
+    clearSharedRequest();
     cameraAbortRef.current?.abort();
     session.restart(seconds, Date.now());
     setInMeetingActive(false);
@@ -422,15 +428,37 @@ export const App: React.FC = () => {
     sync();
   };
   const beginBreak = () => {
+    if (sharedRequestRef.current && sharedRequestRef.current.version !== session.version) clearSharedRequest();
     if (sharedRequestRef.current || !session.present || session.breakActive || session.exercising) return;
-    sharedRequestRef.current = true;
-    const version = session.version;
+    const request = { version: session.version, fallback: null as ReturnType<typeof setTimeout> | null };
+    sharedRequestRef.current = request;
+    let fallingBack = false;
+    const fallback = async () => {
+      if (sharedRequestRef.current !== request || fallingBack) return;
+      fallingBack = true;
+      if (request.fallback !== null) clearTimeout(request.fallback);
+      request.fallback = null;
+      const current = () => sharedRequestRef.current === request && mountedRef.current && request.version === session.version;
+      try {
+        if (!current()) return;
+        if (session.expiryPending && session.counting && settingsRef.current.meetingDetectionEnabled && hasMeetingDetection()) {
+          const meeting = await detectActiveMeeting({ fresh: true });
+          if (!current()) return;
+          if (meeting.inMeeting) {
+            session.postpone(300, Date.now());
+            setNoticeMessage("Перерыв отложен на 5 минут.");
+            sync();
+            return;
+          }
+        }
+        // An unavailable relay or canceled delivery must preserve this local break.
+        if (current()) beginLocalBreak();
+      } finally { clearSharedRequest(request); }
+    };
+    request.fallback = setTimeout(() => { void fallback(); }, 6000);
     void accountSync.startBreak(settingsRef.current.breakSeconds).then(sent => {
-      if (!sent && mountedRef.current && version === session.version) beginLocalBreak();
-    }).catch(() => {
-      // An unavailable relay must never disable this device's local break.
-      if (mountedRef.current && version === session.version) beginLocalBreak();
-    }).finally(() => { sharedRequestRef.current = false; });
+      if (!sent) return fallback();
+    }).catch(fallback);
   };
   const checkCameraAndLock = async (version: number, requireExpiry = false): Promise<boolean> => {
     const controller = new AbortController();
@@ -496,7 +524,8 @@ export const App: React.FC = () => {
     return false;
   };
   const handleTimerExpired = async () => {
-    if (expiryInFlightRef.current) return;
+    if (sharedRequestRef.current && sharedRequestRef.current.version !== session.version) clearSharedRequest();
+    if (sharedRequestRef.current || expiryInFlightRef.current) return;
     expiryInFlightRef.current = true;
     try {
       const version = session.version;
@@ -567,6 +596,7 @@ export const App: React.FC = () => {
     setSavedRemainingBeforeReset(null);
   };
   const handleTogglePlay = () => {
+    clearSharedRequest();
     cameraAbortRef.current?.abort();
     session.advance(Date.now());
     flushFocus();
@@ -746,7 +776,6 @@ export const App: React.FC = () => {
       if (mountedRef.current) { setTodayStats(loadTodayStats(stats)); setAllStats(stats); }
     },
     break: async (event, isCurrent) => {
-      sharedRequestRef.current = false;
       const version = session.version;
       const current = () => isCurrent() && mountedRef.current && settingsRef.current.syncEnabled && version === session.version;
       if (!current() || session.breakActive || session.exercising) return;
@@ -758,14 +787,28 @@ export const App: React.FC = () => {
           // A late call check must settle an already expired local work cycle.
           // Peers whose own timer is still running keep that independent cycle.
           if (session.expiryPending && session.counting) {
-            session.postpone(300, Date.now());
-            setNoticeMessage("Перерыв отложен на 5 минут.");
-            sync();
+            clearSharedRequest();
+            if (meeting.inMeeting) {
+              session.postpone(300, Date.now());
+              setNoticeMessage("Перерыв отложен на 5 минут.");
+              sync();
+            } else {
+              // Unknown call status retains the existing local-expiry policy.
+              beginLocalBreak();
+            }
           }
           return;
         }
       }
-      if (current() && !session.exercising && event.endAt > Date.now()) beginLocalBreak(event);
+      if (current() && !session.exercising) {
+        if (event.endAt > Date.now()) {
+          clearSharedRequest();
+          beginLocalBreak(event);
+        } else if (session.expiryPending && session.counting) {
+          clearSharedRequest();
+          beginLocalBreak();
+        }
+      }
     },
   });
 
@@ -1033,6 +1076,7 @@ export const App: React.FC = () => {
       const finalMeetings = pendingMeetingsRef.current.splice(0).filter(canRecordMeetingHistory);
       if (finalActivity.length || finalMeetings.length) recordTimerProgress([], finalActivity, finalMeetings);
       mountedRef.current = false;
+      clearSharedRequest();
       pendingBreakRef.current = null;
       clearInterval(timer);
       unsubscribeBreak?.();

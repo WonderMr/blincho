@@ -241,9 +241,9 @@ export class AccountSyncSession {
     let last = this.cursor;
     for (const item of value.events) {
       if (!record(item) || typeof item.seq !== 'number' || !Number.isSafeInteger(item.seq) || item.seq <= last || item.seq > value.cursor) throw new Error('Invalid sequence');
-      const payload = await decryptSync(this.key!, this.accountId, 'break', item.envelope);
       let event: SharedBreak;
-      try { event = validateSharedBreak(payload); } catch { last = item.seq; continue; }
+      try { event = validateSharedBreak(await decryptSync(this.key!, this.accountId, 'break', item.envelope)); }
+      catch { last = item.seq; continue; }
       if (this.closed) return;
       this.schedule(event);
       last = item.seq;

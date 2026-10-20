@@ -215,3 +215,32 @@ test('authorization expiry cancels scheduled shared commands and prevents furthe
     await assert.rejects(() => client.publishBreak(5));
   } finally { client.close(); }
 });
+
+
+test('an undecryptable event does not block later commands or preference writes', async () => {
+  const accountId = 'c'.repeat(32), secret = generateRecoveryKey();
+  const key = await deriveSyncKey(secret, accountId);
+  const keyCheck = await encryptSync(key, accountId, 'key-check', { check: 'blincho-sync-v1' });
+  const now = Date.now();
+  const valid = await encryptSync(key, accountId, 'break', { v: 1, id: 'e'.repeat(32), deviceId: 'f'.repeat(32), createdAt: now, startAt: now + 5000, endAt: now + 15000 });
+  const bad = { ...valid, ciphertext: (valid.ciphertext[0] === 'A' ? 'B' : 'A') + valid.ciphertext.slice(1) };
+  const statuses = [], requests = [];
+  const client = new AccountSyncSession({ snapshot: () => ({ settings: DEFAULT_SETTINGS, stats: [] }), settings() {}, stats() {}, break() {}, status(value) { statuses.push(value); } }, storage(), 'http://127.0.0.1:47832', async (url, init) => {
+    requests.push(url);
+    let payload = {};
+    if (url.endsWith('/v1/login')) payload = { accountId, token: 'a'.repeat(43), keyCheck };
+    else if (url.endsWith('/v1/state')) payload = { documents: [] };
+    else if (init.method === 'PUT') payload = { revision: 1 };
+    else if (url.endsWith('/v1/events?after=0')) payload = { instance: 'test', events: [{ seq: 1, envelope: bad }, { seq: 2, envelope: valid }], cursor: 2 };
+    else if (url.endsWith('/v1/events?after=2')) payload = { instance: 'test', events: [], cursor: 2 };
+    return new Response(JSON.stringify(payload), { status: 200 });
+  });
+  try {
+    await client.connect('login', 'owner@example.test', password, secret, '');
+    await until(() => statuses.length >= 2);
+    assert.equal(statuses.at(-1), 'connected');
+    assert(requests.some(url => url.endsWith('/v1/state/settings')));
+    await client.tick();
+    assert(requests.some(url => url.endsWith('/v1/events?after=2')));
+  } finally { client.close(); }
+});
