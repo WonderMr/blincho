@@ -258,7 +258,21 @@ jobs:
           RUST_TARGET: ${{ matrix.rust-target }}
       - name: Smoke test macOS break completion and actual work app focus
         if: matrix.platform == 'macos' && steps.runtime.outputs.tauri == 'true' && hashFiles('tests/tauri-break-focus-smoke.cjs') != ''
-        run: node tests/tauri-break-focus-smoke.cjs
+        shell: bash
+        run: |
+          if [[ "$RELEASE_TAG" == 'v1.10.2' ]]; then
+            test "$(git rev-parse HEAD)" = '31495e5be2ed4f2ace6baf624239f1e6c41329b6'
+            # The immutable tag has shared observers with a 240-second lifetime.
+            # Run every original case with fresh observers, preserving all checks
+            # and leaving the tagged source and packaged application untouched.
+            for scenario in strict-tray-20-seconds strict-visible-unfocused strict-minimized \
+              non-strict-preserves-new-work-app explicit-show-keeps-open hidden-startup-dock \
+              hide-during-strict-release; do
+              BLINCHO_FOCUS_SMOKE_CASE="$scenario" node tests/tauri-break-focus-smoke.cjs
+            done
+          else
+            node tests/tauri-break-focus-smoke.cjs
+          fi
         env:
           RUST_TARGET: ${{ matrix.rust-target }}
       - name: Smoke test macOS camera completion after normal and strict breaks
