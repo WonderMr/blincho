@@ -747,13 +747,25 @@ export const App: React.FC = () => {
     },
     break: async (event, isCurrent) => {
       sharedRequestRef.current = false;
-      if (!isCurrent() || !mountedRef.current || !settingsRef.current.syncEnabled || session.breakActive || session.exercising) return;
-      if (!await samplePresence(true) || !isCurrent() || !mountedRef.current || !settingsRef.current.syncEnabled) return;
+      const version = session.version;
+      const current = () => isCurrent() && mountedRef.current && settingsRef.current.syncEnabled && version === session.version;
+      if (!current() || session.breakActive || session.exercising) return;
+      if (!await samplePresence(true) || !current()) return;
       if (settingsRef.current.meetingDetectionEnabled && hasMeetingDetection()) {
         const meeting = await detectActiveMeeting();
-        if (meeting.inMeeting || !meeting.supported) return;
+        if (!current()) return;
+        if (meeting.inMeeting || !meeting.supported) {
+          // A late call check must settle an already expired local work cycle.
+          // Peers whose own timer is still running keep that independent cycle.
+          if (session.expiryPending && session.counting) {
+            session.postpone(300, Date.now());
+            setNoticeMessage("Перерыв отложен на 5 минут.");
+            sync();
+          }
+          return;
+        }
       }
-      if (isCurrent() && mountedRef.current && settingsRef.current.syncEnabled && !session.exercising && event.endAt > Date.now()) beginLocalBreak(event);
+      if (current() && !session.exercising && event.endAt > Date.now()) beginLocalBreak(event);
     },
   });
 

@@ -186,3 +186,32 @@ test('two account devices converge encrypted settings and snapshots, schedule on
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('authorization expiry cancels scheduled shared commands and prevents further publishing', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const accountId = 'c'.repeat(32), secret = generateRecoveryKey();
+  const key = await deriveSyncKey(secret, accountId);
+  const keyCheck = await encryptSync(key, accountId, 'key-check', { check: 'blincho-sync-v1' });
+  let revoked = false, breaks = 0;
+  const client = new AccountSyncSession({ snapshot: () => ({ settings: DEFAULT_SETTINGS, stats: [] }), settings() {}, stats() {}, break() { breaks++; }, status() {} }, storage(), 'http://127.0.0.1:47832', async (url, init) => {
+    if (revoked) return new Response('{}', { status: 401 });
+    let payload = {};
+    if (url.endsWith('/v1/login')) payload = { accountId, token: 'a'.repeat(43), keyCheck };
+    else if (url.endsWith('/v1/state')) payload = { documents: [] };
+    else if (init.method === 'PUT') payload = { revision: 1 };
+    else if (url.includes('/v1/events?')) payload = { instance: 'test', events: [], cursor: 0 };
+    else if (url.endsWith('/v1/events')) payload = { seq: 1 };
+    return new Response(JSON.stringify(payload), { status: 200 });
+  });
+  try {
+    await client.connect('login', 'owner@example.test', password, secret, '');
+    await new Promise(setImmediate);
+    await client.publishBreak(5);
+    revoked = true;
+    await client.tick();
+    t.mock.timers.tick(3000);
+    await new Promise(setImmediate);
+    assert.equal(breaks, 0, 'an expired or revoked server session cannot execute a queued command');
+    await assert.rejects(() => client.publishBreak(5));
+  } finally { client.close(); }
+});

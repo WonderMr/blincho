@@ -11,11 +11,11 @@ fs.writeFileSync(stub, `export function useAccountSync(enabled, callbacks) {
   window.syncTest = { enabled, callbacks, stats: json => callbacks.stats(JSON.parse(json)), emit: event => callbacks.break(event, () => window.syncCurrent !== false) };
   return { status: enabled ? 'connected' : 'disconnected', account: enabled ? 'test' : null, error: null,
     connect: async () => {}, disconnect: () => {}, deleteAccount: async () => {}, settingsChanged: () => {},
-    startBreak: async () => { window.syncPublished = (window.syncPublished || 0) + 1; if (window.syncPublishFails) throw Error('offline'); return enabled; } };
+    startBreak: async () => { window.syncPublished = (window.syncPublished || 0) + 1; if (window.syncPublishFails) throw Error('offline'); if (window.syncSchedule && enabled) { const at = Date.now(); setTimeout(() => { void callbacks.break({ v: 1, id: 'c'.repeat(32), deviceId: 'd'.repeat(32), createdAt: at, startAt: at + 2500, endAt: at + 22500 }, () => window.syncCurrent !== false); }, 2500); } return enabled; } };
 }`);
 process.on('exit', () => fs.rmSync(directory, { recursive: true, force: true }));
 function harness(settings = {}) {
-  window.syncCurrent = true; window.syncPublished = 0; window.syncPublishFails = false;
+  window.syncCurrent = true; window.syncPublished = 0; window.syncPublishFails = false; window.syncSchedule = false;
   return createHarness({ syncEnabled: true, ...settings }, false, false, 1791712800000, { [path.join('src', 'utils', 'accountSync.ts')]: stub });
 }
 function event(h, seconds = 20) {
@@ -97,4 +97,40 @@ test('synced aggregate display never replaces local counters and clears at logou
     window.syncTest.stats('[]'); await h.settle();
     assert.equal(h.captured.StatisticsView.allStats.find(day => day.date === date)?.breaksCompleted ?? 0, 0);
   } finally { h.destroy(); }
+});
+
+
+test('reset cancels a shared callback already waiting for its meeting check', async () => {
+  const h = harness({ meetingDetectionEnabled: true });
+  try {
+    await h.settle(); let resolveMeeting;
+    h.electronAPI.checkMeetingActive = () => new Promise(resolve => { resolveMeeting = resolve; });
+    const pending = window.syncTest.emit(event(h)); await h.settle();
+    assert.equal(typeof resolveMeeting, 'function');
+    await h.call('TimerWidget', 'onReset');
+    resolveMeeting({ inMeeting: false, supported: true }); await pending; await h.settle();
+    assert(!h.active.has('BreakOverlay'));
+    assert.equal(h.captured.TimerWidget.isRunning, false);
+  } finally { h.destroy(); }
+});
+
+test('a late call postpones an expired local cycle while peers keep their running timer', async () => {
+  for (const expired of [true, false]) {
+    const h = harness({ meetingDetectionEnabled: true, timerPreset: 'custom', workMinutes: expired ? 1 / 60 : 20 });
+    try {
+      await h.settle(); let inMeeting = false;
+      h.electronAPI.checkMeetingActive = async () => ({ inMeeting, supported: true });
+      window.syncSchedule = true;
+      if (expired) { await h.advance(1000); assert.equal(window.syncPublished, 1); }
+      inMeeting = true;
+      if (expired) await h.advance(2500); else await window.syncTest.emit(event(h));
+      await h.settle();
+      assert(!h.active.has('BreakOverlay'));
+      const remaining = h.captured.TimerWidget.secondsRemaining;
+      assert(expired ? remaining >= 298 && remaining <= 300 : remaining > 1000);
+      inMeeting = false; await h.advance(10_000);
+      assert(h.captured.TimerWidget.secondsRemaining > 0);
+      assert(!h.active.has('BreakOverlay'));
+    } finally { h.destroy(); }
+  }
 });

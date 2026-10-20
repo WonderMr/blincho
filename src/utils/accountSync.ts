@@ -106,6 +106,11 @@ export class AccountSyncSession {
         credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
         headers: { ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+      if (response.status === 401) {
+        this.close();
+        this.callbacks.status('disconnected');
+        throw new Error('Sync authorization expired');
+      }
       if (!response.ok) throw new Error(response.status === 409 ? 'Conflict' : 'Sync request failed');
       if (response.status === 204) return null;
       const value = await responseJSON(response);
@@ -310,7 +315,11 @@ export function useAccountSync(enabled: boolean, callbacks: Omit<Callbacks, 'sta
         client = new AccountSyncSession({ snapshot: () => current.current.snapshot(), settings: value => current.current.settings(value),
         stats: values => { if (mounted.current && session.current === client) current.current.stats(values); },
         break: (event, isCurrent) => current.current.break(event, () => isCurrent() && session.current === client), status: status => {
-          if (mounted.current && session.current === client) setState({ status, error: status === 'error' ? 'connection' : null, account: email });
+          if (mounted.current && session.current === client) {
+            if (status === 'disconnected') session.current = null;
+            setState({ status, error: status === 'error' || status === 'disconnected' ? 'connection' : null,
+              account: status === 'disconnected' ? null : email });
+          }
         } });
         session.current = client;
         await client.connect(mode, email, password, secret, code);

@@ -48,7 +48,7 @@ export function synchronizeNativeTimer(session: TimerSession, settings: AppSetti
   if (!window.__TAURI__) return;
   const input = { totalMs: session.totalMs, remainingMs: session.remainingMs, manualPaused: session.manualPaused,
     breakActive: session.breakActive, exercising: session.exercising, expiryPending: session.expiryPending,
-    version: session.version, breakSeconds: settings.breakSeconds, strictMode: settings.strictMode,
+    version: session.version, breakSeconds: settings.breakSeconds, breakDeadlineAt: session.breakDeadlineAt, strictMode: settings.strictMode,
     idleEnabled: settings.idleDetectionEnabled, idleThresholdSeconds: settings.idleThresholdMinutes * 60,
     meetingEnabled: settings.meetingDetectionEnabled, meetingHistoryEnabled: settings.meetingHistoryEnabled,
     cameraLockEnabled: settings.cameraLockEnabled,
@@ -56,9 +56,6 @@ export function synchronizeNativeTimer(session: TimerSession, settings: AppSetti
     absenceLockEnabled: settings.absenceLockEnabled,
     autoTakeover: settings.autoTakeoverModal };
   commandQueue = commandQueue.then(async () => {
-    if (input.breakActive && session.breakDeadlineAt !== null) {
-      input.breakSeconds = Math.max(1, Math.min(1800, (session.breakDeadlineAt - Date.now()) / 1000));
-    }
     latest = await window.__TAURI__!.core.invoke<NativeTimerSnapshot>('configure_timer', { input });
     onConfigured?.(latest);
   }).catch(error => console.warn('Blincho: Native timer update failed:', error));
