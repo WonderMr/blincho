@@ -8,6 +8,7 @@ Release notes are curated here before a version tag is pushed. The website keeps
 
 - Skip automatic camera checks during detected calls, including post-break checks when call postponement and call history are disabled. Require a fresh supported call check before opening the camera and before locking after a break.
 - Stop an automatic camera capture when a call is detected or its native presence evidence becomes stale. Release the camera stream and tray badge without locking or applying a canceled result.
+- Disable the camera-lock setting when call detection is unavailable, including legacy Electron on Windows and Linux, and explain the unavailable detector in Settings.
 - Bypass the legacy Electron call cache for automatic camera safety checks and treat probe failures as unknown.
 
 ## [1.10.1]
