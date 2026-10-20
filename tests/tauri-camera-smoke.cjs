@@ -15,7 +15,9 @@ fs.writeFileSync(source, JSON.stringify({ schemaVersion: 1, exportedAt: new Date
   myeyes_settings_v1: JSON.stringify({ workMinutes: 60, meetingDetectionEnabled: false, idleDetectionEnabled: false, soundEnabled: false, notificationsEnabled: false }),
   'blincho-language-v1': JSON.stringify({ preference: 'en', acknowledged: true }),
 } }));
-const child = spawn(executable, [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory, BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+// Model an inactive supported call detector, matching the isolated presence state.
+// CI Linux may have no host audio service; this test exercises the camera model.
+const child = spawn(executable, [], { env: { ...process.env, BLINCHO_PROTOTYPE_TEST_DIR: directory, BLINCHO_PROTOTYPE_HISTORY_SOURCE: source, BLINCHO_SMOKE_PRESENCE: '1', BLINCHO_SMOKE_MEETINGS: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
 let output = '', launchError, sequence = 0, closed = false;
 child.stdout.on('data', data => { output += data; }); child.stderr.on('data', data => { output += data; }); child.on('error', error => { launchError = error; });
 child.once('close', () => { closed = true; });
