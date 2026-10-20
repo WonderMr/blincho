@@ -85,7 +85,10 @@ int main(int argc, const char **argv) {
         [NSApp finishLaunching];
         [window orderFront:nil];
         pid_t parent = getppid();
-        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:240];
+        // Both observers serve the full seven-case suite, including six 20-second
+        // countdowns and native launch/teardown probes. Keep a finite failsafe
+        // beyond that suite; parent exit and explicit stop still clean up early.
+        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:600];
         __block unsigned long long sequence = 0;
         __block pid_t observedPID = 0;
         __block NSRunningApplication *retainedObserved = nil;
