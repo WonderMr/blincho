@@ -11,6 +11,10 @@ const executable = process.env.BLINCHO_PROTOTYPE_EXECUTABLE || path.join(root, '
   ...(process.env.RUST_TARGET ? [process.env.RUST_TARGET] : []), 'debug', 'blincho');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const COUNTDOWN_COMPLETION_TOLERANCE_MS = 1500;
+// On a loaded Intel CI runner, the first native observation can arrive almost
+// four seconds after break start. Keep a full rest window for the real renderer,
+// Dock and focus probes; completion still verifies the original native deadline.
+const FOCUS_BREAK_SECONDS = 20;
 const DIAGNOSTIC_SAMPLE_MS = 100;
 const RECENT_SAMPLE_LIMIT = 32;
 const POST_FAILURE_SAMPLE_COUNT = 10;
@@ -533,14 +537,14 @@ async function main() {
     const third = await startFixture(base, compiled, 'new-work-app');
     const scenarios = [];
     const cases = [
-      { name: 'strict-tray-20-seconds', mode: 'tray', strictMode: true, breakSeconds: 20 },
-      { name: 'strict-visible-unfocused', mode: 'visible', strictMode: true, breakSeconds: 4 },
-      { name: 'strict-minimized', mode: 'minimized', strictMode: true, breakSeconds: 4 },
-      { name: 'non-strict-preserves-new-work-app', mode: 'tray', strictMode: false, breakSeconds: 6, chooseThird: true },
-      { name: 'explicit-show-keeps-open', mode: 'tray', strictMode: false, breakSeconds: 4, explicitShow: true },
-      { name: 'hidden-startup-dock', mode: 'tray', strictMode: false, breakSeconds: 4, startupHidden: true },
+      { name: 'strict-tray-20-seconds', mode: 'tray', strictMode: true, breakSeconds: FOCUS_BREAK_SECONDS },
+      { name: 'strict-visible-unfocused', mode: 'visible', strictMode: true, breakSeconds: FOCUS_BREAK_SECONDS },
+      { name: 'strict-minimized', mode: 'minimized', strictMode: true, breakSeconds: FOCUS_BREAK_SECONDS },
+      { name: 'non-strict-preserves-new-work-app', mode: 'tray', strictMode: false, breakSeconds: FOCUS_BREAK_SECONDS, chooseThird: true },
+      { name: 'explicit-show-keeps-open', mode: 'tray', strictMode: false, breakSeconds: FOCUS_BREAK_SECONDS, explicitShow: true },
+      { name: 'hidden-startup-dock', mode: 'tray', strictMode: false, breakSeconds: FOCUS_BREAK_SECONDS, startupHidden: true },
       // This interrupts a live guard and exits early; full countdown is checked above.
-      { name: 'hide-during-strict-release', mode: 'tray', strictMode: true, breakSeconds: 20, releaseAndHide: true },
+      { name: 'hide-during-strict-release', mode: 'tray', strictMode: true, breakSeconds: FOCUS_BREAK_SECONDS, releaseAndHide: true },
     ];
     const selected = process.env.BLINCHO_FOCUS_SMOKE_CASE;
     assert(!selected || cases.some(options => options.name === selected), 'Unknown native focus smoke case');

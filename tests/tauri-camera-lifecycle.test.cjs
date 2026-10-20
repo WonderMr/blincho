@@ -44,6 +44,7 @@ async function runFixture(mode) {
       }
       cp.spawn = (file, args, options) => {
         if (file !== 'fixture-native' || args.length) throw Error('Unexpected native launch');
+        assert.equal(options.env.BLINCHO_SMOKE_MEETINGS, '1', 'Camera smoke must model supported call detection independently of host audio services');
         if (process.env.BLINCHO_LIFECYCLE_MODE === 'windows-fallback') assert.equal(options.detached, false);
         fs.writeFileSync(path.join(process.env.BLINCHO_LIFECYCLE_FIXTURE, 'profile.txt'), options.env.BLINCHO_PROTOTYPE_TEST_DIR);
         return process.env.BLINCHO_LIFECYCLE_MODE === 'launch-error'
