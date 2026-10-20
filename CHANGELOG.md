@@ -2,6 +2,14 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.10.2]
+
+### Fixed
+
+- Skip automatic camera checks during detected calls, including post-break checks when call postponement and call history are disabled. Require a fresh supported call check before opening the camera and before locking after a break.
+- Stop an automatic camera capture when a call is detected or its native presence evidence becomes stale. Release the camera stream and tray badge without locking or applying a canceled result.
+- Bypass the legacy Electron call cache for automatic camera safety checks and treat probe failures as unknown.
+
 ## [1.10.1]
 
 ### Added

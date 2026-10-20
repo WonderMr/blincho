@@ -1,5 +1,6 @@
 use super::{
-    active_meeting_applications, bounded_probe, needs_zoom_capture_probe, MeetingStatus, Presence,
+    active_meeting_applications, bounded_probe, bounded_probe_with_exit, needs_zoom_capture_probe,
+    MeetingStatus, Presence,
 };
 use std::{
     ffi::{c_void, CString},
@@ -221,16 +222,82 @@ pub fn meeting_supported() -> bool {
     true
 }
 pub fn meeting_status() -> MeetingStatus {
-    let assertion = bounded_probe("/usr/bin/pmset", &["-g", "assertions"]);
+    meeting_status_with_probes(bounded_probe_with_exit)
+}
+fn meeting_status_with_probes(
+    mut probe: impl FnMut(&str, &[&str], Option<i32>) -> Option<String>,
+) -> MeetingStatus {
+    let assertion = probe("/usr/bin/pmset", &["-g", "assertions"], None);
     let Some(output) = assertion else {
         return MeetingStatus::inactive(false);
     };
     let mut applications = active_meeting_applications(&output);
-    if needs_zoom_capture_probe(&applications)
-        && bounded_probe("/usr/bin/pgrep", &["-i", "-x", "CptHost"])
-            .is_some_and(|text| text.lines().any(|line| line.parse::<u32>().is_ok()))
-    {
-        applications.push("Zoom".into());
+    if needs_zoom_capture_probe(&applications) {
+        match probe("/usr/bin/pgrep", &["-i", "-x", "CptHost"], Some(1)) {
+            Some(text) if text.trim().is_empty() => {}
+            Some(text) if text.lines().all(|line| line.parse::<u32>().is_ok()) => {
+                applications.push("Zoom".into());
+            }
+            _ if applications.is_empty() => return MeetingStatus::inactive(false),
+            // An already identified call remains positive if the Zoom fallback fails.
+            _ => {}
+        }
     }
     MeetingStatus::detected(applications, true)
+}
+
+#[cfg(test)]
+mod meeting_tests {
+    use super::*;
+
+    #[test]
+    fn failed_zoom_fallback_cannot_grant_a_negative_camera_preflight() {
+        for output in [None, Some("malformed process output".to_string())] {
+            let status = meeting_status_with_probes(|program, _, _| {
+                if program == "/usr/bin/pmset" {
+                    Some(String::new())
+                } else {
+                    output.clone()
+                }
+            });
+            assert!(!status.supported);
+            assert!(!status.in_meeting);
+        }
+    }
+
+    #[test]
+    fn zoom_fallback_accepts_normal_no_match_and_positive_process_output() {
+        for (output, active) in [("", false), ("123\n", true)] {
+            let status = meeting_status_with_probes(|program, _, no_match| {
+                if program == "/usr/bin/pmset" {
+                    assert_eq!(no_match, None);
+                    Some(String::new())
+                } else {
+                    assert_eq!(no_match, Some(1));
+                    Some(output.into())
+                }
+            });
+            assert!(status.supported);
+            assert_eq!(status.in_meeting, active);
+        }
+    }
+}
+
+#[cfg(test)]
+mod probe_positive_tests {
+    use super::*;
+
+    #[test]
+    fn a_positive_call_survives_an_unavailable_zoom_fallback() {
+        let status = meeting_status_with_probes(|program, _, _| {
+            if program == "/usr/bin/pmset" {
+                Some("PreventUserIdleDisplaySleep 1\npid 50(Microsoft Teams): [0x1] 00:00:01 PreventUserIdleDisplaySleep named: \"active meeting\"".into())
+            } else {
+                None
+            }
+        });
+        assert!(status.supported);
+        assert!(status.in_meeting);
+        assert_eq!(status.applications, ["Microsoft Teams"]);
+    }
 }
