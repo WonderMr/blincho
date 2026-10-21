@@ -1208,7 +1208,7 @@ fn main() {
             startup_trace("power-observer-start");
             if let Err(error) = platform::observe_power(power_event) { eprintln!("Power observer: {error}"); }
             startup_trace("power-observer-ready");
-            if bundled { platform::notifications_initialize(notification_clicked); }
+            if bundled || channel::is_test(app.handle()) { platform::notifications_initialize(notification_clicked); }
             startup_trace("native-menu-start");
             let show = MenuItem::with_id(app, "show", "Показать Blincho", true, None::<&str>)?;
             let rest = MenuItem::with_id(app, "rest", "Сделать перерыв", true, None::<&str>)?;
