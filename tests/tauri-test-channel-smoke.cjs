@@ -3,10 +3,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const payload = { darwin: 'Blincho Test.app/Contents/MacOS/blincho', win32: 'Blincho Test.exe', linux: 'Blincho-Test.AppImage' }[process.platform];
 if (!payload) throw new Error('Unsupported native test platform');
+const build = JSON.parse(fs.readFileSync(path.join(root, 'release/test-channel/BUILD.json'), 'utf8'));
+const digest = createHash('sha256').update(fs.readFileSync(path.join(root, 'release/test-channel', payload))).digest('hex');
+assert.equal(digest, process.platform === 'linux' ? build.appImageSha256 : build.packagedBinarySha256);
+assert.equal(build.identifier, 'com.myeyes.test');
+assert.equal(build.dirty, false, 'Native delivery smoke requires a committed build');
 const data = process.platform === 'darwin' ? path.join(os.homedir(), 'Library/Application Support')
   : process.platform === 'win32' ? process.env.APPDATA : process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share');
 const profile = path.join(data, 'com.myeyes.test');

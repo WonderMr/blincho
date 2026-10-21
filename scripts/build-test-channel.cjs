@@ -48,7 +48,10 @@ if (process.platform === 'darwin') {
 }
 const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const dirty = Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim());
-const build = { schemaVersion: 1, channel: 'test', version, head, dirty, platform, architecture: process.arch, ...receipt,
+const build = { schemaVersion: 1, channel: 'test', version, head, dirty, platform, architecture: process.arch,
+  identifier: config.identifier, productName: config.productName, sourceBinarySha256: receipt.sha256,
+  ...(process.platform === 'linux' ? { appImageSha256: digest(payload) }
+    : { packagedBinarySha256: digest(process.platform === 'darwin' ? path.join(payload, 'Contents/MacOS/blincho') : payload) }),
   automaticUpdates: false, autostart: false, legacyImport: false, stableFileAssociations: false };
 fs.writeFileSync(path.join(output, 'BUILD.json'), JSON.stringify(build, null, 2) + '\n');
 fs.writeFileSync(path.join(output, 'README.txt'), `Blincho Test ${version}\n\nOpen ${path.basename(payload)} directly. This portable test channel has a separate identity and profile and can run alongside Blincho. It does not import the stable profile, register login startup, create desktop shortcuts or check the stable update feed. Sync is disabled by default. Enable it explicitly for account tests. Use a separate test account for cloud isolation. Signing into the same account intentionally shares settings, statistics and breaks. Pause the other application while testing breaks.\n\nmacOS requires version 14 or later. This local macOS build is ad-hoc signed, without notarization. Portable Windows requires WebView2 and can register its own Blincho Test notification shortcut in the Start Menu. Linux uses an AppImage; make it executable before opening it. Do not run it through a desktop-integration tool. No installer or system package is provided.\n\nSync credentials and encryption keys remain in memory. Reconnect after restarting. Physical account sync and timing across devices still require manual verification.\n\nSource: ${head}${dirty ? ' (local changes)' : ''}\n`);
