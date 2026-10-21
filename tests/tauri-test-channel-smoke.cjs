@@ -18,11 +18,12 @@ const data = process.platform === 'darwin' ? path.join(os.homedir(), 'Library/Ap
 const profile = path.join(data, 'com.myeyes.test');
 const report = path.join(profile, 'runtime-diagnostics.json');
 const env = { ...process.env, BLINCHO_DIAGNOSTICS: '1' };
+if (process.platform === 'linux') env.APPIMAGE_EXTRACT_AND_RUN = '1';
 delete env.BLINCHO_PROTOTYPE_TEST_DIR;
 delete env.BLINCHO_PROTOTYPE_HISTORY_SOURCE;
 const started = Date.now();
 const child = spawn(path.join(root, 'release/test-channel', payload),
-  [...(process.platform === 'linux' ? ['--appimage-extract-and-run'] : []), '--autostart'],
+  ['--autostart'],
   { env, stdio: ['ignore', 'ignore', 'pipe'] });
 let launchError;
 child.on('error', error => { launchError = error; });
