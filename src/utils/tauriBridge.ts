@@ -48,7 +48,7 @@ export function synchronizeNativeTimer(session: TimerSession, settings: AppSetti
   if (!window.__TAURI__) return;
   const input = { totalMs: session.totalMs, remainingMs: session.remainingMs, manualPaused: session.manualPaused,
     breakActive: session.breakActive, exercising: session.exercising, expiryPending: session.expiryPending,
-    version: session.version, breakSeconds: settings.breakSeconds, strictMode: settings.strictMode,
+    version: session.version, breakSeconds: settings.breakSeconds, breakDeadlineAt: session.breakDeadlineAt, strictMode: settings.strictMode,
     idleEnabled: settings.idleDetectionEnabled, idleThresholdSeconds: settings.idleThresholdMinutes * 60,
     meetingEnabled: settings.meetingDetectionEnabled, meetingHistoryEnabled: settings.meetingHistoryEnabled,
     cameraLockEnabled: settings.cameraLockEnabled,

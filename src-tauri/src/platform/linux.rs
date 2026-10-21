@@ -612,10 +612,11 @@ pub async fn notification_permission(_app: &tauri::AppHandle) -> Result<bool, St
         .map_err(|error| error.to_string())
 }
 pub async fn notification_send(
-    _app: &tauri::AppHandle,
+    app: &tauri::AppHandle,
     title: String,
     body: String,
 ) -> Result<bool, String> {
+    let sender_name = crate::channel::name(app).to_owned();
     tauri::async_runtime::spawn_blocking(move || {
         let state = notifications()?;
         let service = state.as_ref().ok_or("Notification service unavailable")?;
@@ -639,7 +640,7 @@ pub async fn notification_send(
             .call(
                 "Notify",
                 &(
-                    "Blincho",
+                    sender_name,
                     0u32,
                     "",
                     title,

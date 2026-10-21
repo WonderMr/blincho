@@ -99,6 +99,9 @@ fn autostart_path(path: &Path, os: &str, installed_windows: bool, appimage: bool
 }
 
 fn eligible(app: &tauri::AppHandle) -> bool {
+    if crate::channel::is_test(app) {
+        return false;
+    }
     if !is_packaged() || std::env::var_os("BLINCHO_PROTOTYPE_TEST_DIR").is_some() {
         return false;
     }
@@ -162,6 +165,9 @@ pub fn disable(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 pub fn is_enabled(app: &tauri::AppHandle) -> Result<bool, String> {
+    if crate::channel::is_test(app) {
+        return Ok(false);
+    }
     #[cfg(target_os = "macos")]
     {
         app.autolaunch().is_enabled().map_err(|e| e.to_string())

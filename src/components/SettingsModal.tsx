@@ -2,6 +2,8 @@ import { useI18n } from '../i18n/useI18n';
 import { LanguagePicker } from './LanguagePicker';
 import { UpdateSettings } from './UpdateSettings';
 import { LocalMcpSettings } from './LocalMcpSettings';
+import { SyncSettings } from './SyncSettings';
+import type { SyncControls } from '../utils/accountSync';
 import { MeetingHistoryControls } from './MeetingHistoryControls';
 import { InputActivityControls } from './InputActivityControls';
 import type { InputActivityControlsProps } from './InputActivityControls';
@@ -22,6 +24,7 @@ import { X, Volume2, Shield, Check, Clock, Monitor } from 'lucide-react';
 interface SettingsModalProps {
   symbioteBuild?: SymbioteBuild;
   settings: AppSettings;
+  accountSync?: SyncControls;
   onUpdateSettings: (newSettings: AppSettings) => void;
   onClose: () => void;
   onCameraAccessPendingChange?: (pending: boolean) => void;
@@ -57,7 +60,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ id, title, description, checked, 
   </div>
 );
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSettings, onClose, onCameraAccessPendingChange, updates, meetingHistoryControls, inputActivityControls, symbioteBuild }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, accountSync, onUpdateSettings, onClose, onCameraAccessPendingChange, updates, meetingHistoryControls, inputActivityControls, symbioteBuild }) => {
   const { preference, suggestedLocale, SUPPORTED_LANGUAGES, setLanguagePreference } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -265,6 +268,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
           <button type="button" onClick={() => showSection('timing-title')}><Clock size={15} aria-hidden="true" />{t("Ритм")}</button>
           <button type="button" onClick={() => showSection('alerts-title')}><Volume2 size={15} aria-hidden="true" />{t("Напоминания")}</button>
           <button type="button" onClick={() => showSection('automation-title')}><Shield size={15} aria-hidden="true" />{t("Автопауза")}</button>
+          {accountSync && <button type="button" onClick={() => showSection('account-sync-title')}>{t('Синхронизация устройств')}</button>}
           {updates && <button type="button" onClick={() => showSection('updates-title')}>{t('Обновления')}</button>}
         </nav>
         <div className="settings-scroll-body">
@@ -382,6 +386,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
               checked={settings.strictMode} onChange={value => handleChange('strictMode', value)} />
           </section>
           <LocalMcpSettings enabled={settings.localMcpEnabled} onChange={value => handleChange('localMcpEnabled', value)} />
+          {accountSync && <SyncSettings enabled={settings.syncEnabled} onEnabledChange={value => handleChange('syncEnabled', value)} sync={accountSync} />}
           {inputActivityControls && <section className="settings-section-card"><InputActivityControls {...inputActivityControls} /></section>}
           {updates && <UpdateSettings updates={updates} />}
         </div>

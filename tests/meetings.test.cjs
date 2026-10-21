@@ -557,3 +557,28 @@ test('App native clear precedes local deletion, rejects stale frames and exposes
   } finally { h.destroy(); if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
     delete window.testNativeFrame; delete window.testClearMeetingHistory; }
 });
+
+
+test('native queue retains the captured absolute shared deadline across later session changes', async () => {
+  const previous = global.window, commands = [];
+  let release;
+  const barrier = new Promise(resolve => { release = resolve; });
+  global.window = { __TAURI__: { core: { invoke: async (name, args) => {
+    if (name === 'configure_timer') { commands.push(args.input); if (commands.length === 1) await barrier; }
+    return { meetingHistoryEpoch: 0 };
+  } } } };
+  try {
+    const { TimerSession } = require(path.join(build, 'utils/timerSession.js'));
+    const session = new TimerSession(1200, Date.now());
+    bridge.synchronizeNativeTimer(session, storage.DEFAULT_SETTINGS);
+    await Promise.resolve(); await Promise.resolve();
+    session.breakActive = true; session.breakDeadlineAt = Date.now() - 1000; session.version++;
+    const endAt = session.breakDeadlineAt;
+    bridge.synchronizeNativeTimer(session, storage.DEFAULT_SETTINGS);
+    session.breakDeadlineAt = null;
+    release(); await bridge.clearNativeMeetingHistory();
+    assert.equal(commands[0].breakDeadlineAt, null);
+    assert.equal(commands[1].breakDeadlineAt, endAt, 'native gets the original deadline, including when it is already expired');
+    assert.equal(commands[1].breakActive, true);
+  } finally { release(); global.window = previous; }
+});

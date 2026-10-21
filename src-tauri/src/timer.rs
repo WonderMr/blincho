@@ -13,6 +13,8 @@ pub struct TimerInput {
     pub expiry_pending: bool,
     pub version: u64,
     pub break_seconds: f64,
+    #[serde(default)]
+    pub break_deadline_at: Option<i64>,
     pub strict_mode: bool,
     pub idle_enabled: bool,
     pub idle_threshold_seconds: f64,
@@ -150,6 +152,9 @@ impl Timer {
             || !(0. ..=28_800_000.).contains(&input.remaining_ms)
             || !input.break_seconds.is_finite()
             || !(1. ..=1800.).contains(&input.break_seconds)
+            || input
+                .break_deadline_at
+                .is_some_and(|end| end < 0 || end > now.saturating_add(1_800_000))
             || !input.idle_threshold_seconds.is_finite()
             || !(30. ..=3600.).contains(&input.idle_threshold_seconds)
         {
@@ -204,9 +209,13 @@ impl Timer {
             self.snapshot.version = input.version;
         }
         if input.break_active && !self.snapshot.break_active {
-            self.break_end = Some(now + (input.break_seconds * 1000.) as i64);
+            // A shared deadline is absolute, so queued IPC cannot extend the break.
+            let end = input
+                .break_deadline_at
+                .unwrap_or(now + (input.break_seconds * 1000.) as i64);
+            self.break_end = Some(end);
             self.snapshot.break_end_at = self.break_end;
-            self.snapshot.break_elapsed = false;
+            self.snapshot.break_elapsed = end <= now;
         } else if !input.break_active {
             self.break_end = None;
             self.snapshot.break_end_at = None;
@@ -1625,6 +1634,7 @@ mod tests {
             expiry_pending: false,
             version: 0,
             break_seconds: 2.,
+            break_deadline_at: None,
             strict_mode: true,
             idle_enabled: true,
             idle_threshold_seconds: 60.,
@@ -1634,6 +1644,36 @@ mod tests {
             enhanced_presence_enabled: false,
             absence_lock_enabled: false,
             auto_takeover: true,
+        }
+    }
+    #[test]
+    fn shared_break_keeps_absolute_deadline_after_delayed_configuration() {
+        let mut timer = Timer::new(0);
+        let mut config = input();
+        config.break_active = true;
+        config.break_deadline_at = Some(20_000);
+        timer.configure(config.clone(), 15_000).unwrap();
+        assert_eq!(timer.snapshot.break_end_at, Some(20_000));
+        assert!(!timer.snapshot.break_elapsed);
+        timer.configure(config, 19_000).unwrap();
+        assert_eq!(timer.snapshot.break_end_at, Some(20_000));
+    }
+    #[test]
+    fn expired_shared_deadline_is_elapsed_without_starting_an_extra_second() {
+        let mut timer = Timer::new(0);
+        let mut config = input();
+        config.break_active = true;
+        config.break_deadline_at = Some(20_000);
+        timer.configure(config, 30_000).unwrap();
+        assert_eq!(timer.snapshot.break_end_at, Some(20_000));
+        assert!(timer.snapshot.break_elapsed);
+    }
+    #[test]
+    fn shared_deadline_rejects_negative_and_excessive_future_values() {
+        for end in [-1, 1_800_001] {
+            let mut config = input();
+            config.break_deadline_at = Some(end);
+            assert!(Timer::new(0).configure(config, 0).is_err());
         }
     }
     #[test]

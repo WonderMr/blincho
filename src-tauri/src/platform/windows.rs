@@ -327,6 +327,11 @@ fn known_programs(folder: &GUID) -> Result<PathBuf, String> {
     }
 }
 fn notification_identity(identifier: &str) -> Result<(), String> {
+    let name = if identifier == crate::channel::TEST_IDENTIFIER {
+        crate::channel::TEST_NAME
+    } else {
+        "Blincho"
+    };
     NOTIFICATION_IDENTITY
         .get_or_init(|| {
             let app_id = wide(identifier);
@@ -342,8 +347,8 @@ fn notification_identity(identifier: &str) -> Result<(), String> {
             // NSIS/MSI may already own the app shortcut. Do not overwrite it.
             if locations.iter().any(|directory| {
                 [
-                    directory.join("Blincho.lnk"),
-                    directory.join("Blincho").join("Blincho.lnk"),
+                    directory.join(format!("{name}.lnk")),
+                    directory.join(name).join(format!("{name}.lnk")),
                 ]
                 .iter()
                 .any(|path| path.is_file())
@@ -353,7 +358,7 @@ fn notification_identity(identifier: &str) -> Result<(), String> {
             std::fs::create_dir_all(&programs).map_err(|error| error.to_string())?;
             let executable = std::env::current_exe().map_err(|error| error.to_string())?;
             let executable_wide = wide_path(&executable);
-            let shortcut = programs.join("Blincho.lnk");
+            let shortcut = programs.join(format!("{name}.lnk"));
             // Save to a temporary path, then move without replacing any existing file.
             let temporary = tempfile::Builder::new()
                 .prefix("blincho-notification-")
@@ -369,7 +374,7 @@ fn notification_identity(identifier: &str) -> Result<(), String> {
                     .map_err(|error| error.to_string())?;
                 link.SetArguments(PCWSTR(wide("").as_ptr()))
                     .map_err(|error| error.to_string())?;
-                link.SetDescription(PCWSTR(wide("Blincho").as_ptr()))
+                link.SetDescription(PCWSTR(wide(name).as_ptr()))
                     .map_err(|error| error.to_string())?;
                 link.SetIconLocation(PCWSTR(executable_wide.as_ptr()), 0)
                     .map_err(|error| error.to_string())?;

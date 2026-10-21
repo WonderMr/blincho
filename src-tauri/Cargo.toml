@@ -4,7 +4,7 @@ version = "1.10.2"
 edition = "2021"
 
 [build-dependencies]
-tauri-build = "=2.6.3"
+tauri-build = { version = "=2.6.3", features = [] }
 cc = "=1.4.4"
 # Newer Windows code generation references APIs absent in the pinned runtime.
 tauri-codegen = "=2.6.3"

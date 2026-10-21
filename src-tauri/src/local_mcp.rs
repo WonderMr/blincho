@@ -64,6 +64,7 @@ struct Server {
 pub struct LocalMcp {
     shared: Arc<Mutex<Shared>>,
     server: Mutex<Option<Server>>,
+    ephemeral_only: bool,
 }
 
 // No app callbacks run under this lock. Recover a poisoned lock so disabling
@@ -95,6 +96,11 @@ fn transient_accept_error(error: &std::io::Error) -> bool {
 }
 
 impl LocalMcp {
+    pub fn isolated() -> Self {
+        let mut server = Self::default();
+        server.ephemeral_only = true;
+        server
+    }
     pub fn status(&self) -> McpStatus {
         lock(&self.shared).status.clone()
     }
@@ -169,9 +175,16 @@ impl LocalMcp {
         let mut random = [0_u8; 32];
         getrandom::fill(&mut random).map_err(|_| "Unable to create local MCP token".to_string())?;
         let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
-        let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, PREFERRED_PORT))
-            .or_else(|_| TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)))
-            .map_err(|error| format!("Unable to start local MCP: {error}"))?;
+        let listener = TcpListener::bind(SocketAddrV4::new(
+            Ipv4Addr::LOCALHOST,
+            if self.ephemeral_only {
+                0
+            } else {
+                PREFERRED_PORT
+            },
+        ))
+        .or_else(|_| TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)))
+        .map_err(|error| format!("Unable to start local MCP: {error}"))?;
         let port = listener
             .local_addr()
             .map_err(|error| error.to_string())?

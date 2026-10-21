@@ -342,7 +342,7 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
         LABEL,
         tauri::WebviewUrl::App("index.html?tray-preview=1".into()),
     )
-    .title("Blincho")
+    .title(crate::channel::name(app))
     .inner_size(WIDTH, HEIGHT)
     .visible(false)
     .focused(false)
@@ -361,7 +361,10 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
             || (matches!(url.scheme(), "http" | "https")
                 && url.host_str() == Some("tauri.localhost"))
     });
-    if let Some(path) = &app.state::<Runtime>().test_dir {
+    let runtime = app.state::<Runtime>();
+    let storage =
+        crate::channel::webview_directory(app, runtime.test_dir.as_deref(), &runtime.profile);
+    if let Some(path) = &storage {
         #[cfg(target_os = "macos")]
         {
             use std::hash::{Hash, Hasher};
