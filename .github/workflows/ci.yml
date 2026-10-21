@@ -3,7 +3,7 @@ name: Validate app and website
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, test]
 
 permissions:
   contents: read
