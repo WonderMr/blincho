@@ -176,13 +176,20 @@ pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
     // Windows can start login items before Explorer is ready. The tray
     // library retains its window and registers again on TaskbarCreated.
     // An optional tooltip update must not abort that recovery or startup.
-    if let Err(error) = crate::tray_preview::set_tooltip(app, label("title")) {
+    if let Err(error) = crate::tray_preview::set_tooltip(
+        app,
+        if crate::channel::is_test(app) {
+            crate::channel::TEST_NAME
+        } else {
+            label("title")
+        },
+    ) {
         eprintln!("Tray tooltip: {error}");
     }
     #[cfg(target_os = "macos")]
     let result = (|| -> tauri::Result<()> {
         let about = AboutMetadata {
-            name: Some("Blincho".into()),
+            name: Some(crate::channel::name(app).into()),
             version: Some(app.package_info().version.to_string()),
             ..Default::default()
         };
@@ -196,7 +203,7 @@ pub fn set_locale(app: &tauri::AppHandle, locale: &str) -> Result<(), String> {
         )?;
         let application = Submenu::with_items(
             app,
-            "Blincho",
+            crate::channel::name(app),
             true,
             &[
                 &Item::about(app, Some(label("about")), Some(about))?,

@@ -46,6 +46,14 @@ npm start
 
 On macOS, run `npm run tauri:test` for Rust and history migration checks, `npm run tauri:build:mac` to build `release/tauri-macos/Blincho.app`, or `npm run tauri:test:mac` for an isolated native smoke test. Install Blincho in `/Applications` before using its login startup feature so the registered executable has a stable path. Windows and Linux builds use `npm run tauri:build:win` and `npm run tauri:build:linux`.
 
+### Separate test channel
+
+The `test` branch is the integration target for experimental work. Pull requests targeting it and pushes to it run **Build isolated test apps**, which retains portable downloads for 14 days in the Actions run. This workflow does not publish releases, update feeds or the website. It builds macOS ARM64/Intel, Windows x64 and Linux x64 packages.
+
+Run `npm run tauri:build:test` locally, optionally passing the matching native Rust target after `--`. Downloads and SHA-256 checksums go to `release/test-artifacts/`. Open `Blincho Test.app`, `Blincho Test.exe` or the extracted executable AppImage directly. Windows needs WebView2. These portable packages do not require replacing the installed application. macOS test packages have an ad-hoc signature without notarization.
+
+`Blincho Test` uses the separate identity `com.myeyes.test`, its own application data and WebView storage, and its own singleton. It can run alongside Blincho. It does not import stable history or preferences, register login startup, create desktop shortcuts or handle `.blincho` files. Stable update checks are disabled. Update it by downloading another test artifact. Sync remains off by default. Windows notifications may register their own `Blincho Test` Start Menu shortcut. Local MCP uses an OS-assigned port in this channel. Use a separate test account for cloud isolation. Signing into the same account intentionally shares settings, statistics and breaks. The profile is retained across test builds; restart still requires reconnecting the account with its encryption key. Both applications retain their own timers, so pause one before manually testing breaks in the other.
+
 Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at several window sizes, through resize/restore and across all five pages in all 30 languages at three widths. It verifies that Settings and sound share a row whenever they fit, translated controls remain unclipped, and statistics fit the content pane. It uses synthetic settings and a separate WebKit profile. The document and titlebar stay fixed; long page content and sidebar controls retain their own scrolling. AppKit can clamp requested dimensions to the screen's available work area. The reopen check reports a skip when macOS cannot confirm presence, while the viewport checks still run.
 
 ## Local MCP

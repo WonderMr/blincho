@@ -107,6 +107,9 @@ fn extension() -> &'static str {
 }
 fn context(app: &tauri::AppHandle) -> Result<Option<Context>, String> {
     let runtime = app.state::<crate::Runtime>();
+    if crate::channel::is_test(app) && runtime.test_dir.is_none() {
+        return Ok(None);
+    }
     if runtime.test_dir.is_none() && !crate::startup::is_packaged() {
         return Ok(None);
     }

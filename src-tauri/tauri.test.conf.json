@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Blincho Test",
+  "identifier": "com.myeyes.test",
+  "app": {
+    "windows": [{
+      "label": "main", "create": false, "title": "Blincho Test",
+      "width": 1040, "height": 760, "minWidth": 780, "minHeight": 620,
+      "titleBarStyle": "Overlay", "hiddenTitle": true
+    }]
+  },
+  "bundle": { "fileAssociations": [] }
+}
