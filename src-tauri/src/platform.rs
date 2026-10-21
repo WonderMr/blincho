@@ -351,6 +351,7 @@ pub fn active_meeting_applications(output: &str) -> Vec<String> {
                 "safari",
                 "firefox",
                 "microsoft edge",
+                "vivaldi",
             ]
             .contains(&owner.as_str());
             let webrtc = name == "webrtc" || name.starts_with("webrtc ");
@@ -544,6 +545,30 @@ mod tests {
             ),
             ["Google Chrome"]
         );
+    }
+    #[test]
+    fn vivaldi_preply_waiting_room_is_detected_without_remote_audio() {
+        let output = "PreventUserIdleDisplaySleep 1\nPreventUserIdleSystemSleep 1\n   pid 13957(Vivaldi): [0x0016b9d90001950b] 00:03:40 NoIdleSleepAssertion named: \"WebRTC has active PeerConnections\"\n   pid 13957(Vivaldi): [0x0016b9da0005950c] 00:03:39 NoDisplaySleepAssertion named: \"Video Wake Lock\"";
+        assert_eq!(active_meeting_applications(output), ["Vivaldi"]);
+        assert_eq!(
+            active_meeting_applications(&output.replace("DisplaySleep 1", "DisplaySleep 0")),
+            ["Vivaldi"]
+        );
+        for kind in ["PreventUserIdleSystemSleep", "PreventUserIdleDisplaySleep"] {
+            assert_eq!(
+                active_meeting_applications(&output.replace("NoIdleSleepAssertion", kind)),
+                ["Vivaldi"]
+            );
+        }
+        for playback in ["Playing audio", "Playing video", "Video Wake Lock"] {
+            assert!(active_meeting_applications(
+                &output.replace("WebRTC has active PeerConnections", playback)
+            )
+            .is_empty());
+        }
+        for owner in ["Vivaldi Helper", "NotVivaldi"] {
+            assert!(active_meeting_applications(&output.replace("Vivaldi", owner)).is_empty());
+        }
     }
     #[test]
     fn meeting_assertions_attribute_multiple_apps_without_retaining_titles() {
