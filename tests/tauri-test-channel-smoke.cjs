@@ -5,6 +5,7 @@ const os = require('node:os');
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
+const { stopOwnedNativeProcess } = require('./support/ownedNativeProcess.cjs');
 const root = path.resolve(__dirname, '..');
 const payload = { darwin: 'Blincho Test.app/Contents/MacOS/blincho', win32: 'Blincho Test.exe', linux: 'Blincho-Test.AppImage' }[process.platform];
 if (!payload) throw new Error('Unsupported native test platform');
@@ -24,7 +25,7 @@ delete env.BLINCHO_PROTOTYPE_HISTORY_SOURCE;
 const started = Date.now();
 const child = spawn(path.join(root, 'release/test-channel', payload),
   ['--autostart'],
-  { env, stdio: ['ignore', 'ignore', 'pipe'] });
+  { env, detached: process.platform === 'linux', stdio: ['ignore', 'ignore', 'pipe'] });
 let launchError;
 child.on('error', error => { launchError = error; });
 child.stderr.on('data', () => {});
@@ -56,6 +57,6 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       profileIsSeparate: true, explicitWebviewStore: true, legacyImportDisabled: true,
       autostartManaged: false, stableUpdateChecks: false, prototypeOverrideUsed: false }));
   } finally {
-    if (child.exitCode === null) child.kill();
+    await stopOwnedNativeProcess(child, { processGroup: process.platform === 'linux' });
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
