@@ -195,6 +195,13 @@ test('spring, autumn and skipped midnight observations retain actual elapsed dur
   } finally { if (original === undefined) delete process.env.TZ; else process.env.TZ = original; }
 });
 
+test('Vivaldi call attribution survives normalization without retaining private titles', () => {
+  assert.deepEqual(meetings.normalizeMeetingApplications(['Vivaldi', 'vivaldi', 'Vivaldi private lesson']), ['Vivaldi', 'unknown']);
+  const date = '2026-10-12';
+  const span = { ...call(date, 9, 0, 10, 0), app: 'Vivaldi', title: 'Private Preply lesson' };
+  assert.deepEqual(meetings.normalizeMeetings([span], date), [{ start: span.start, end: span.end, app: 'Vivaldi' }]);
+});
+
 test('unsafe application attribution is reduced to unknown and invalid ranges cannot enter history', () => {
   const date = '2026-10-12';
   const unsafe = { ...call(date, 9, 0, 10, 0), app: 'https://private.example/team?token=secret', title: 'Private meeting title', path: '/Users/private' };

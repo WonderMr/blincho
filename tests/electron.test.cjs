@@ -108,6 +108,12 @@ async function mainHarness(platform='darwin',assertion='',host='',hostError=null
  const webRtc=await mainHarness('darwin','PreventUserIdleDisplaySleep 1\npid 12(Google Chrome): [x] 00:01:01 PreventUserIdleDisplaySleep named: "WebRTC has active PeerConnections"');assert.equal((await webRtc.handlers['check-meeting-active']()).inMeeting,true);
  const backgroundRtc='PreventUserIdleDisplaySleep 0\nPreventUserIdleSystemSleep 1\n   pid 98974(Google Chrome): [0x000ef28000019b96] 00:17:39 NoIdleSleepAssertion named: "WebRTC has active PeerConnections"';
  const backgroundCall=await mainHarness('darwin',backgroundRtc);assert.equal((await backgroundCall.handlers['check-meeting-active']()).inMeeting,true,'background Chrome call survives a zero display-sleep summary');
+ for(const kind of ['NoIdleSleepAssertion','PreventUserIdleSystemSleep','PreventUserIdleDisplaySleep']){
+  const vivaldiRtc=backgroundRtc.replace('Google Chrome','Vivaldi').replace('NoIdleSleepAssertion',kind).replace('PreventUserIdleDisplaySleep 0','PreventUserIdleDisplaySleep 1');
+  const waitingRoom=await mainHarness('darwin',vivaldiRtc);assert.equal((await waitingRoom.handlers['check-meeting-active']()).inMeeting,true,'Vivaldi call postpones breaks before the teacher joins');
+  for(const name of ['Playing audio','Playing video','Video Wake Lock']){const playback=await mainHarness('darwin',vivaldiRtc.replace('WebRTC has active PeerConnections',name));assert.equal((await playback.handlers['check-meeting-active']()).inMeeting,false);}
+ }
+ const vivaldiBackground=await mainHarness('darwin',backgroundRtc.replace('Google Chrome','Vivaldi'));assert.equal((await vivaldiBackground.handlers['check-meeting-active']()).inMeeting,true,'Vivaldi WebRTC does not require display sleep prevention');
  for(const name of ['Playing audio','Playing video']){const playback=await mainHarness('darwin',backgroundRtc.replace('WebRTC has active PeerConnections',name));assert.equal((await playback.handlers['check-meeting-active']()).inMeeting,false);}
  for(const owner of ['Spotify','caffeinate','zoom.us']){const unrelated=await mainHarness('darwin',backgroundRtc.replace('Google Chrome',owner));assert.equal((await unrelated.handlers['check-meeting-active']()).inMeeting,false);}
  for(const kind of ['BackgroundTask','InternalPreventDisplaySleep']){const unrelated=await mainHarness('darwin',backgroundRtc.replace('NoIdleSleepAssertion',kind));assert.equal((await unrelated.handlers['check-meeting-active']()).inMeeting,false);}

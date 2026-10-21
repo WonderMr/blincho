@@ -608,7 +608,7 @@ function hasActiveMeetingAssertion(output) {
     const owner = assertion[1].trim();
     const name = assertion[3];
     const knownOwner = /^(?:zoom(?:\.us)?|cpthost|microsoft teams|teams|webex|skype|facetime)$/i.test(owner);
-    const browserOwner = /^(?:google chrome|chromium|safari|firefox|microsoft edge)$/i.test(owner);
+    const browserOwner = /^(?:google chrome|chromium|safari|firefox|microsoft edge|vivaldi)$/i.test(owner);
     const webRtc = /^WebRTC(?:\s.*)?$/i.test(name);
     const backgroundWebRtc = browserOwner && webRtc && ['NoIdleSleepAssertion', 'PreventUserIdleSystemSleep'].includes(assertion[2]);
     return backgroundWebRtc || (displaySleepPrevented && assertion[2] === 'PreventUserIdleDisplaySleep'
