@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 const MEETING_MEDIA_INACTIVE_MS: i64 = 300_000;
+const MEETING_END_CONFIRM_MS: i64 = 5000;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,6 +117,7 @@ pub struct Timer {
     meeting_warning_version: Option<u64>,
     meeting_action_epoch: u64,
     meeting_break_token: Option<u64>,
+    meeting_end_since: Option<i64>,
 }
 impl Timer {
     #[cfg(any(target_os = "linux", test))]
@@ -148,6 +150,7 @@ impl Timer {
             meeting_warning_version: None,
             meeting_action_epoch: 0,
             meeting_break_token: None,
+            meeting_end_since: None,
             snapshot: Snapshot {
                 total_ms: 0.,
                 remaining_ms: 0.,
@@ -708,6 +711,7 @@ impl Timer {
         self.meeting_break_context = false;
         self.snapshot.meeting_warning_required = false;
         self.clear_meeting_warning();
+        self.meeting_end_since = None;
     }
 
     fn observe_meeting_media(&mut self, now: i64, status: &crate::platform::MeetingStatus) {
@@ -725,19 +729,37 @@ impl Timer {
         {
             self.media_inactive_since = None;
             self.meeting_resumed = false;
+            self.meeting_end_since = None;
         }
         self.last_media_at = Some(now);
+        // Meeting status is independent from device capture. In particular,
+        // a muted WebRTC PeerConnection or Zoom session remains an active call.
+        let has_meeting = self.meeting_seen
+            || self.meeting_break_context
+            || self.snapshot.meeting_resume_token.is_some()
+            || self.snapshot.meeting_reminders_paused;
+        if has_meeting && status.supported && !status.in_meeting {
+            self.media_inactive_since = None;
+            let since = *self.meeting_end_since.get_or_insert(now);
+            if now - since >= MEETING_END_CONFIRM_MS {
+                self.finish_meeting();
+                return;
+            }
+        } else {
+            self.meeting_end_since = None;
+        }
         self.meeting_seen |= status.supported && status.in_meeting;
         self.meeting_break_context |= status.supported && status.in_meeting;
         self.snapshot.meeting_warning_required = (self.meeting_break_context
             || self.snapshot.meeting_resume_token.is_some())
             && self.input.as_ref().is_some_and(|input| input.strict_mode);
         if self.snapshot.meeting_reminders_paused {
-            self.meeting_postponement_pending = true;
-            // A muted call may disappear from OS heuristics. Only the user's
-            // explicit return may undo an explicit meeting suspension.
             self.media_inactive_since = None;
             self.meeting_breaks_blocked = true;
+            return;
+        }
+        if self.meeting_end_since.is_some() {
+            self.meeting_breaks_blocked = self.meeting_seen && !self.meeting_resumed;
             return;
         }
         if !status.capture_supported {
@@ -768,6 +790,32 @@ impl Timer {
             self.meeting_seen = false;
         }
         self.meeting_breaks_blocked = self.meeting_seen && !self.meeting_resumed;
+    }
+
+    fn finish_meeting(&mut self) {
+        let was_paused = self.snapshot.meeting_reminders_paused;
+        let version = self.snapshot.version;
+        // Reclaim only an already due meeting postponement, never a normal
+        // work countdown or the independent manual timer pause.
+        self.reclaim_meeting_postponement();
+        if self.snapshot.version == version {
+            self.snapshot.version += 1;
+        }
+        if let Some(input) = &mut self.input {
+            input.version = self.snapshot.version;
+            input.remaining_ms = self.snapshot.remaining_ms;
+            input.expiry_pending = self.snapshot.expiry_pending;
+            input.meeting_break_token = None;
+        }
+        self.snapshot.meeting_reminders_paused = false;
+        self.snapshot.meeting_resume_token = None;
+        self.snapshot.meeting_break_cancellable = false;
+        self.meeting_break_token = None;
+        self.reset_meeting_media();
+        if was_paused {
+            self.snapshot.meeting_pause_ended_epoch += 1;
+        }
+        self.snapshot.tick_count += 1;
     }
 
     fn reclaim_meeting_postponement(&mut self) {
@@ -860,6 +908,7 @@ impl Timer {
         }
         self.clear_meeting_warning();
         self.snapshot.meeting_reminders_paused = minutes.is_none();
+        self.meeting_end_since = None;
         if minutes.is_none() {
             self.rotate_meeting_action();
             self.meeting_breaks_blocked = true;
@@ -909,6 +958,8 @@ impl Timer {
             return Ok(());
         }
         self.clear_meeting_warning();
+        let was_due = self.snapshot.expiry_pending || self.snapshot.break_active;
+        self.meeting_end_since = None;
         if paused && self.snapshot.break_active {
             self.snapshot.break_active = false;
             self.snapshot.break_elapsed = false;
@@ -920,7 +971,7 @@ impl Timer {
         self.snapshot.meeting_break_cancellable = false;
         self.snapshot.meeting_reminders_paused = paused;
         self.meeting_breaks_blocked = paused;
-        self.meeting_postponement_pending = false;
+        self.meeting_postponement_pending = paused && was_due;
         self.media_inactive_since = None;
         self.meeting_seen = false;
         self.meeting_resumed = !paused;
@@ -1178,18 +1229,19 @@ mod tests {
         }
     }
     #[test]
-    fn disappearance_of_call_heuristic_alone_does_not_skip_the_media_grace_period() {
+    fn supported_meeting_end_is_confirmed_independently_of_capture_inactivity() {
         let mut timer = live_meeting_timer();
         media_sample(&mut timer, 0, &media_status(Some(true)));
         let mut off = crate::platform::MeetingStatus::inactive(true);
         off.capture_active = Some(false);
         off.capture_supported = true;
         media_sample(&mut timer, 1000, &off);
-        media_until(&mut timer, 1000, 300000, &off);
+        media_until(&mut timer, 1000, 5999, &off);
         assert!(timer.meeting_blocks_break());
-        media_sample(&mut timer, 301000, &off);
+        media_sample(&mut timer, 6000, &off);
         assert!(!timer.meeting_blocks_break());
-        assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
+        assert_eq!(timer.snapshot.meeting_resumed_epoch, 0);
+        assert!(timer.snapshot.meeting_resume_token.is_none());
     }
     #[test]
     fn media_resume_preserves_a_normal_work_cycle() {
@@ -1348,16 +1400,11 @@ mod tests {
         media_sample(&mut timer, 312000, &ended);
         media_until(&mut timer, 312000, 316999, &ended);
         assert!(timer.snapshot.meeting_reminders_paused);
-        media_until(&mut timer, 316999, 620000, &ended);
-        assert!(timer.snapshot.meeting_reminders_paused);
-        assert!(timer.meeting_blocks_break());
-        let token = timer.snapshot.meeting_resume_token.unwrap();
-        timer
-            .set_meeting_reminders_paused(token, false, 620001)
-            .unwrap();
+        media_sample(&mut timer, 317000, &ended);
         assert!(!timer.snapshot.meeting_reminders_paused);
         assert!(!timer.meeting_blocks_break());
         assert!(timer.snapshot.meeting_resume_token.is_none());
+        assert_eq!(timer.snapshot.meeting_pause_ended_epoch, 1);
         assert!(timer.input.as_ref().unwrap().strict_mode);
     }
 
@@ -1436,10 +1483,8 @@ mod tests {
                 assert!(timer
                     .set_meeting_reminders_paused(token, true, 300001)
                     .is_err());
-                let mut lost = crate::platform::MeetingStatus::inactive(true);
-                lost.capture_supported = true;
-                lost.capture_active = Some(false);
-                media_until(&mut timer, 300000, 610000, &lost);
+                let muted = media_status(Some(false));
+                media_until(&mut timer, 300000, 610000, &muted);
                 media_sample(
                     &mut timer,
                     611000,
@@ -1543,6 +1588,156 @@ mod tests {
         assert_eq!(timer.snapshot.remaining_ms, 0.);
         assert_eq!(timer.snapshot.meeting_warning_end_at, end);
         assert!(timer.snapshot.meeting_resume_token.is_none());
+    }
+    #[test]
+    fn meeting_override_ends_automatically_and_preserves_manual_timer_pause() {
+        for manual in [false, true] {
+            let mut timer = strict_warning_timer();
+            timer
+                .defer_meeting_warning(
+                    timer.snapshot.version,
+                    timer.snapshot.meeting_warning_epoch,
+                    None,
+                    3000,
+                )
+                .unwrap();
+            if manual {
+                let mut config = timer.input.clone().unwrap();
+                config.manual_paused = true;
+                config.version += 1;
+                timer.configure(config, 3000).unwrap();
+            }
+            let muted = media_status(Some(false));
+            media_until(&mut timer, 3000, 310000, &muted);
+            assert!(
+                timer.snapshot.meeting_reminders_paused,
+                "camera/microphone inactivity cannot end an active meeting"
+            );
+            let token = timer.snapshot.meeting_resume_token.unwrap();
+            let mut ended = crate::platform::MeetingStatus::inactive(true);
+            ended.capture_supported = true;
+            ended.capture_active = Some(false);
+            media_sample(&mut timer, 311000, &ended);
+            media_until(&mut timer, 311000, 315999, &ended);
+            assert!(
+                timer.snapshot.meeting_reminders_paused,
+                "meeting end is debounced"
+            );
+            media_sample(&mut timer, 316000, &ended);
+            assert!(!timer.snapshot.meeting_reminders_paused);
+            assert!(!timer.meeting_blocks_break());
+            assert_eq!(timer.snapshot.manual_paused, manual);
+            assert_eq!(timer.input.as_ref().unwrap().manual_paused, manual);
+            assert!(timer.snapshot.meeting_resume_token.is_none());
+            assert!(!timer.snapshot.meeting_warning_required);
+            assert_eq!(timer.snapshot.meeting_pause_ended_epoch, 1);
+            assert!(timer
+                .set_meeting_reminders_paused(token, true, 316001)
+                .is_err());
+            if !manual {
+                assert!(timer.snapshot.expiry_pending);
+            }
+            media_until(&mut timer, 316000, 630000, &ended);
+            assert_eq!(
+                timer.snapshot.meeting_pause_ended_epoch, 1,
+                "one restoration per meeting"
+            );
+        }
+    }
+    #[test]
+    fn meeting_end_preserves_a_not_yet_due_work_cycle_with_any_capture_state() {
+        for capture in [None, Some(false), Some(true)] {
+            let mut timer = Timer::new(0);
+            let mut config = input();
+            config.meeting_enabled = true;
+            config.total_ms = 1_200_000.;
+            config.remaining_ms = 1_200_000.;
+            timer.configure(config, 0).unwrap();
+            let muted = media_status(Some(false));
+            media_sample(&mut timer, 0, &muted);
+            media_until(&mut timer, 0, 300000, &muted);
+            timer
+                .set_meeting_reminders_paused(
+                    timer.snapshot.meeting_resume_token.unwrap(),
+                    true,
+                    300000,
+                )
+                .unwrap();
+            let mut ended = crate::platform::MeetingStatus::inactive(true);
+            ended.capture_supported = true;
+            ended.capture_active = capture;
+            media_sample(&mut timer, 301000, &ended);
+            media_until(&mut timer, 301000, 306000, &ended);
+            assert!(!timer.snapshot.meeting_reminders_paused);
+            assert_eq!(timer.snapshot.remaining_ms, 894_000.);
+            assert!(
+                !timer.snapshot.expiry_pending,
+                "a meeting override does not invent an overdue break"
+            );
+            assert_eq!(
+                timer.input.as_ref().unwrap().remaining_ms,
+                timer.snapshot.remaining_ms
+            );
+        }
+    }
+    #[test]
+    fn meeting_end_needs_continuous_supported_negatives_after_each_boundary() {
+        for cause in 0..6 {
+            let mut timer = strict_warning_timer();
+            timer
+                .defer_meeting_warning(
+                    timer.snapshot.version,
+                    timer.snapshot.meeting_warning_epoch,
+                    None,
+                    3000,
+                )
+                .unwrap();
+            let ended = crate::platform::MeetingStatus::inactive(true);
+            media_sample(&mut timer, 4000, &ended);
+            media_until(&mut timer, 4000, 8000, &ended);
+            let next = match cause {
+                0 => {
+                    media_sample(
+                        &mut timer,
+                        9000,
+                        &crate::platform::MeetingStatus::inactive(false),
+                    );
+                    10000
+                }
+                1 => {
+                    media_sample(&mut timer, 9000, &media_status(Some(false)));
+                    10000
+                }
+                2 => {
+                    media_sample(&mut timer, 19000, &ended);
+                    20000
+                }
+                3 => {
+                    media_sample(&mut timer, 7000, &ended);
+                    9000
+                }
+                4 => {
+                    timer.clear_meeting_history(8001);
+                    9000
+                }
+                _ => {
+                    timer.power(1, 8001);
+                    timer.power(2, 9000);
+                    10000
+                }
+            };
+            media_sample(&mut timer, next, &ended);
+            media_until(&mut timer, next, next + 4999, &ended);
+            assert!(
+                timer.snapshot.meeting_reminders_paused,
+                "boundary {cause} must restart confirmation"
+            );
+            media_sample(&mut timer, next + 5000, &ended);
+            assert!(
+                !timer.snapshot.meeting_reminders_paused,
+                "boundary {cause} eventually restores"
+            );
+        }
     }
     fn meeting_status(applications: &[&str]) -> crate::platform::MeetingStatus {
         crate::platform::MeetingStatus {
