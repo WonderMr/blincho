@@ -89,6 +89,7 @@ export const App: React.FC = () => {
   const nativeTickRef = useRef(0);
   const nativeMeetingEpochRef = useRef(0);
   const nativeMeetingResumedEpochRef = useRef(0);
+  const nativeMeetingPauseEndedEpochRef = useRef(0);
   const nativeMeetingWarningEpochRef = useRef(0);
   const nativeMeetingBreakCancelledEpochRef = useRef(0);
   const [meetingControl, setMeetingControl] = useState<{ token: number; paused: boolean; breakCancellable: boolean } | null>(null);
@@ -542,7 +543,10 @@ export const App: React.FC = () => {
       const snapshot = await deferNativeMeetingBreak(meetingWarning.version, meetingWarning.epoch, minutes);
       if (!mountedRef.current) return;
       applyNativeRef.current(snapshot);
-      if (minutes === null) setNoticeMessage("Напоминания отключены. Верните их, когда встреча закончится.");
+      if (minutes === null && meetingControlRef.current?.paused
+        && meetingControlRef.current.token === snapshot.meetingResumeToken) {
+        setNoticeMessage("Напоминания приостановлены до конца встречи.");
+      }
     } catch (error) {
       console.warn('Blincho: Meeting warning action failed:', error);
       if (mountedRef.current) setMeetingWarningError(true);
@@ -974,6 +978,14 @@ export const App: React.FC = () => {
             + ' ' + t("Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания."));
         }
       } else setMeetingWarning(null);
+      if ((snapshot.meetingPauseEndedEpoch ?? 0) > nativeMeetingPauseEndedEpochRef.current) {
+        nativeMeetingPauseEndedEpochRef.current = snapshot.meetingPauseEndedEpoch ?? 0;
+        setInMeetingActive(false);
+        if (!snapshot.manualPaused) {
+          setNoticeMessage("Встреча завершена. Напоминания о перерывах возобновлены.");
+          if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Напоминания о перерывах возобновлены"), t("Встреча завершена. Напоминания о перерывах возобновлены."));
+        }
+      }
       if ((snapshot.meetingResumedEpoch ?? 0) > nativeMeetingResumedEpochRef.current) {
         nativeMeetingResumedEpochRef.current = snapshot.meetingResumedEpoch ?? 0;
         setInMeetingActive(false);
@@ -1273,7 +1285,7 @@ export const App: React.FC = () => {
       {meetingControl && !isBreakActive && !activeTechnique && !meetingWarning && <aside data-meeting-control role="status"
         style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 1050,
           width: 'min(480px, calc(100vw - 32px))', padding: 18, borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border-control)', boxShadow: 'var(--shadow-lg)' }}>
-        <p>{t(meetingControl.paused ? 'Напоминания отключены. Верните их, когда встреча закончится.' : 'Перерывы возобновлены во время встречи.')}</p>
+        <p>{t(meetingControl.paused ? 'Напоминания приостановлены до конца встречи.' : 'Перерывы возобновлены во время встречи.')}</p>
         <button className="btn btn-secondary" disabled={meetingControlBusy} onClick={() => { void handleMeetingReminders(); }}>
           {t(meetingControl.paused ? 'Вернуть напоминания' : 'Я ещё на встрече: отключить перерывы')}</button>
         {!meetingControl.paused && <button className="btn btn-secondary" disabled={meetingControlBusy}
