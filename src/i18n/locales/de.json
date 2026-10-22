@@ -635,5 +635,10 @@
   "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kamera und Mikrofon wurden seit 5 Minuten nicht verwendet. Die Pausenerinnerungen wurden fortgesetzt.",
   "Напоминания о перерывах возобновлены": "Pausenerinnerungen fortgesetzt",
   "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Sind Sie in einer Besprechung? Verschieben Sie die Pause oder pausieren Sie die Erinnerungen bis zum Ende der Besprechung.",
-  "До конца встречи": "Bis zum Ende der Besprechung"
+  "До конца встречи": "Bis zum Ende der Besprechung",
+  "Перерывы возобновлены во время встречи.": "Die Pausen wurden während der Besprechung wieder aktiviert.",
+  "Я ещё на встрече: отключить перерывы": "Ich bin noch in einer Besprechung: Pausen ausschalten",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Erinnerungen sind ausgeschaltet. Schalten Sie sie nach der Besprechung wieder ein.",
+  "Вернуть напоминания": "Erinnerungen wieder einschalten",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Die Erinnerungen konnten nicht geändert werden. Versuchen Sie es erneut."
 }

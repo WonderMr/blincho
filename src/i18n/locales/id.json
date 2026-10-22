@@ -635,5 +635,10 @@
   "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kamera dan mikrofon tidak digunakan selama 5 menit. Pengingat istirahat dilanjutkan.",
   "Напоминания о перерывах возобновлены": "Pengingat istirahat dilanjutkan",
   "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Sedang rapat? Tunda istirahat atau jeda pengingat hingga rapat selesai.",
-  "До конца встречи": "Hingga rapat selesai"
+  "До конца встречи": "Hingga rapat selesai",
+  "Перерывы возобновлены во время встречи.": "Istirahat dilanjutkan saat rapat berlangsung.",
+  "Я ещё на встрече: отключить перерывы": "Saya masih rapat: nonaktifkan istirahat",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Pengingat dinonaktifkan. Aktifkan kembali setelah rapat selesai.",
+  "Вернуть напоминания": "Aktifkan kembali pengingat",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Tidak dapat mengubah pengingat. Coba lagi."
 }

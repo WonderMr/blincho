@@ -635,5 +635,10 @@
   "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "The camera and microphone have not been used for 5 minutes. Break reminders have resumed.",
   "Напоминания о перерывах возобновлены": "Break reminders resumed",
   "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Are you in a meeting? Delay the break or pause reminders until it ends.",
-  "До конца встречи": "Until the meeting ends"
+  "До конца встречи": "Until the meeting ends",
+  "Перерывы возобновлены во время встречи.": "Breaks have resumed during the meeting.",
+  "Я ещё на встрече: отключить перерывы": "I'm still in a meeting: turn off breaks",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Reminders are off. Turn them back on when the meeting ends.",
+  "Вернуть напоминания": "Turn reminders back on",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Couldn't change reminders. Try again."
 }

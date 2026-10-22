@@ -217,6 +217,13 @@ impl MeetingMonitor {
         });
         self.invalidate();
     }
+    pub fn set_test_capture(&self, active: Option<bool>, supported: bool) {
+        if let Some(status) = self.test_status.lock().unwrap().as_mut() {
+            status.capture_active = active;
+            status.capture_supported = supported;
+        }
+        self.invalidate();
+    }
     pub fn invalidate(&self) {
         let mut cache = self.cache.lock().unwrap();
         cache.revision = cache.revision.wrapping_add(1);

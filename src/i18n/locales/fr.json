@@ -635,5 +635,10 @@
   "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "La caméra et le microphone ne sont pas utilisés depuis 5 minutes. Les rappels de pause sont réactivés.",
   "Напоминания о перерывах возобновлены": "Rappels de pause réactivés",
   "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Vous êtes en réunion ? Reportez la pause ou suspendez les rappels jusqu’à la fin de la réunion.",
-  "До конца встречи": "Jusqu’à la fin de la réunion"
+  "До конца встречи": "Jusqu’à la fin de la réunion",
+  "Перерывы возобновлены во время встречи.": "Les pauses ont repris pendant la réunion.",
+  "Я ещё на встрече: отключить перерывы": "Je suis encore en réunion : désactiver les pauses",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Les rappels sont désactivés. Réactivez-les à la fin de la réunion.",
+  "Вернуть напоминания": "Réactiver les rappels",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Impossible de modifier les rappels. Réessayez."
 }

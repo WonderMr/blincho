@@ -48,7 +48,7 @@ async function control(operation, args = {}) {
 }
 async function inspect() {
   const marker = ++sequence;
-  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,warningProbe:${marker},warning:!!document.getElementById('meeting-warning-title'),breakDialog:!!document.querySelector('.fullscreen-break-takeover'),buttons:Array.from(document.querySelectorAll('[aria-labelledby="meeting-warning-title"] button')).map(b=>b.textContent),overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth}})` });
+  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,warningProbe:${marker},control:!!document.querySelector("[data-meeting-control]"),breakControl:!!document.querySelector("[data-meeting-break-control]"),warning:!!document.getElementById('meeting-warning-title'),breakDialog:!!document.querySelector('.fullscreen-break-takeover'),buttons:Array.from(document.querySelectorAll('[aria-labelledby="meeting-warning-title"] button')).map(b=>b.textContent),overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth}})` });
   return until(state => state.renderer?.warningProbe === marker);
 }
 async function prepareWarning() {
@@ -88,14 +88,54 @@ async function prepareWarning() {
   assert.equal(state.timer.meetingWarningEndAt, null);
   assert.equal(state.strictShieldCount, 0);
   await control('meeting', { active: false });
-  state = await until(value => value.timer.meetingPauseEndedEpoch === 1);
-  assert.equal(state.timer.meetingRemindersPaused, false);
+  await sleep(6500);
+  state = await inspect();
+  assert.equal(state.timer.meetingRemindersPaused, true, 'muted heuristic loss cannot reverse explicit suspension');
+  assert.equal(state.renderer.control, true, 'manual return stays visible');
+  await control('eval', { script: `document.querySelector('[data-meeting-control] button').click()` });
+  state = await until(value => !value.timer.meetingRemindersPaused && value.timer.meetingResumeToken === null);
   assert.equal(state.strictShieldCount, 0);
+  // Let the real native five-minute policy run with modeled passive metadata.
+  await control('meeting', { active: true, applications: ['Zoom'], captureSupported: true, captureActive: false });
+  state = read();
+  await control('configure', { input: { totalMs: 1200000, remainingMs: 900000, version: state.timer.version + 1,
+    manualPaused: false, breakActive: false, exercising: false, expiryPending: false,
+    breakSeconds: 60, strictMode: true, idleEnabled: false, idleThresholdSeconds: 60,
+    meetingEnabled: true, meetingHistoryEnabled: false, autoTakeover: true } });
+  console.log('Waiting for real five-minute media-inactivity policy in isolated profile');
+  state = await until(value => value.timer.meetingResumedEpoch >= 1 && value.timer.meetingResumeToken, 325000);
+  state = await inspect();
+  assert(state.renderer.control, 'resumption provides a persistent action before the work deadline');
+  assert(state.timer.remainingMs > 500000, 'ordinary countdown is preserved');
+  const resumeToken = state.timer.meetingResumeToken;
+  await control('meeting', { active: false, captureSupported: true, captureActive: false });
+  await sleep(6500);
+  state = await inspect();
+  assert(state.renderer.control, 'action survives a muted call disappearing from OS heuristics');
+  // Force the next deadline, then let the actual 30-second warning and strict takeover run.
+  await control('configure', { input: { totalMs: 1200000, remainingMs: 1000, version: state.timer.version + 1,
+    manualPaused: false, breakActive: false, exercising: false, expiryPending: false,
+    breakSeconds: 60, strictMode: true, idleEnabled: false, idleThresholdSeconds: 60,
+    meetingEnabled: true, meetingHistoryEnabled: false, autoTakeover: true } });
+  state = await until(value => value.timer.breakActive, 45000);
+  state = await inspect();
+  for (let i = 0; i < 30 && !state.renderer.breakControl; i++) { await sleep(100); state = await inspect(); }
+  assert(state.renderer.breakControl, 'the ongoing strict break retains meeting undo');
+  assert(state.timer.meetingBreakCancellable);
+  assert.equal(state.timer.meetingResumeToken, resumeToken);
+  await control('eval', { script: `document.querySelector('[data-meeting-break-control] button').click()` });
+  state = await until(value => !value.timer.breakActive && value.timer.meetingRemindersPaused && value.strictShieldCount === 0);
+  state = await inspect();
+  assert(!state.renderer.breakDialog && state.renderer.control, 'cancellation closes overlay and exposes manual return');
+  assert.equal(state.timer.breakEndAt, null);
+  await sleep(6500);
+  state = read();
+  assert(state.timer.meetingRemindersPaused);
   await control('quit');
   for (let i = 0; i < 50 && child.exitCode === null; i++) await sleep(100);
   assert.equal(child.exitCode, 0);
   const result = { passed: true, profile: directory, checks: ['real WKWebView warning', 'no early strict shields',
-    'notification-off panel', 'duration buttons', 'native10-minute postpone', 'pause until meeting end', 'native end resumption', 'no overflow'],
+    'notification-off panel', 'duration buttons', 'native10-minute postpone', 'manual pause survives heuristic loss', 'explicit return', 'real five-minute auto resumption', 'persistent undo before expiry', 'strict break cancellation', 'native shields released', 'no overflow'],
   limitation: 'Call and presence signals are modeled. Actual meeting-app behavior is checked by the user.' };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));

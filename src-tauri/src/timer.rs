@@ -11,6 +11,8 @@ pub struct TimerInput {
     pub remaining_ms: f64,
     pub manual_paused: bool,
     pub break_active: bool,
+    #[serde(default)]
+    pub meeting_break_token: Option<u64>,
     pub exercising: bool,
     pub expiry_pending: bool,
     pub version: u64,
@@ -79,6 +81,9 @@ pub struct Snapshot {
     pub tick_count: u64,
     pub meeting_postponed_epoch: u64,
     pub meeting_resumed_epoch: u64,
+    pub meeting_resume_token: Option<u64>,
+    pub meeting_break_cancellable: bool,
+    pub meeting_break_cancelled_epoch: u64,
     pub meeting_warning_epoch: u64,
     pub meeting_warning_end_at: Option<i64>,
     pub meeting_warning_ready: bool,
@@ -109,7 +114,8 @@ pub struct Timer {
     meeting_postponement_pending: bool,
     meeting_break_context: bool,
     meeting_warning_version: Option<u64>,
-    meeting_end_since: Option<i64>,
+    meeting_action_epoch: u64,
+    meeting_break_token: Option<u64>,
 }
 impl Timer {
     #[cfg(any(target_os = "linux", test))]
@@ -140,7 +146,8 @@ impl Timer {
             meeting_postponement_pending: false,
             meeting_break_context: false,
             meeting_warning_version: None,
-            meeting_end_since: None,
+            meeting_action_epoch: 0,
+            meeting_break_token: None,
             snapshot: Snapshot {
                 total_ms: 0.,
                 remaining_ms: 0.,
@@ -167,6 +174,9 @@ impl Timer {
                 tick_count: 0,
                 meeting_postponed_epoch: 0,
                 meeting_resumed_epoch: 0,
+                meeting_resume_token: None,
+                meeting_break_cancellable: false,
+                meeting_break_cancelled_epoch: 0,
                 meeting_warning_epoch: 0,
                 meeting_warning_end_at: None,
                 meeting_warning_ready: false,
@@ -191,6 +201,15 @@ impl Timer {
         }
         if self.input.is_some() && input.version < self.snapshot.version {
             return Err("Stale timer command".into());
+        }
+        if input.break_active
+            && !self.snapshot.break_active
+            && input.meeting_break_token.is_some()
+            && (input.meeting_break_token != self.snapshot.meeting_resume_token
+                || self.snapshot.meeting_reminders_paused
+                || !input.meeting_enabled)
+        {
+            return Err("Stale meeting break command".into());
         }
         self.observe_activity(self.last_at, now, self.activity_state());
         if self
@@ -249,10 +268,16 @@ impl Timer {
             self.snapshot.version = input.version;
         }
         if input.break_active && !self.snapshot.break_active {
+            self.meeting_break_token = input.meeting_break_token.filter(|token| {
+                Some(*token) == self.snapshot.meeting_resume_token
+                    && !self.snapshot.meeting_reminders_paused
+                    && input.meeting_enabled
+            });
             self.break_end = Some(now + (input.break_seconds * 1000.) as i64);
             self.snapshot.break_end_at = self.break_end;
             self.snapshot.break_elapsed = false;
         } else if !input.break_active {
+            self.meeting_break_token = None;
             self.break_end = None;
             self.snapshot.break_end_at = None;
             self.snapshot.break_elapsed = false;
@@ -264,11 +289,19 @@ impl Timer {
         if !input.strict_mode || !input.meeting_enabled {
             self.clear_meeting_warning();
             self.snapshot.meeting_warning_required = false;
+        } else if self.snapshot.meeting_resume_token.is_some()
+            && !self.snapshot.meeting_reminders_paused
+        {
+            self.snapshot.meeting_warning_required = true;
         }
         if !input.meeting_enabled {
             self.snapshot.meeting_reminders_paused = false;
-            self.meeting_end_since = None;
+            self.snapshot.meeting_resume_token = None;
+            self.meeting_break_token = None;
         }
+        self.snapshot.meeting_break_cancellable = self.meeting_break_token.is_some()
+            && self.meeting_break_token == self.snapshot.meeting_resume_token
+            && self.snapshot.break_active;
         self.snapshot.live_meeting_enabled = input.meeting_enabled
             || input.meeting_history_enabled
             || input.enhanced_presence_enabled
@@ -662,7 +695,7 @@ impl Timer {
     }
 
     pub fn meeting_blocks_break(&self) -> bool {
-        self.meeting_breaks_blocked
+        self.snapshot.meeting_reminders_paused || self.meeting_breaks_blocked
     }
 
     fn reset_meeting_media(&mut self) {
@@ -675,7 +708,6 @@ impl Timer {
         self.meeting_break_context = false;
         self.snapshot.meeting_warning_required = false;
         self.clear_meeting_warning();
-        self.meeting_end_since = None;
     }
 
     fn observe_meeting_media(&mut self, now: i64, status: &crate::platform::MeetingStatus) {
@@ -693,31 +725,20 @@ impl Timer {
         {
             self.media_inactive_since = None;
             self.meeting_resumed = false;
-            self.meeting_end_since = None;
         }
         self.last_media_at = Some(now);
         self.meeting_seen |= status.supported && status.in_meeting;
         self.meeting_break_context |= status.supported && status.in_meeting;
-        self.snapshot.meeting_warning_required = self.meeting_break_context
+        self.snapshot.meeting_warning_required = (self.meeting_break_context
+            || self.snapshot.meeting_resume_token.is_some())
             && self.input.as_ref().is_some_and(|input| input.strict_mode);
         if self.snapshot.meeting_reminders_paused {
             self.meeting_postponement_pending = true;
-            if status.supported && !status.in_meeting {
-                let since = *self.meeting_end_since.get_or_insert(now);
-                if now - since >= 5000 {
-                    self.snapshot.meeting_reminders_paused = false;
-                    self.snapshot.meeting_pause_ended_epoch += 1;
-                    self.meeting_seen = false;
-                    self.reclaim_meeting_postponement();
-                }
-            } else {
-                self.meeting_end_since = None;
-            }
-            if self.snapshot.meeting_reminders_paused {
-                self.media_inactive_since = None;
-                self.meeting_breaks_blocked = true;
-                return;
-            }
+            // A muted call may disappear from OS heuristics. Only the user's
+            // explicit return may undo an explicit meeting suspension.
+            self.media_inactive_since = None;
+            self.meeting_breaks_blocked = true;
+            return;
         }
         if !status.capture_supported {
             // Runtimes without a device-use probe retain their existing call
@@ -737,6 +758,9 @@ impl Timer {
             if now - since >= MEETING_MEDIA_INACTIVE_MS && !self.meeting_resumed {
                 self.meeting_resumed = true;
                 self.snapshot.meeting_resumed_epoch += 1;
+                if !self.snapshot.break_active {
+                    self.rotate_meeting_action();
+                }
                 self.reclaim_meeting_postponement();
             }
         }
@@ -836,7 +860,10 @@ impl Timer {
         }
         self.clear_meeting_warning();
         self.snapshot.meeting_reminders_paused = minutes.is_none();
-        self.meeting_end_since = None;
+        if minutes.is_none() {
+            self.rotate_meeting_action();
+            self.meeting_breaks_blocked = true;
+        }
         self.meeting_postponement_pending = minutes.is_none();
         self.snapshot.remaining_ms = f64::from(minutes.unwrap_or(5)) * 60_000.;
         self.snapshot.expiry_pending = false;
@@ -845,6 +872,74 @@ impl Timer {
         if let Some(input) = &mut self.input {
             input.remaining_ms = self.snapshot.remaining_ms;
             input.expiry_pending = false;
+            input.version = self.snapshot.version;
+        }
+        self.last_at = now;
+        Ok(())
+    }
+
+    fn rotate_meeting_action(&mut self) {
+        self.meeting_action_epoch += 1;
+        self.snapshot.meeting_resume_token = Some(self.meeting_action_epoch);
+    }
+
+    pub fn set_meeting_reminders_paused(
+        &mut self,
+        token: u64,
+        paused: bool,
+        now: i64,
+    ) -> Result<(), String> {
+        if self.snapshot.meeting_resume_token != Some(token)
+            || (self.snapshot.meeting_reminders_paused && paused)
+            || self
+                .input
+                .as_ref()
+                .is_none_or(|input| !input.meeting_enabled)
+            || (self.snapshot.break_active && self.meeting_break_token != Some(token))
+            || self.snapshot.exercising
+        {
+            return Err("Meeting reminder action is no longer current".into());
+        }
+        if !paused && !self.snapshot.meeting_reminders_paused {
+            // Dismissing the resumption control is not a postponement.
+            self.snapshot.meeting_resume_token = None;
+            self.meeting_break_token = None;
+            self.snapshot.meeting_break_cancellable = false;
+            self.snapshot.tick_count += 1;
+            return Ok(());
+        }
+        self.clear_meeting_warning();
+        if paused && self.snapshot.break_active {
+            self.snapshot.break_active = false;
+            self.snapshot.break_elapsed = false;
+            self.snapshot.break_end_at = None;
+            self.break_end = None;
+            self.snapshot.meeting_break_cancelled_epoch += 1;
+        }
+        self.meeting_break_token = None;
+        self.snapshot.meeting_break_cancellable = false;
+        self.snapshot.meeting_reminders_paused = paused;
+        self.meeting_breaks_blocked = paused;
+        self.meeting_postponement_pending = false;
+        self.media_inactive_since = None;
+        self.meeting_seen = false;
+        self.meeting_resumed = !paused;
+        self.snapshot.expiry_pending = false;
+        if self.snapshot.remaining_ms <= 0. {
+            self.snapshot.remaining_ms = 300_000.;
+        }
+        self.snapshot.version += 1;
+        self.snapshot.tick_count += 1;
+        if paused {
+            self.rotate_meeting_action();
+        } else {
+            self.snapshot.meeting_resume_token = None;
+        }
+        if let Some(input) = &mut self.input {
+            input.remaining_ms = self.snapshot.remaining_ms;
+            input.expiry_pending = false;
+            input.break_active = self.snapshot.break_active;
+            input.meeting_break_token = None;
             input.version = self.snapshot.version;
         }
         self.last_at = now;
@@ -1253,16 +1348,19 @@ mod tests {
         media_sample(&mut timer, 312000, &ended);
         media_until(&mut timer, 312000, 316999, &ended);
         assert!(timer.snapshot.meeting_reminders_paused);
-        media_sample(&mut timer, 317000, &ended);
+        media_until(&mut timer, 316999, 620000, &ended);
+        assert!(timer.snapshot.meeting_reminders_paused);
+        assert!(timer.meeting_blocks_break());
+        let token = timer.snapshot.meeting_resume_token.unwrap();
+        timer
+            .set_meeting_reminders_paused(token, false, 620001)
+            .unwrap();
         assert!(!timer.snapshot.meeting_reminders_paused);
         assert!(!timer.meeting_blocks_break());
-        assert_eq!(timer.snapshot.meeting_pause_ended_epoch, 1);
-        assert!(timer.snapshot.expiry_pending);
+        assert!(timer.snapshot.meeting_resume_token.is_none());
         assert!(timer.input.as_ref().unwrap().strict_mode);
-        media_sample(&mut timer, 318000, &media_status(Some(true)));
-        assert!(timer.meeting_blocks_break());
-        assert!(!timer.snapshot.meeting_reminders_paused);
     }
+
     #[test]
     fn warning_cancels_on_pause_absence_reset_and_policy_change() {
         for cause in 0..5 {
@@ -1310,6 +1408,141 @@ mod tests {
             assert!(!timer.hold_for_meeting_warning(2000));
             assert!(timer.meeting_warning_allows_break());
         }
+    }
+    #[test]
+    fn resumed_meeting_control_works_before_expiry_in_both_modes_and_preserves_manual_pause() {
+        for strict in [false, true] {
+            for manual in [false, true] {
+                let mut timer = Timer::new(0);
+                let mut config = input();
+                config.strict_mode = strict;
+                config.manual_paused = manual;
+                config.meeting_enabled = true;
+                config.total_ms = 1_200_000.;
+                config.remaining_ms = 1_200_000.;
+                timer.configure(config, 0).unwrap();
+                let off = media_status(Some(false));
+                media_sample(&mut timer, 0, &off);
+                media_until(&mut timer, 0, 300000, &off);
+                let token = timer.snapshot.meeting_resume_token.unwrap();
+                assert!(!timer.snapshot.expiry_pending);
+                let remaining = timer.snapshot.remaining_ms;
+                timer
+                    .set_meeting_reminders_paused(token, true, 300000)
+                    .unwrap();
+                assert_eq!(timer.snapshot.remaining_ms, remaining);
+                assert_eq!(timer.snapshot.manual_paused, manual);
+                assert!(timer.meeting_blocks_break());
+                assert!(timer
+                    .set_meeting_reminders_paused(token, true, 300001)
+                    .is_err());
+                let mut lost = crate::platform::MeetingStatus::inactive(true);
+                lost.capture_supported = true;
+                lost.capture_active = Some(false);
+                media_until(&mut timer, 300000, 610000, &lost);
+                media_sample(
+                    &mut timer,
+                    611000,
+                    &crate::platform::MeetingStatus::inactive(false),
+                );
+                assert!(timer.meeting_blocks_break());
+                assert!(timer.snapshot.meeting_reminders_paused);
+                timer.clear_meeting_history(611001);
+                assert!(
+                    timer.meeting_blocks_break(),
+                    "history deletion cannot undo manual suspension"
+                );
+                let current = timer.snapshot.meeting_resume_token.unwrap();
+                timer
+                    .set_meeting_reminders_paused(current, false, 612000)
+                    .unwrap();
+                assert!(!timer.snapshot.meeting_reminders_paused);
+                assert!(timer.snapshot.meeting_resume_token.is_none());
+                assert_eq!(timer.snapshot.manual_paused, manual);
+                assert_eq!(timer.input.as_ref().unwrap().strict_mode, strict);
+            }
+        }
+    }
+    #[test]
+    fn resumed_meeting_control_cancels_only_its_associated_break_and_clears_deadline() {
+        for associated in [false, true] {
+            let mut timer = live_meeting_timer();
+            let off = media_status(Some(false));
+            media_sample(&mut timer, 0, &off);
+            media_until(&mut timer, 0, 300000, &off);
+            let token = timer.snapshot.meeting_resume_token.unwrap();
+            let mut config = timer.input.clone().unwrap();
+            config.manual_paused = false;
+            config.break_active = true;
+            config.break_seconds = 120.;
+            config.version += 1;
+            config.meeting_break_token = associated.then_some(token);
+            timer.configure(config, 301000).unwrap();
+            assert_eq!(timer.snapshot.meeting_break_cancellable, associated);
+            let result = timer.set_meeting_reminders_paused(token, true, 302000);
+            assert_eq!(result.is_ok(), associated);
+            if associated {
+                assert!(!timer.snapshot.break_active);
+                assert!(!timer.strict());
+                assert!(timer.snapshot.break_end_at.is_none());
+                assert_eq!(timer.snapshot.meeting_break_cancelled_epoch, 1);
+                timer.tick(500000, Some(0.), Some(false));
+                assert!(!timer.snapshot.break_elapsed);
+                let mut config = timer.input.clone().unwrap();
+                config.meeting_enabled = false;
+                timer.configure(config, 500001).unwrap();
+                assert!(timer.snapshot.meeting_resume_token.is_none());
+                assert!(timer
+                    .set_meeting_reminders_paused(token, true, 500002)
+                    .is_err());
+            } else {
+                assert!(timer.strict(), "ordinary strict breaks remain locked");
+            }
+        }
+    }
+    #[test]
+    fn paused_meeting_rejects_a_queued_break_even_at_the_same_timer_version() {
+        let mut timer = live_meeting_timer();
+        let off = media_status(Some(false));
+        media_sample(&mut timer, 0, &off);
+        media_until(&mut timer, 0, 300000, &off);
+        let token = timer.snapshot.meeting_resume_token.unwrap();
+        timer
+            .set_meeting_reminders_paused(token, true, 300001)
+            .unwrap();
+        let mut config = timer.input.clone().unwrap();
+        config.break_active = true;
+        config.meeting_break_token = Some(token);
+        assert!(timer.configure(config, 300002).is_err());
+        assert!(!timer.snapshot.break_active);
+        assert!(timer.snapshot.meeting_reminders_paused);
+    }
+    #[test]
+    fn dismissing_resumption_control_preserves_due_break_and_warning() {
+        let mut timer = live_meeting_timer();
+        let off = media_status(Some(false));
+        media_sample(&mut timer, 0, &off);
+        media_until(&mut timer, 0, 300000, &off);
+        let token = timer.snapshot.meeting_resume_token.unwrap();
+        let mut config = timer.input.clone().unwrap();
+        config.manual_paused = false;
+        config.remaining_ms = 0.;
+        config.expiry_pending = true;
+        config.version += 1;
+        timer.configure(config, 300001).unwrap();
+        assert!(
+            timer.snapshot.meeting_warning_required,
+            "muted heuristic loss preserves resumption warning context"
+        );
+        assert!(timer.hold_for_meeting_warning(300001));
+        let end = timer.snapshot.meeting_warning_end_at;
+        timer
+            .set_meeting_reminders_paused(token, false, 300002)
+            .unwrap();
+        assert!(timer.snapshot.expiry_pending);
+        assert_eq!(timer.snapshot.remaining_ms, 0.);
+        assert_eq!(timer.snapshot.meeting_warning_end_at, end);
+        assert!(timer.snapshot.meeting_resume_token.is_none());
     }
     fn meeting_status(applications: &[&str]) -> crate::platform::MeetingStatus {
         crate::platform::MeetingStatus {
@@ -2201,6 +2434,7 @@ mod tests {
             remaining_ms: 2000.,
             manual_paused: false,
             break_active: false,
+            meeting_break_token: None,
             exercising: false,
             expiry_pending: false,
             version: 0,

@@ -635,5 +635,10 @@
   "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kamera ve mikrofon 5 dakikadır kullanılmıyor. Mola hatırlatıcıları yeniden başladı.",
   "Напоминания о перерывах возобновлены": "Mola hatırlatıcıları devam ediyor",
   "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Toplantıda mısınız? Molayı erteleyin veya toplantı bitene kadar hatırlatıcıları duraklatın.",
-  "До конца встречи": "Toplantı bitene kadar"
+  "До конца встречи": "Toplantı bitene kadar",
+  "Перерывы возобновлены во время встречи.": "Molalar toplantı sırasında yeniden başladı.",
+  "Я ещё на встрече: отключить перерывы": "Hâlâ toplantıdayım: molaları kapat",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Hatırlatıcılar kapalı. Toplantı bitince yeniden açın.",
+  "Вернуть напоминания": "Hatırlatıcıları yeniden aç",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Hatırlatıcılar değiştirilemedi. Yeniden deneyin."
 }

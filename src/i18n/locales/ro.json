@@ -635,5 +635,10 @@
   "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Camera și microfonul nu au fost utilizate timp de 5 minute. Mementourile de pauză au fost reluate.",
   "Напоминания о перерывах возобновлены": "Mementourile de pauză au fost reluate",
   "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Ești într-o întâlnire? Amână pauza sau suspendă mementourile până la sfârșitul întâlnirii.",
-  "До конца встречи": "Până la sfârșitul întâlnirii"
+  "До конца встречи": "Până la sfârșitul întâlnirii",
+  "Перерывы возобновлены во время встречи.": "Pauzele au fost reluate în timpul întâlnirii.",
+  "Я ещё на встрече: отключить перерывы": "Sunt încă într-o întâlnire: dezactivează pauzele",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Mementourile sunt dezactivate. Reactivează-le când se termină întâlnirea.",
+  "Вернуть напоминания": "Reactivează mementourile",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Mementourile nu au putut fi modificate. Încearcă din nou."
 }
