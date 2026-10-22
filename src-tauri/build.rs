@@ -1,3 +1,4 @@
+/// Compile macOS native bridges, link their system frameworks, and run Tauri build setup.
 fn main() {
     println!("cargo:rerun-if-env-changed=BLINCHO_RELEASE_METADATA");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {

@@ -942,6 +942,8 @@ mod tests {
         })).unwrap()
     }
 
+    /// Verify translated tray labels for disabled, active, inactive, unsupported, and unknown-
+    /// application call states.
     #[test]
     fn call_status_uses_live_snapshot_and_translated_labels_in_every_state() {
         let summary = summary();

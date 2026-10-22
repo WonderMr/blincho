@@ -6,6 +6,11 @@ import { useModalFocus } from '../utils/useModalFocus';
 export interface MeetingBreakWarningState { version: number; epoch: number; endAt: number }
 interface Props { warning: MeetingBreakWarningState; busy: boolean; error: boolean; onDefer: (minutes: number | null) => void }
 
+/**
+ * Show the native strict-break deadline and the available meeting deferrals.
+ * Send 5, 10 or 15 minutes to onDefer, or null to pause until meeting end.
+ * Disable actions while submitting or after the deadline; the native timer owns expiry.
+ */
 export function MeetingBreakWarning({ warning, busy, error, onDefer }: Props) {
   useI18n();
   const [now, setNow] = useState(Date.now());

@@ -52,6 +52,11 @@ export function hasNativeTimer(): boolean { return !!window.__TAURI__; }
 export function subscribeNativeTimer(callback: (snapshot: NativeTimerSnapshot) => void): () => void {
   frames.add(callback); return () => frames.delete(callback);
 }
+/**
+ * Serialize a captured timer/settings update with other native timer commands.
+ * meetingBreakToken associates an automatic break with its cancellable meeting
+ * resumption. Report a successful configuration to onConfigured; log failures.
+ */
 export function synchronizeNativeTimer(session: TimerSession, settings: AppSettings,
   onConfigured?: (snapshot: NativeTimerSnapshot) => void, meetingBreakToken: number | null = null): void {
   if (!window.__TAURI__) return;
@@ -75,12 +80,22 @@ export async function readNativeTimer(): Promise<NativeTimerSnapshot | null> {
   latest = await window.__TAURI__.core.invoke<NativeTimerSnapshot>('timer_snapshot');
   return latest;
 }
+/**
+ * Defer the strict warning identified by timer version and warning epoch.
+ * Accept 5, 10 or 15 minutes, or null to pause reminders until meeting end.
+ * Return the native snapshot; reject unavailable-runtime, stale-action or IPC errors.
+ */
 export async function deferNativeMeetingBreak(version: number, warningEpoch: number, minutes: number | null): Promise<NativeTimerSnapshot> {
   if (!window.__TAURI__) throw new Error('Native meeting warning unavailable');
   const action = commandQueue.then(() => window.__TAURI__!.core.invoke<NativeTimerSnapshot>('defer_meeting_break', { version, warningEpoch, minutes }));
   commandQueue = action.then(snapshot => { latest = snapshot; }).catch(() => {});
   return action;
 }
+/**
+ * Queue a reminder pause or resumption for the current meeting action token.
+ * Return the native snapshot, including any associated break cancellation.
+ * Reject unavailable-runtime, stale-token or IPC errors without blocking later commands.
+ */
 export async function setNativeMeetingRemindersPaused(token: number, paused: boolean): Promise<NativeTimerSnapshot> {
   if (!window.__TAURI__) throw new Error('Native meeting reminders unavailable');
   const action = commandQueue.then(() => window.__TAURI__!.core.invoke<NativeTimerSnapshot>('set_meeting_reminders_paused', { token, paused }));

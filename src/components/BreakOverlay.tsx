@@ -19,6 +19,11 @@ interface BreakOverlayProps {
   meetingError?: boolean;
 }
 
+/**
+ * Render the break countdown with strict-mode dismissal rules and optional meeting undo.
+ * Native completion remains authoritative when requested; otherwise report the
+ * local monotonic deadline once through onElapsed.
+ */
 export const BreakOverlay: React.FC<BreakOverlayProps> = ({
   initialSeconds = 20,
   strictMode = false,
