@@ -624,5 +624,13 @@
   "Показать ярлык": "Zobrazit zástupce",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Zástupce na ploše se mění podle konfigurace.",
   "Не удалось сохранить ярлык.": "Zástupce se nepodařilo uložit.",
-  "Камера Blincho активна": "Blincho používá kameru"
+  "Камера Blincho активна": "Blincho používá kameru",
+  "Напоминания о перерывах возобновлены": "Připomínky přestávek obnoveny",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kamera a mikrofon se 5 minut nepoužívají. Připomínky přestávek byly obnoveny.",
+  "Перерыв начнётся через {seconds} с.": "Přestávka začne za {seconds} s.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Jste na schůzce? Odložte přestávku nebo pozastavte připomínky do jejího konce.",
+  "До конца встречи": "Do konce schůzky",
+  "Напоминания приостановлены до конца встречи.": "Připomínky jsou pozastaveny do konce schůzky.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Schůzka skončila. Připomínky přestávek byly obnoveny.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Přestávku se nepodařilo odložit. Zkuste to znovu."
 }

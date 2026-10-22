@@ -624,5 +624,13 @@
   "Показать ярлык": "Arată scurtătura",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Scurtătura de pe desktop se adaptează configurației tale.",
   "Не удалось сохранить ярлык.": "Scurtătura nu a putut fi salvată.",
-  "Камера Blincho активна": "Blincho folosește camera"
+  "Камера Blincho активна": "Blincho folosește camera",
+  "Напоминания о перерывах возобновлены": "Mementourile de pauză au fost reluate",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Camera și microfonul nu au fost utilizate timp de 5 minute. Mementourile de pauză au fost reluate.",
+  "Перерыв начнётся через {seconds} с.": "Pauza începe în {seconds} s.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Ești într-o întâlnire? Amână pauza sau suspendă mementourile până la sfârșitul întâlnirii.",
+  "До конца встречи": "Până la sfârșitul întâlnirii",
+  "Напоминания приостановлены до конца встречи.": "Mementourile sunt suspendate până la sfârșitul întâlnirii.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Întâlnirea s-a încheiat. Mementourile pentru pauze au fost reluate.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Pauza nu a putut fi amânată. Încearcă din nou."
 }

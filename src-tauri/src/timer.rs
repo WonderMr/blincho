@@ -2,6 +2,8 @@ use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+const MEETING_MEDIA_INACTIVE_MS: i64 = 300_000;
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimerInput {
@@ -76,6 +78,13 @@ pub struct Snapshot {
     pub meeting_history_epoch: u64,
     pub tick_count: u64,
     pub meeting_postponed_epoch: u64,
+    pub meeting_resumed_epoch: u64,
+    pub meeting_warning_epoch: u64,
+    pub meeting_warning_end_at: Option<i64>,
+    pub meeting_warning_ready: bool,
+    pub meeting_warning_required: bool,
+    pub meeting_reminders_paused: bool,
+    pub meeting_pause_ended_epoch: u64,
     pub presence_epoch: u64,
 }
 pub struct Timer {
@@ -92,6 +101,15 @@ pub struct Timer {
     camera_check_deadline: Option<i64>,
     presence_lock_attempted: bool,
     last_call_at: Option<i64>,
+    meeting_seen: bool,
+    media_inactive_since: Option<i64>,
+    last_media_at: Option<i64>,
+    meeting_resumed: bool,
+    meeting_breaks_blocked: bool,
+    meeting_postponement_pending: bool,
+    meeting_break_context: bool,
+    meeting_warning_version: Option<u64>,
+    meeting_end_since: Option<i64>,
 }
 impl Timer {
     #[cfg(any(target_os = "linux", test))]
@@ -114,6 +132,15 @@ impl Timer {
             camera_check_deadline: None,
             presence_lock_attempted: false,
             last_call_at: None,
+            meeting_seen: false,
+            media_inactive_since: None,
+            last_media_at: None,
+            meeting_resumed: false,
+            meeting_breaks_blocked: false,
+            meeting_postponement_pending: false,
+            meeting_break_context: false,
+            meeting_warning_version: None,
+            meeting_end_since: None,
             snapshot: Snapshot {
                 total_ms: 0.,
                 remaining_ms: 0.,
@@ -139,6 +166,13 @@ impl Timer {
                 meeting_history_epoch: 0,
                 tick_count: 0,
                 meeting_postponed_epoch: 0,
+                meeting_resumed_epoch: 0,
+                meeting_warning_epoch: 0,
+                meeting_warning_end_at: None,
+                meeting_warning_ready: false,
+                meeting_warning_required: false,
+                meeting_reminders_paused: false,
+                meeting_pause_ended_epoch: 0,
                 presence_epoch: 0,
             },
         }
@@ -159,6 +193,13 @@ impl Timer {
             return Err("Stale timer command".into());
         }
         self.observe_activity(self.last_at, now, self.activity_state());
+        if self
+            .input
+            .as_ref()
+            .is_some_and(|old| old.meeting_enabled != input.meeting_enabled)
+        {
+            self.reset_meeting_media();
+        }
         if self.input.as_ref().is_none_or(|old| {
             old.enhanced_presence_enabled != input.enhanced_presence_enabled
                 || old.absence_lock_enabled != input.absence_lock_enabled
@@ -199,6 +240,10 @@ impl Timer {
         }
         let changed = self.input.is_none() || input.version != self.snapshot.version;
         if changed {
+            self.clear_meeting_warning();
+            self.meeting_break_context = false;
+            self.snapshot.meeting_warning_required = false;
+            self.meeting_postponement_pending = false;
             self.snapshot.remaining_ms = input.remaining_ms;
             self.snapshot.expiry_pending = input.expiry_pending;
             self.snapshot.version = input.version;
@@ -216,6 +261,14 @@ impl Timer {
         self.snapshot.manual_paused = input.manual_paused;
         self.snapshot.break_active = input.break_active && self.snapshot.reasons.is_empty();
         self.snapshot.exercising = input.exercising && self.snapshot.reasons.is_empty();
+        if !input.strict_mode || !input.meeting_enabled {
+            self.clear_meeting_warning();
+            self.snapshot.meeting_warning_required = false;
+        }
+        if !input.meeting_enabled {
+            self.snapshot.meeting_reminders_paused = false;
+            self.meeting_end_since = None;
+        }
         self.snapshot.live_meeting_enabled = input.meeting_enabled
             || input.meeting_history_enabled
             || input.enhanced_presence_enabled
@@ -238,10 +291,14 @@ impl Timer {
         {
             return false;
         }
+        self.clear_meeting_warning();
         self.snapshot.remaining_ms = 300_000.;
         self.snapshot.expiry_pending = false;
         self.snapshot.version += 1;
-        self.snapshot.meeting_postponed_epoch += 1;
+        if !self.snapshot.meeting_reminders_paused {
+            self.snapshot.meeting_postponed_epoch += 1;
+        }
+        self.meeting_postponement_pending = true;
         if let Some(input) = &mut self.input {
             input.remaining_ms = self.snapshot.remaining_ms;
             input.expiry_pending = false;
@@ -270,6 +327,7 @@ impl Timer {
             })
     }
     fn cancel_for_absence(&mut self, now: i64, new_absence: bool) {
+        self.clear_meeting_warning();
         if new_absence {
             self.snapshot.absent_since = Some(now);
             self.snapshot.absence_epoch += 1;
@@ -550,6 +608,7 @@ impl Timer {
             self.end_meeting_observation(now, false);
             return;
         }
+        self.observe_meeting_media(now, status);
         let mut applications = if status.supported && status.in_meeting {
             crate::platform::normalize_meeting_applications(&status.applications)
         } else {
@@ -562,6 +621,8 @@ impl Timer {
             in_meeting: status.supported && status.in_meeting,
             supported: status.supported,
             applications: applications.clone(),
+            capture_active: status.capture_active,
+            capture_supported: status.capture_supported,
         });
         self.last_call_at = status.supported.then_some(now);
         if status.in_meeting || !status.supported {
@@ -596,7 +657,198 @@ impl Timer {
         self.meeting_clock_floor = self.meeting_clock_floor.max(now);
         self.snapshot.meeting_applications.clear();
         self.snapshot.live_meeting_status = None;
+        self.reset_meeting_media();
         self.meeting_epoch = self.meeting_epoch.wrapping_add(1);
+    }
+
+    pub fn meeting_blocks_break(&self) -> bool {
+        self.meeting_breaks_blocked
+    }
+
+    fn reset_meeting_media(&mut self) {
+        self.meeting_seen = false;
+        self.media_inactive_since = None;
+        self.last_media_at = None;
+        self.meeting_resumed = false;
+        self.meeting_breaks_blocked = false;
+        self.meeting_postponement_pending = false;
+        self.meeting_break_context = false;
+        self.snapshot.meeting_warning_required = false;
+        self.clear_meeting_warning();
+        self.meeting_end_since = None;
+    }
+
+    fn observe_meeting_media(&mut self, now: i64, status: &crate::platform::MeetingStatus) {
+        if self
+            .input
+            .as_ref()
+            .is_none_or(|input| !input.meeting_enabled)
+        {
+            self.reset_meeting_media();
+            return;
+        }
+        if self
+            .last_media_at
+            .is_some_and(|at| !(0..=5000).contains(&(now - at)))
+        {
+            self.media_inactive_since = None;
+            self.meeting_resumed = false;
+            self.meeting_end_since = None;
+        }
+        self.last_media_at = Some(now);
+        self.meeting_seen |= status.supported && status.in_meeting;
+        self.meeting_break_context |= status.supported && status.in_meeting;
+        self.snapshot.meeting_warning_required = self.meeting_break_context
+            && self.input.as_ref().is_some_and(|input| input.strict_mode);
+        if self.snapshot.meeting_reminders_paused {
+            self.meeting_postponement_pending = true;
+            if status.supported && !status.in_meeting {
+                let since = *self.meeting_end_since.get_or_insert(now);
+                if now - since >= 5000 {
+                    self.snapshot.meeting_reminders_paused = false;
+                    self.snapshot.meeting_pause_ended_epoch += 1;
+                    self.meeting_seen = false;
+                    self.reclaim_meeting_postponement();
+                }
+            } else {
+                self.meeting_end_since = None;
+            }
+            if self.snapshot.meeting_reminders_paused {
+                self.media_inactive_since = None;
+                self.meeting_breaks_blocked = true;
+                return;
+            }
+        }
+        if !status.capture_supported {
+            // Runtimes without a device-use probe retain their existing call
+            // policy. An unknown sample from a capable probe is different.
+            self.media_inactive_since = None;
+            self.meeting_resumed = false;
+            self.meeting_seen = status.supported && status.in_meeting;
+            self.meeting_breaks_blocked = self.meeting_seen;
+            return;
+        }
+        let both_off = status.supported && status.capture_active == Some(false);
+        if !both_off {
+            self.media_inactive_since = None;
+            self.meeting_resumed = false;
+        } else if self.meeting_seen {
+            let since = *self.media_inactive_since.get_or_insert(now);
+            if now - since >= MEETING_MEDIA_INACTIVE_MS && !self.meeting_resumed {
+                self.meeting_resumed = true;
+                self.snapshot.meeting_resumed_epoch += 1;
+                self.reclaim_meeting_postponement();
+            }
+        }
+        if self.meeting_resumed && status.supported && !status.in_meeting {
+            self.meeting_seen = false;
+        }
+        self.meeting_breaks_blocked = self.meeting_seen && !self.meeting_resumed;
+    }
+
+    fn reclaim_meeting_postponement(&mut self) {
+        if self.meeting_postponement_pending
+            && !self.snapshot.manual_paused
+            && !self.snapshot.break_active
+            && !self.snapshot.exercising
+            && self.snapshot.reasons.is_empty()
+        {
+            self.snapshot.remaining_ms = 0.;
+            self.snapshot.expiry_pending = true;
+            self.snapshot.version += 1;
+            if let Some(input) = &mut self.input {
+                input.remaining_ms = 0.;
+                input.expiry_pending = true;
+                input.version = self.snapshot.version;
+            }
+        }
+        self.meeting_postponement_pending = false;
+    }
+
+    fn clear_meeting_warning(&mut self) {
+        self.snapshot.meeting_warning_end_at = None;
+        self.snapshot.meeting_warning_ready = false;
+        self.meeting_warning_version = None;
+    }
+
+    pub fn meeting_warning_allows_break(&self) -> bool {
+        !self.snapshot.meeting_warning_required || self.snapshot.meeting_warning_ready
+    }
+
+    pub fn hold_for_meeting_warning(&mut self, now: i64) -> bool {
+        if !self.snapshot.meeting_warning_required
+            || self.snapshot.meeting_reminders_paused
+            || !self.snapshot.expiry_pending
+            || self.snapshot.manual_paused
+            || self.snapshot.break_active
+            || self.snapshot.exercising
+            || !self.snapshot.reasons.is_empty()
+        {
+            return false;
+        }
+        if self.meeting_warning_version == Some(self.snapshot.version) {
+            if self
+                .snapshot
+                .meeting_warning_end_at
+                .is_some_and(|end| now < end)
+            {
+                return true;
+            }
+            self.snapshot.meeting_warning_end_at = None;
+            self.snapshot.meeting_warning_ready = true;
+            return false;
+        }
+        self.meeting_warning_version = Some(self.snapshot.version);
+        self.snapshot.meeting_warning_ready = false;
+        self.snapshot.meeting_warning_end_at = Some(now + 30_000);
+        self.snapshot.meeting_warning_epoch += 1;
+        true
+    }
+
+    pub fn defer_meeting_warning(
+        &mut self,
+        version: u64,
+        warning_epoch: u64,
+        minutes: Option<u8>,
+        now: i64,
+    ) -> Result<(), String> {
+        if self.snapshot.version != version
+            || self.snapshot.meeting_warning_epoch != warning_epoch
+            || self.meeting_warning_version != Some(version)
+            || !self
+                .snapshot
+                .meeting_warning_end_at
+                .is_some_and(|end| now < end)
+            || !self.snapshot.expiry_pending
+            || self.snapshot.manual_paused
+            || self.snapshot.break_active
+            || self.snapshot.exercising
+            || !self.snapshot.reasons.is_empty()
+            || self
+                .input
+                .as_ref()
+                .is_none_or(|input| !input.strict_mode || !input.meeting_enabled)
+        {
+            return Err("Meeting warning is no longer current".into());
+        }
+        if minutes.is_some_and(|minutes| ![5, 10, 15].contains(&minutes)) {
+            return Err("Invalid meeting postponement duration".into());
+        }
+        self.clear_meeting_warning();
+        self.snapshot.meeting_reminders_paused = minutes.is_none();
+        self.meeting_end_since = None;
+        self.meeting_postponement_pending = minutes.is_none();
+        self.snapshot.remaining_ms = f64::from(minutes.unwrap_or(5)) * 60_000.;
+        self.snapshot.expiry_pending = false;
+        self.snapshot.version += 1;
+        self.snapshot.tick_count += 1;
+        if let Some(input) = &mut self.input {
+            input.remaining_ms = self.snapshot.remaining_ms;
+            input.expiry_pending = false;
+            input.version = self.snapshot.version;
+        }
+        self.last_at = now;
+        Ok(())
     }
 
     fn extend_meeting_to(&mut self, now: i64) {
@@ -737,8 +989,332 @@ impl Timer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn media_status(active: Option<bool>) -> crate::platform::MeetingStatus {
+        let mut status = meeting_status(&["Zoom"]);
+        status.capture_active = active;
+        status.capture_supported = true;
+        status
+    }
+    fn media_sample(timer: &mut Timer, now: i64, status: &crate::platform::MeetingStatus) {
+        timer.tick(now, Some(0.), Some(false));
+        timer.observe_meeting(now, status);
+    }
+    fn media_until(
+        timer: &mut Timer,
+        from: i64,
+        until: i64,
+        status: &crate::platform::MeetingStatus,
+    ) {
+        let mut now = from;
+        while now < until {
+            now = (now + 1000).min(until);
+            media_sample(timer, now, status);
+        }
+    }
+    #[test]
+    fn five_minutes_of_confirmed_media_inactivity_releases_only_postponement() {
+        let mut timer = live_meeting_timer();
+        let off = media_status(Some(false));
+        media_sample(&mut timer, 0, &off);
+        media_until(&mut timer, 0, 299_999, &off);
+        assert!(timer.meeting_blocks_break());
+        assert_eq!(timer.snapshot.meeting_resumed_epoch, 0);
+        media_sample(&mut timer, 300_000, &off);
+        assert!(!timer.meeting_blocks_break());
+        assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
+        assert!(timer.snapshot.manual_paused);
+        assert_eq!(timer.snapshot.remaining_ms, 2000.);
+        assert!(!timer.snapshot.expiry_pending);
+        assert!(
+            timer
+                .snapshot
+                .live_meeting_status
+                .as_ref()
+                .unwrap()
+                .in_meeting
+        );
+        media_until(&mut timer, 300_000, 610_000, &off);
+        assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
+    }
+    #[test]
+    fn media_resume_reclaims_an_already_due_break_without_waiting_another_postponement() {
+        let mut timer = Timer::new(0);
+        let mut config = input();
+        config.meeting_enabled = true;
+        config.meeting_history_enabled = true;
+        timer.configure(config, 0).unwrap();
+        media_sample(&mut timer, 1000, &media_status(Some(true)));
+        media_sample(&mut timer, 2000, &media_status(Some(true)));
+        assert!(timer.postpone_meeting(timer.snapshot.version, 2000));
+        let off = media_status(Some(false));
+        media_sample(&mut timer, 3000, &off);
+        media_until(&mut timer, 3000, 302000, &off);
+        assert!(timer.postpone_meeting(timer.snapshot.version, 302000));
+        media_sample(&mut timer, 303000, &off);
+        assert_eq!(timer.snapshot.remaining_ms, 0.);
+        assert!(timer.snapshot.expiry_pending);
+        assert!(!timer.meeting_blocks_break());
+        assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
+        assert_eq!(timer.snapshot.meeting_applications, ["Zoom"]);
+        assert!(!timer.snapshot.meeting_spans.is_empty());
+    }
+    #[test]
+    fn media_activation_unknown_and_failed_observations_require_a_new_full_interval() {
+        for interruption in [
+            media_status(Some(true)),
+            media_status(None),
+            crate::platform::MeetingStatus::inactive(false),
+        ] {
+            let mut timer = live_meeting_timer();
+            let off = media_status(Some(false));
+            media_sample(&mut timer, 0, &off);
+            media_until(&mut timer, 0, 299000, &off);
+            media_sample(&mut timer, 300000, &interruption);
+            media_sample(&mut timer, 301000, &off);
+            media_until(&mut timer, 301000, 600000, &off);
+            assert_eq!(timer.snapshot.meeting_resumed_epoch, 0);
+            media_sample(&mut timer, 601000, &off);
+            assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
+            media_sample(&mut timer, 602000, &media_status(Some(true)));
+            assert!(timer.meeting_blocks_break());
+            media_sample(&mut timer, 603000, &off);
+            media_until(&mut timer, 603000, 903000, &off);
+            assert_eq!(timer.snapshot.meeting_resumed_epoch, 2);
+        }
+    }
+    #[test]
+    fn disappearance_of_call_heuristic_alone_does_not_skip_the_media_grace_period() {
+        let mut timer = live_meeting_timer();
+        media_sample(&mut timer, 0, &media_status(Some(true)));
+        let mut off = crate::platform::MeetingStatus::inactive(true);
+        off.capture_active = Some(false);
+        off.capture_supported = true;
+        media_sample(&mut timer, 1000, &off);
+        media_until(&mut timer, 1000, 300000, &off);
+        assert!(timer.meeting_blocks_break());
+        media_sample(&mut timer, 301000, &off);
+        assert!(!timer.meeting_blocks_break());
+        assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
+    }
+    #[test]
+    fn media_resume_preserves_a_normal_work_cycle() {
+        let mut timer = Timer::new(0);
+        let mut config = input();
+        config.meeting_enabled = true;
+        config.remaining_ms = 1_200_000.;
+        config.total_ms = 1_200_000.;
+        timer.configure(config, 0).unwrap();
+        let off = media_status(Some(false));
+        media_sample(&mut timer, 0, &off);
+        media_until(&mut timer, 0, 300000, &off);
+        assert_eq!(timer.snapshot.remaining_ms, 900_000.);
+        assert!(!timer.snapshot.expiry_pending);
+        assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
+    }
+    #[test]
+    fn unknown_capture_and_lost_call_heuristic_cannot_release_a_pending_call() {
+        for supported in [true, false] {
+            let mut timer = live_meeting_timer();
+            let off = media_status(Some(false));
+            media_sample(&mut timer, 0, &off);
+            media_until(&mut timer, 0, 299000, &off);
+            let unknown = crate::platform::MeetingStatus {
+                capture_supported: true,
+                ..crate::platform::MeetingStatus::inactive(supported)
+            };
+            media_sample(&mut timer, 300000, &unknown);
+            assert!(timer.meeting_blocks_break());
+            assert_eq!(timer.snapshot.meeting_resumed_epoch, 0);
+            media_sample(&mut timer, 301000, &off);
+            media_until(&mut timer, 301000, 600000, &off);
+            assert!(timer.meeting_blocks_break());
+            media_sample(&mut timer, 601000, &off);
+            assert!(!timer.meeting_blocks_break());
+            assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
+        }
+    }
+    #[test]
+    fn media_inactivity_cannot_cross_power_policy_or_clock_boundaries() {
+        for boundary in 0..5 {
+            let mut timer = live_meeting_timer();
+            let off = media_status(Some(false));
+            media_sample(&mut timer, 0, &off);
+            media_until(&mut timer, 0, 299000, &off);
+            let restart = match boundary {
+                0 | 1 => {
+                    timer.power(if boundary == 0 { 1 } else { 3 }, 299000);
+                    timer.power(if boundary == 0 { 2 } else { 4 }, 300000);
+                    300000
+                }
+                2 => {
+                    let mut config = timer.input.clone().unwrap();
+                    config.meeting_enabled = false;
+                    timer.configure(config.clone(), 299000).unwrap();
+                    config.meeting_enabled = true;
+                    timer.configure(config, 300000).unwrap();
+                    300000
+                }
+                3 => 310000,
+                _ => 298000,
+            };
+            media_sample(&mut timer, restart, &off);
+            media_until(&mut timer, restart, restart + 299000, &off);
+            assert_eq!(
+                timer.snapshot.meeting_resumed_epoch, 0,
+                "boundary {boundary}"
+            );
+        }
+    }
+    fn strict_warning_timer() -> Timer {
+        let mut timer = Timer::new(0);
+        let mut config = input();
+        config.meeting_enabled = true;
+        timer.configure(config, 0).unwrap();
+        let mut status = meeting_status(&["Zoom"]);
+        status.capture_supported = true;
+        status.capture_active = Some(false);
+        media_sample(&mut timer, 0, &status);
+        media_sample(&mut timer, 2000, &status);
+        // Model the media-inactivity release while retaining the raw call.
+        timer.meeting_resumed = true;
+        timer.meeting_breaks_blocked = false;
+        assert!(timer.hold_for_meeting_warning(2000));
+        timer
+    }
+    #[test]
+    fn strict_meeting_warning_grants_one_full_grace_before_takeover() {
+        let mut timer = strict_warning_timer();
+        assert!(!timer.meeting_warning_allows_break());
+        assert_eq!(timer.snapshot.meeting_warning_end_at, Some(32000));
+        for at in 2001..32000 {
+            assert!(timer.hold_for_meeting_warning(at));
+        }
+        assert_eq!(timer.snapshot.meeting_warning_epoch, 1);
+        assert!(!timer.hold_for_meeting_warning(32000));
+        assert!(timer.meeting_warning_allows_break());
+        assert!(!timer.hold_for_meeting_warning(33000));
+        assert_eq!(timer.snapshot.meeting_warning_epoch, 1);
+    }
+    #[test]
+    fn meeting_warning_actions_validate_duration_identity_and_preserve_explicit_delay() {
+        for minutes in [5, 10, 15] {
+            let mut timer = strict_warning_timer();
+            let version = timer.snapshot.version;
+            let epoch = timer.snapshot.meeting_warning_epoch;
+            assert!(timer
+                .defer_meeting_warning(version, epoch, Some(7), 3000)
+                .is_err());
+            assert!(timer
+                .defer_meeting_warning(version + 1, epoch, Some(minutes), 3000)
+                .is_err());
+            assert!(timer
+                .defer_meeting_warning(version, epoch + 1, Some(minutes), 3000)
+                .is_err());
+            timer
+                .defer_meeting_warning(version, epoch, Some(minutes), 3000)
+                .unwrap();
+            assert_eq!(timer.snapshot.remaining_ms, f64::from(minutes) * 60000.);
+            assert!(!timer.snapshot.expiry_pending);
+            assert!(timer.input.as_ref().unwrap().strict_mode);
+            assert!(!timer.meeting_postponement_pending);
+            assert!(timer.snapshot.meeting_warning_end_at.is_none());
+            assert!(timer
+                .defer_meeting_warning(version, epoch, Some(minutes), 3001)
+                .is_err());
+            timer.reclaim_meeting_postponement();
+            assert_eq!(timer.snapshot.remaining_ms, f64::from(minutes) * 60000.);
+        }
+    }
+    #[test]
+    fn meeting_pause_waits_for_confirmed_end_and_keeps_strict_mode_and_focus() {
+        let mut timer = strict_warning_timer();
+        timer
+            .defer_meeting_warning(
+                timer.snapshot.version,
+                timer.snapshot.meeting_warning_epoch,
+                None,
+                3000,
+            )
+            .unwrap();
+        let active = media_status(Some(false));
+        media_until(&mut timer, 3000, 310000, &active);
+        assert!(timer.snapshot.meeting_reminders_paused);
+        assert!(timer.meeting_blocks_break());
+        assert_eq!(timer.snapshot.meeting_resumed_epoch, 0);
+        assert!(!timer.hold_for_meeting_warning(310000));
+        assert!(timer.snapshot.focus_by_date.values().sum::<f64>() > 0.);
+        let mut unknown = crate::platform::MeetingStatus::inactive(false);
+        unknown.capture_supported = true;
+        media_sample(&mut timer, 311000, &unknown);
+        assert!(timer.snapshot.meeting_reminders_paused);
+        let mut ended = crate::platform::MeetingStatus::inactive(true);
+        ended.capture_supported = true;
+        ended.capture_active = Some(false);
+        media_sample(&mut timer, 312000, &ended);
+        media_until(&mut timer, 312000, 316999, &ended);
+        assert!(timer.snapshot.meeting_reminders_paused);
+        media_sample(&mut timer, 317000, &ended);
+        assert!(!timer.snapshot.meeting_reminders_paused);
+        assert!(!timer.meeting_blocks_break());
+        assert_eq!(timer.snapshot.meeting_pause_ended_epoch, 1);
+        assert!(timer.snapshot.expiry_pending);
+        assert!(timer.input.as_ref().unwrap().strict_mode);
+        media_sample(&mut timer, 318000, &media_status(Some(true)));
+        assert!(timer.meeting_blocks_break());
+        assert!(!timer.snapshot.meeting_reminders_paused);
+    }
+    #[test]
+    fn warning_cancels_on_pause_absence_reset_and_policy_change() {
+        for cause in 0..5 {
+            let mut timer = strict_warning_timer();
+            let version = timer.snapshot.version;
+            let epoch = timer.snapshot.meeting_warning_epoch;
+            if cause == 0 {
+                timer.power(3, 3000);
+            } else {
+                let mut config = timer.input.clone().unwrap();
+                match cause {
+                    1 => {
+                        config.manual_paused = true;
+                        config.version += 1;
+                    }
+                    2 => {
+                        config.strict_mode = false;
+                    }
+                    3 => {
+                        config.meeting_enabled = false;
+                    }
+                    _ => {
+                        config.remaining_ms = 2000.;
+                        config.expiry_pending = false;
+                        config.version += 1;
+                    }
+                }
+                timer.configure(config, 3000).unwrap();
+            }
+            assert!(timer.snapshot.meeting_warning_end_at.is_none());
+            assert!(timer
+                .defer_meeting_warning(version, epoch, Some(5), 3001)
+                .is_err());
+        }
+    }
+    #[test]
+    fn warning_is_not_created_without_a_strict_meeting_context() {
+        for strict in [false, true] {
+            let mut timer = Timer::new(0);
+            let mut config = input();
+            config.strict_mode = strict;
+            config.meeting_enabled = true;
+            timer.configure(config, 0).unwrap();
+            timer.tick(2000, Some(0.), Some(false));
+            assert!(!timer.hold_for_meeting_warning(2000));
+            assert!(timer.meeting_warning_allows_break());
+        }
+    }
     fn meeting_status(applications: &[&str]) -> crate::platform::MeetingStatus {
         crate::platform::MeetingStatus {
+            capture_active: None,
+            capture_supported: false,
             in_meeting: !applications.is_empty(),
             supported: true,
             applications: applications.iter().map(|app| (*app).into()).collect(),
@@ -918,6 +1494,8 @@ mod tests {
         timer.observe_meeting(
             250,
             &crate::platform::MeetingStatus {
+                capture_active: None,
+                capture_supported: false,
                 in_meeting: true,
                 supported: true,
                 applications: vec!["Private call title".into()],
@@ -1253,6 +1831,8 @@ mod tests {
     fn unknown_attribution_is_preserved_without_accepting_private_metadata() {
         let mut timer = meeting_timer();
         let status = crate::platform::MeetingStatus {
+            capture_active: None,
+            capture_supported: false,
             in_meeting: true,
             supported: true,
             applications: vec![

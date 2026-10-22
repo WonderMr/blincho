@@ -624,5 +624,13 @@
   "Показать ярлык": "Afficher le raccourci",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Le raccourci sur le bureau suit votre configuration.",
   "Не удалось сохранить ярлык.": "Impossible d’enregistrer le raccourci.",
-  "Камера Blincho активна": "Blincho utilise la caméra"
+  "Камера Blincho активна": "Blincho utilise la caméra",
+  "Напоминания о перерывах возобновлены": "Rappels de pause réactivés",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "La caméra et le microphone ne sont pas utilisés depuis 5 minutes. Les rappels de pause sont réactivés.",
+  "Перерыв начнётся через {seconds} с.": "La pause commence dans {seconds} s.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Vous êtes en réunion ? Reportez la pause ou suspendez les rappels jusqu’à la fin de la réunion.",
+  "До конца встречи": "Jusqu’à la fin de la réunion",
+  "Напоминания приостановлены до конца встречи.": "Les rappels sont suspendus jusqu’à la fin de la réunion.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "La réunion est terminée. Les rappels de pause ont repris.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Impossible de reporter la pause. Réessayez."
 }

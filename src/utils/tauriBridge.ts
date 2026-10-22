@@ -11,7 +11,13 @@ export interface NativeTimerSnapshot {
   totalMs: number; remainingMs: number; manualPaused: boolean; breakActive: boolean;
   exercising: boolean; expiryPending: boolean; version: number; reasons: PresenceReason[];
   absentSince: number | null; absenceEpoch: number; idleSeconds: number; locked: boolean; suspended: boolean;
-  meetingPostponedEpoch?: number; breakElapsed: boolean; breakEndAt?: number | null; focusByDate: Record<string, number>; tickCount: number;
+  meetingPostponedEpoch?: number; meetingResumedEpoch?: number; breakElapsed: boolean; breakEndAt?: number | null; focusByDate: Record<string, number>; tickCount: number;
+  meetingWarningEpoch?: number;
+  meetingWarningEndAt?: number | null;
+  meetingWarningRequired?: boolean;
+  meetingWarningReady?: boolean;
+  meetingRemindersPaused?: boolean;
+  meetingPauseEndedEpoch?: number;
   activitySpans?: ActivitySpan[];
   meetingSpans?: MeetingSpan[];
   meetingApplications?: string[];
@@ -65,6 +71,12 @@ export async function readNativeTimer(): Promise<NativeTimerSnapshot | null> {
   await commandQueue;
   latest = await window.__TAURI__.core.invoke<NativeTimerSnapshot>('timer_snapshot');
   return latest;
+}
+export async function deferNativeMeetingBreak(version: number, warningEpoch: number, minutes: number | null): Promise<NativeTimerSnapshot> {
+  if (!window.__TAURI__) throw new Error('Native meeting warning unavailable');
+  const action = commandQueue.then(() => window.__TAURI__!.core.invoke<NativeTimerSnapshot>('defer_meeting_break', { version, warningEpoch, minutes }));
+  commandQueue = action.then(snapshot => { latest = snapshot; }).catch(() => {});
+  return action;
 }
 export async function clearNativeMeetingHistory(): Promise<NativeTimerSnapshot | null> {
   if (!window.__TAURI__) return null;

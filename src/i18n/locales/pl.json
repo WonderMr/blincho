@@ -624,5 +624,13 @@
   "Показать ярлык": "Pokaż skrót",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Skrót na pulpicie zmienia się wraz z konfiguracją.",
   "Не удалось сохранить ярлык.": "Nie udało się zapisać skrótu.",
-  "Камера Blincho активна": "Blincho używa kamery"
+  "Камера Blincho активна": "Blincho używa kamery",
+  "Напоминания о перерывах возобновлены": "Wznowiono przypomnienia o przerwach",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kamera i mikrofon nie są używane od 5 minut. Wznowiono przypomnienia o przerwach.",
+  "Перерыв начнётся через {seconds} с.": "Przerwa rozpocznie się za {seconds} s.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Jesteś na spotkaniu? Odłóż przerwę lub wstrzymaj przypomnienia do końca spotkania.",
+  "До конца встречи": "Do końca spotkania",
+  "Напоминания приостановлены до конца встречи.": "Przypomnienia są wstrzymane do końca spotkania.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Spotkanie zakończone. Przypomnienia o przerwach zostały wznowione.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Nie udało się odłożyć przerwy. Spróbuj ponownie."
 }

@@ -624,5 +624,13 @@
   "Показать ярлык": "Tampilkan pintasan",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Pintasan desktop mengikuti konfigurasi Anda.",
   "Не удалось сохранить ярлык.": "Pintasan tidak dapat disimpan.",
-  "Камера Blincho активна": "Blincho sedang menggunakan kamera"
+  "Камера Blincho активна": "Blincho sedang menggunakan kamera",
+  "Напоминания о перерывах возобновлены": "Pengingat istirahat dilanjutkan",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kamera dan mikrofon tidak digunakan selama 5 menit. Pengingat istirahat dilanjutkan.",
+  "Перерыв начнётся через {seconds} с.": "Istirahat dimulai dalam {seconds} dtk.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Sedang rapat? Tunda istirahat atau jeda pengingat hingga rapat selesai.",
+  "До конца встречи": "Hingga rapat selesai",
+  "Напоминания приостановлены до конца встречи.": "Pengingat dijeda hingga rapat selesai.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Rapat telah selesai. Pengingat istirahat dilanjutkan.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Tidak dapat menunda istirahat. Coba lagi."
 }

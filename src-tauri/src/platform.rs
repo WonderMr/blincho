@@ -150,6 +150,10 @@ pub struct MeetingStatus {
     pub in_meeting: bool,
     pub supported: bool,
     pub applications: Vec<String>,
+    /// Passive device-use metadata only. None must never be treated as off.
+    pub capture_active: Option<bool>,
+    /// Distinguishes a failed sample from a runtime without this probe.
+    pub capture_supported: bool,
 }
 impl MeetingStatus {
     pub fn detected(applications: Vec<String>, supported: bool) -> Self {
@@ -158,6 +162,8 @@ impl MeetingStatus {
             in_meeting: supported && !applications.is_empty(),
             supported,
             applications,
+            capture_active: None,
+            capture_supported: false,
         }
     }
     pub fn inactive(supported: bool) -> Self {
@@ -165,6 +171,8 @@ impl MeetingStatus {
             in_meeting: false,
             supported,
             applications: vec![],
+            capture_active: None,
+            capture_supported: false,
         }
     }
 }
@@ -204,6 +212,8 @@ impl MeetingMonitor {
             in_meeting: active,
             supported: true,
             applications,
+            capture_active: None,
+            capture_supported: false,
         });
         self.invalidate();
     }

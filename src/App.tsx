@@ -24,6 +24,7 @@ import { TimerWidget } from './components/TimerWidget';
 import { ExerciseLibrary } from './components/ExerciseLibrary';
 import { ExercisePlayer } from './components/ExercisePlayer';
 import { BreakOverlay } from './components/BreakOverlay';
+import { MeetingBreakWarning, type MeetingBreakWarningState } from './components/MeetingBreakWarning';
 import { CVSSurvey } from './components/CVSSurvey';
 import { ErgonomicsGuide } from './components/ErgonomicsGuide';
 import { StatisticsView } from './components/StatisticsView';
@@ -37,7 +38,7 @@ import { useLocalMcp } from './utils/localMcp';
 import { buildMcpStats } from './utils/mcpStats';
 import { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities } from './utils/symbiote';
 import { updateDocumentSymbioteIcon } from './utils/symbioteIcons';
-import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory } from './utils/tauriBridge';
+import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory, deferNativeMeetingBreak } from './utils/tauriBridge';
 
 import {
   BookOpen, Play, Lock, Video, UserCheck
@@ -84,6 +85,13 @@ export const App: React.FC = () => {
   const nativeAbsenceEpochRef = useRef(0);
   const nativeTickRef = useRef(0);
   const nativeMeetingEpochRef = useRef(0);
+  const nativeMeetingResumedEpochRef = useRef(0);
+  const nativeMeetingWarningEpochRef = useRef(0);
+  const nativeMeetingPauseEndedEpochRef = useRef(0);
+  const [meetingWarning, setMeetingWarning] = useState<MeetingBreakWarningState | null>(null);
+  const [meetingWarningBusy, setMeetingWarningBusy] = useState(false);
+  const [meetingWarningError, setMeetingWarningError] = useState(false);
+  const meetingWarningBusyRef = useRef(false);
   const nativeHistoryEpochRef = useRef(0);
   const nativeHistoryMinimumEpochRef = useRef(0);
   const nativeHistoryConsentGenerationRef = useRef(0);
@@ -483,6 +491,9 @@ export const App: React.FC = () => {
         const meeting = await detectActiveMeeting();
         if (!mountedRef.current || version !== session.version || !session.counting) return;
         if (meeting.inMeeting && settingsRef.current.meetingDetectionEnabled) {
+          // The native heartbeat owns meeting postponement and its event epoch.
+          // A snapshot poll can see expiry before that heartbeat handles it.
+          if (hasNativeTimer()) return;
           session.postpone(300, Date.now());
           setInMeetingActive(true);
           setNoticeMessage("Обнаружена активная встреча. Перерыв отложен на 5 минут.");
@@ -491,12 +502,36 @@ export const App: React.FC = () => {
           return;
         }
       }
+      if (hasNativeTimer() && settingsRef.current.strictMode) {
+        const snapshot = await readNativeTimer();
+        if (!snapshot || !mountedRef.current || snapshot.version !== version) return;
+        applyNativeRef.current(snapshot);
+        if (snapshot.meetingWarningRequired && !snapshot.meetingWarningReady) return;
+      }
       if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting) return;
       setInMeetingActive(false);
       if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"), t("Отведите взгляд от экрана и дайте глазам отдохнуть."));
       if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak();
       else { soundSynth.playZenBowl(); restartWork(); }
     } finally { expiryInFlightRef.current = false; }
+  };
+  const handleDeferMeetingWarning = async (minutes: number | null) => {
+    if (!meetingWarning || meetingWarningBusyRef.current) return;
+    meetingWarningBusyRef.current = true;
+    setMeetingWarningBusy(true);
+    setMeetingWarningError(false);
+    try {
+      const snapshot = await deferNativeMeetingBreak(meetingWarning.version, meetingWarning.epoch, minutes);
+      if (!mountedRef.current) return;
+      applyNativeRef.current(snapshot);
+      if (minutes === null) setNoticeMessage("Напоминания приостановлены до конца встречи.");
+    } catch (error) {
+      console.warn('Blincho: Meeting warning action failed:', error);
+      if (mountedRef.current) setMeetingWarningError(true);
+    } finally {
+      meetingWarningBusyRef.current = false;
+      if (mountedRef.current) setMeetingWarningBusy(false);
+    }
   };
   const handleTriggerInstantBreak = async () => {
     if (await samplePresence()) beginBreak();
@@ -848,6 +883,30 @@ export const App: React.FC = () => {
         setNoticeMessage("Обнаружена активная встреча. Перерыв отложен на 5 минут.");
         if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Blincho: встреча активна"), t("Перерыв отложен на 5 минут."));
       }
+      const warningEnd = snapshot.meetingWarningEndAt;
+      if (warningEnd && snapshot.expiryPending && snapshot.version === session.version
+        && snapshot.reasons.length === 0 && !snapshot.manualPaused && settingsRef.current.strictMode) {
+        setMeetingWarning({ version: snapshot.version, epoch: snapshot.meetingWarningEpoch ?? 0, endAt: warningEnd });
+        if ((snapshot.meetingWarningEpoch ?? 0) > nativeMeetingWarningEpochRef.current) {
+          nativeMeetingWarningEpochRef.current = snapshot.meetingWarningEpoch ?? 0;
+          setMeetingWarningError(false);
+          if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"),
+            t("Перерыв начнётся через {seconds} с.", { seconds: Math.max(0, Math.ceil((warningEnd - Date.now()) / 1000)) })
+            + ' ' + t("Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания."));
+        }
+      } else setMeetingWarning(null);
+      if ((snapshot.meetingPauseEndedEpoch ?? 0) > nativeMeetingPauseEndedEpochRef.current) {
+        nativeMeetingPauseEndedEpochRef.current = snapshot.meetingPauseEndedEpoch ?? 0;
+        setInMeetingActive(false);
+        setNoticeMessage("Встреча завершена. Напоминания о перерывах возобновлены.");
+        if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Напоминания о перерывах возобновлены"), t("Встреча завершена. Напоминания о перерывах возобновлены."));
+      }
+      if ((snapshot.meetingResumedEpoch ?? 0) > nativeMeetingResumedEpochRef.current) {
+        nativeMeetingResumedEpochRef.current = snapshot.meetingResumedEpoch ?? 0;
+        setInMeetingActive(false);
+        setNoticeMessage("Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.");
+        if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Напоминания о перерывах возобновлены"), t("Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены."));
+      }
       if (snapshot.absenceEpoch > nativeAbsenceEpochRef.current) {
         nativeAbsenceEpochRef.current = snapshot.absenceEpoch;
         const beganAt = snapshot.absentSince ?? Date.now();
@@ -1134,6 +1193,9 @@ export const App: React.FC = () => {
           setNoticeMessage(null);
         }}
       />}
+
+      {meetingWarning && !isBreakActive && <MeetingBreakWarning warning={meetingWarning}
+        busy={meetingWarningBusy} error={meetingWarningError} onDefer={minutes => { void handleDeferMeetingWarning(minutes); }} />}
 
       {/* Full-Screen Break Overlay (When timer finishes or triggered) */}
       {isBreakActive && (
