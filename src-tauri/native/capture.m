@@ -4,6 +4,10 @@
 
 // Read device-use flags without opening a stream, recording media or requesting
 // camera/microphone permission. A failed or incomplete scan remains unknown.
+/**
+ * Return 1 for a running input-capable device, 0 for a complete idle scan, or -1 for an
+ * inconclusive scan. Duplex-device playback may count as activity.
+ */
 static int legacy_microphone_active(void) {
     AudioObjectPropertyAddress devicesAddress = {kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
     UInt32 bytes = 0;
@@ -30,6 +34,10 @@ static int legacy_microphone_active(void) {
     return result;
 }
 
+/**
+ * Inspect process input activity, falling back to the conservative device scan when
+ * unavailable. Return 1 for activity, 0 for confirmed inactivity, or -1 for unknown.
+ */
 static int microphone_active(void) {
     // Process input activity distinguishes microphone capture from playback on
     // the same duplex device. Older systems use the conservative device scan.
@@ -53,6 +61,10 @@ static int microphone_active(void) {
     return result;
 }
 
+/**
+ * Inspect camera device-use flags without opening a stream. Return 1 for activity, 0 for a
+ * complete idle scan, or -1 for unknown.
+ */
 static int camera_active(void) {
     CMIOObjectPropertyAddress devicesAddress = {kCMIOHardwarePropertyDevices, kCMIOObjectPropertyScopeGlobal, kCMIOObjectPropertyElementMain};
     UInt32 bytes = 0;
@@ -73,6 +85,10 @@ static int camera_active(void) {
     return result;
 }
 
+/**
+ * Read passive microphone and camera metadata without recording media or requesting permission.
+ * Return 1 if either probe is active, 0 only if both are inactive, or -1 otherwise.
+ */
 int blincho_capture_active(void) {
     int microphone = microphone_active();
     int camera = camera_active();

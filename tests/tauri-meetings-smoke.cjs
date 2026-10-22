@@ -98,6 +98,10 @@ async function selectStatistics() {
 async function click(id) {
   await control('eval', { script: `document.getElementById(${JSON.stringify(id)}).click()` });
 }
+/**
+ * Verify repeated call postponement without focus or shields, then automatic
+ * strict takeover after confirmed call end and cleanup of native presentation.
+ */
 async function verifyStrictMeetingExpiry() {
   const before = read();
   const input = { totalMs: 3600000, remainingMs: 1000, manualPaused: false,
@@ -106,6 +110,7 @@ async function verifyStrictMeetingExpiry() {
     meetingEnabled: true, meetingHistoryEnabled: false, autoTakeover: true };
   // The native heartbeat and renderer can both claim expiry. Either path must
   // publish the same five-minute timer without acquiring break presentation.
+  /** Recognize a newly committed five-minute postponement without a pending expiry. */
   const isPostponed = (value, version) => value.timer.version > version &&
     value.timer.remainingMs > 295000 && value.timer.remainingMs <= 300000 &&
     !value.timer.expiryPending;

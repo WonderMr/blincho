@@ -9,6 +9,7 @@ use std::{
 };
 
 extern "C" {
+    /// Return passive capture state: 1 for active, 0 for confirmed inactive, or -1 for unknown.
     fn blincho_capture_active() -> i32;
     fn blincho_observe_power(callback: extern "C" fn(i32));
     fn blincho_idle_seconds() -> f64;
@@ -225,6 +226,8 @@ pub fn meeting_supported() -> bool {
 pub fn meeting_status() -> MeetingStatus {
     meeting_status_with_probes(bounded_probe_with_exit)
 }
+/// Combine bounded meeting-process probes with passive capture metadata, preserving unknown
+/// status when required meeting probes fail.
 fn meeting_status_with_probes(
     mut probe: impl FnMut(&str, &[&str], Option<i32>) -> Option<String>,
 ) -> MeetingStatus {

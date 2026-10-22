@@ -126,6 +126,7 @@ impl Timer {
             .as_ref()
             .is_some_and(|input| input.camera_lock_enabled || input.enhanced_presence_enabled)
     }
+    /// Create an unconfigured timer with empty history and no active meeting controls.
     pub fn new(now: i64) -> Self {
         Self {
             input: None,
@@ -190,6 +191,11 @@ impl Timer {
             },
         }
     }
+    /// Validate and apply renderer state, rejecting stale timer versions and stale tokens when
+    /// starting a meeting-associated break.
+    ///
+    /// Returns an error for invalid input or stale commands. The now argument is a timestamp in
+    /// milliseconds.
     pub fn configure(&mut self, input: TimerInput, now: i64) -> Result<(), String> {
         if !input.total_ms.is_finite()
             || !(1000. ..=28_800_000.).contains(&input.total_ms)
@@ -313,6 +319,11 @@ impl Timer {
         self.last_at = now;
         Ok(())
     }
+    /// Postpone a still-current due break for five minutes and record that meeting postponement
+    /// may later be reclaimed.
+    ///
+    /// Return false without mutation when the version or timer state no longer permits
+    /// postponement. The now argument is in milliseconds.
     pub fn postpone_meeting(&mut self, expected_version: u64, now: i64) -> bool {
         if self.snapshot.version != expected_version
             || !self.snapshot.expiry_pending
@@ -362,6 +373,8 @@ impl Timer {
                 ) == expected_policy
             })
     }
+    /// Clear pending break presentation and meeting warnings, recording a new absence boundary
+    /// when requested.
     fn cancel_for_absence(&mut self, now: i64, new_absence: bool) {
         self.clear_meeting_warning();
         if new_absence {
@@ -629,6 +642,8 @@ impl Timer {
         true
     }
 
+    /// Apply a current meeting sample to break policy and live status, extending normalized
+    /// history only when its separate opt-in permits it.
     pub fn observe_meeting(&mut self, now: i64, status: &crate::platform::MeetingStatus) {
         if now < self.meeting_clock_floor {
             if self.last_meeting_at.is_some()
@@ -685,6 +700,8 @@ impl Timer {
         self.last_meeting_at = Some(now);
     }
 
+    /// Close the current observation boundary, clear transient meeting state, and invalidate
+    /// in-flight probes.
     fn end_meeting_observation(&mut self, now: i64, explicit_boundary: bool) {
         if explicit_boundary && self.meeting_sample_allowed() {
             self.extend_meeting_to(now);
@@ -697,10 +714,13 @@ impl Timer {
         self.meeting_epoch = self.meeting_epoch.wrapping_add(1);
     }
 
+    /// Report whether meeting detection or an explicit reminder pause currently blocks breaks.
     pub fn meeting_blocks_break(&self) -> bool {
         self.snapshot.meeting_reminders_paused || self.meeting_breaks_blocked
     }
 
+    /// Clear accumulated meeting and capture evidence, postponement tracking, and warning
+    /// state.
     fn reset_meeting_media(&mut self) {
         self.meeting_seen = false;
         self.media_inactive_since = None;
@@ -714,6 +734,12 @@ impl Timer {
         self.meeting_end_since = None;
     }
 
+    /// Update meeting break policy from consecutive samples, releasing capture postponement
+    /// after five inactive minutes and confirming meeting end after five seconds.
+    ///
+    /// Unknown capture never counts as inactive. Observation gaps over five seconds, clock
+    /// rollback and policy boundaries reset accumulated evidence. All timestamps are
+    /// milliseconds.
     fn observe_meeting_media(&mut self, now: i64, status: &crate::platform::MeetingStatus) {
         if self
             .input
@@ -792,6 +818,8 @@ impl Timer {
         self.meeting_breaks_blocked = self.meeting_seen && !self.meeting_resumed;
     }
 
+    /// End the confirmed meeting override, reclaim an eligible due break, and invalidate
+    /// meeting actions while preserving manual timer pause.
     fn finish_meeting(&mut self) {
         let was_paused = self.snapshot.meeting_reminders_paused;
         let version = self.snapshot.version;
@@ -818,6 +846,8 @@ impl Timer {
         self.snapshot.tick_count += 1;
     }
 
+    /// Restore a postponed due break only when work can resume, then consume the postponement
+    /// marker.
     fn reclaim_meeting_postponement(&mut self) {
         if self.meeting_postponement_pending
             && !self.snapshot.manual_paused
@@ -837,16 +867,23 @@ impl Timer {
         self.meeting_postponement_pending = false;
     }
 
+    /// Clear the warning deadline, readiness flag, and associated timer version.
     fn clear_meeting_warning(&mut self) {
         self.snapshot.meeting_warning_end_at = None;
         self.snapshot.meeting_warning_ready = false;
         self.meeting_warning_version = None;
     }
 
+    /// Allow takeover when no meeting warning is required or its grace period has completed.
     pub fn meeting_warning_allows_break(&self) -> bool {
         !self.snapshot.meeting_warning_required || self.snapshot.meeting_warning_ready
     }
 
+    /// Start or advance one 30-second warning for an eligible due meeting break; return true
+    /// while takeover must wait.
+    ///
+    /// The deadline is tied to the timer version and uses milliseconds; repeated checks never
+    /// extend the same warning.
     pub fn hold_for_meeting_warning(&mut self, now: i64) -> bool {
         if !self.snapshot.meeting_warning_required
             || self.snapshot.meeting_reminders_paused
@@ -877,6 +914,11 @@ impl Timer {
         true
     }
 
+    /// Validate the current warning and defer it by 5, 10, or 15 minutes, or pause reminders
+    /// until meeting end when minutes is None.
+    ///
+    /// Returns an error for an expired or stale warning, ineligible timer state, or unsupported
+    /// duration. The now argument is a timestamp in milliseconds.
     pub fn defer_meeting_warning(
         &mut self,
         version: u64,
@@ -927,11 +969,18 @@ impl Timer {
         Ok(())
     }
 
+    /// Issue a new meeting action token so previously rendered controls become stale.
     fn rotate_meeting_action(&mut self) {
         self.meeting_action_epoch += 1;
         self.snapshot.meeting_resume_token = Some(self.meeting_action_epoch);
     }
 
+    /// Apply a current meeting action to pause or resume reminders, cancelling only its
+    /// associated break; dismissing an unpaused control preserves the countdown.
+    ///
+    /// Returns an error for stale tokens, disabled detection, exercises or an unrelated active
+    /// break. A pause leaves manual timer pause unchanged and lasts until supported meeting-end
+    /// confirmation. The now argument is in milliseconds.
     pub fn set_meeting_reminders_paused(
         &mut self,
         token: u64,
@@ -1135,16 +1184,20 @@ impl Timer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// Build a supported Zoom observation with the requested tri-state capture result.
     fn media_status(active: Option<bool>) -> crate::platform::MeetingStatus {
         let mut status = meeting_status(&["Zoom"]);
         status.capture_active = active;
         status.capture_supported = true;
         status
     }
+    /// Advance a present, unlocked timer and apply one meeting observation at the same
+    /// timestamp.
     fn media_sample(timer: &mut Timer, now: i64, status: &crate::platform::MeetingStatus) {
         timer.tick(now, Some(0.), Some(false));
         timer.observe_meeting(now, status);
     }
+    /// Feed observations at intervals of at most one second through the requested endpoint.
     fn media_until(
         timer: &mut Timer,
         from: i64,
@@ -1157,6 +1210,8 @@ mod tests {
             media_sample(timer, now, status);
         }
     }
+    /// Verify that five inactive minutes release meeting blocking once without overriding
+    /// manual pause or raw call status.
     #[test]
     fn five_minutes_of_confirmed_media_inactivity_releases_only_postponement() {
         let mut timer = live_meeting_timer();
@@ -1182,6 +1237,8 @@ mod tests {
         media_until(&mut timer, 300_000, 610_000, &off);
         assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
     }
+    /// Verify that media resumption immediately restores an already due break while preserving
+    /// meeting history.
     #[test]
     fn media_resume_reclaims_an_already_due_break_without_waiting_another_postponement() {
         let mut timer = Timer::new(0);
@@ -1204,6 +1261,7 @@ mod tests {
         assert_eq!(timer.snapshot.meeting_applications, ["Zoom"]);
         assert!(!timer.snapshot.meeting_spans.is_empty());
     }
+    /// Verify that active, unknown, or failed samples restart the full inactivity interval.
     #[test]
     fn media_activation_unknown_and_failed_observations_require_a_new_full_interval() {
         for interruption in [
@@ -1228,6 +1286,8 @@ mod tests {
             assert_eq!(timer.snapshot.meeting_resumed_epoch, 2);
         }
     }
+    /// Verify that five seconds of confirmed meeting absence end blocking without a capture
+    /// inactivity resumption event.
     #[test]
     fn supported_meeting_end_is_confirmed_independently_of_capture_inactivity() {
         let mut timer = live_meeting_timer();
@@ -1243,6 +1303,8 @@ mod tests {
         assert_eq!(timer.snapshot.meeting_resumed_epoch, 0);
         assert!(timer.snapshot.meeting_resume_token.is_none());
     }
+    /// Verify that releasing meeting blocking does not make an ordinary work countdown expire
+    /// early.
     #[test]
     fn media_resume_preserves_a_normal_work_cycle() {
         let mut timer = Timer::new(0);
@@ -1258,6 +1320,8 @@ mod tests {
         assert!(!timer.snapshot.expiry_pending);
         assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
     }
+    /// Verify that uncertain capture or lost call evidence cannot complete the inactivity
+    /// release interval.
     #[test]
     fn unknown_capture_and_lost_call_heuristic_cannot_release_a_pending_call() {
         for supported in [true, false] {
@@ -1280,6 +1344,8 @@ mod tests {
             assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
         }
     }
+    /// Verify that sleep, lock, policy changes, observation gaps, and clock rollback invalidate
+    /// accumulated inactivity.
     #[test]
     fn media_inactivity_cannot_cross_power_policy_or_clock_boundaries() {
         for boundary in 0..5 {
@@ -1312,6 +1378,7 @@ mod tests {
             );
         }
     }
+    /// Build a due strict meeting break with simulated media release and an active warning.
     fn strict_warning_timer() -> Timer {
         let mut timer = Timer::new(0);
         let mut config = input();
@@ -1328,6 +1395,8 @@ mod tests {
         assert!(timer.hold_for_meeting_warning(2000));
         timer
     }
+    /// Verify that one complete 30-second warning precedes takeover without restarting after
+    /// expiry.
     #[test]
     fn strict_meeting_warning_grants_one_full_grace_before_takeover() {
         let mut timer = strict_warning_timer();
@@ -1342,6 +1411,8 @@ mod tests {
         assert!(!timer.hold_for_meeting_warning(33000));
         assert_eq!(timer.snapshot.meeting_warning_epoch, 1);
     }
+    /// Verify warning identity and allowed delays, rejecting stale actions and preserving an
+    /// explicit postponement.
     #[test]
     fn meeting_warning_actions_validate_duration_identity_and_preserve_explicit_delay() {
         for minutes in [5, 10, 15] {
@@ -1372,6 +1443,8 @@ mod tests {
             assert_eq!(timer.snapshot.remaining_ms, f64::from(minutes) * 60000.);
         }
     }
+    /// Verify that reminder pause survives muted or unknown calls until confirmed meeting end
+    /// while focus accounting continues.
     #[test]
     fn meeting_pause_waits_for_confirmed_end_and_keeps_strict_mode_and_focus() {
         let mut timer = strict_warning_timer();
@@ -1408,6 +1481,8 @@ mod tests {
         assert!(timer.input.as_ref().unwrap().strict_mode);
     }
 
+    /// Verify that absence, timer pause or reset, and relevant policy changes invalidate
+    /// warning actions.
     #[test]
     fn warning_cancels_on_pause_absence_reset_and_policy_change() {
         for cause in 0..5 {
@@ -1443,6 +1518,7 @@ mod tests {
                 .is_err());
         }
     }
+    /// Verify that a due timer without meeting context never creates a meeting warning.
     #[test]
     fn warning_is_not_created_without_a_strict_meeting_context() {
         for strict in [false, true] {
@@ -1456,6 +1532,8 @@ mod tests {
             assert!(timer.meeting_warning_allows_break());
         }
     }
+    /// Verify current-token pause and resume before expiry in both modes without changing
+    /// manual pause or strict policy.
     #[test]
     fn resumed_meeting_control_works_before_expiry_in_both_modes_and_preserves_manual_pause() {
         for strict in [false, true] {
@@ -1508,6 +1586,8 @@ mod tests {
             }
         }
     }
+    /// Verify that reminder pause cancels only the token-associated break and removes its
+    /// deadline.
     #[test]
     fn resumed_meeting_control_cancels_only_its_associated_break_and_clears_deadline() {
         for associated in [false, true] {
@@ -1545,6 +1625,8 @@ mod tests {
             }
         }
     }
+    /// Verify that an invalidated meeting token rejects a queued break even when its timer
+    /// version matches.
     #[test]
     fn paused_meeting_rejects_a_queued_break_even_at_the_same_timer_version() {
         let mut timer = live_meeting_timer();
@@ -1562,6 +1644,8 @@ mod tests {
         assert!(!timer.snapshot.break_active);
         assert!(timer.snapshot.meeting_reminders_paused);
     }
+    /// Verify that dismissing the resumption control preserves both the due break and its
+    /// warning deadline.
     #[test]
     fn dismissing_resumption_control_preserves_due_break_and_warning() {
         let mut timer = live_meeting_timer();
@@ -1589,6 +1673,8 @@ mod tests {
         assert_eq!(timer.snapshot.meeting_warning_end_at, end);
         assert!(timer.snapshot.meeting_resume_token.is_none());
     }
+    /// Verify that confirmed meeting end clears the override once, invalidates its token, and
+    /// preserves manual timer pause.
     #[test]
     fn meeting_override_ends_automatically_and_preserves_manual_timer_pause() {
         for manual in [false, true] {
@@ -1644,6 +1730,8 @@ mod tests {
             );
         }
     }
+    /// Verify that confirmed meeting end preserves a running work countdown regardless of
+    /// capture state.
     #[test]
     fn meeting_end_preserves_a_not_yet_due_work_cycle_with_any_capture_state() {
         for capture in [None, Some(false), Some(true)] {
@@ -1680,6 +1768,8 @@ mod tests {
             );
         }
     }
+    /// Verify that failed or positive probes, timing discontinuities, history deletion, and
+    /// sleep restart meeting-end confirmation.
     #[test]
     fn meeting_end_needs_continuous_supported_negatives_after_each_boundary() {
         for cause in 0..6 {
@@ -1739,6 +1829,7 @@ mod tests {
             );
         }
     }
+    /// Build a supported meeting fixture from application names with no capture-probe support.
     fn meeting_status(applications: &[&str]) -> crate::platform::MeetingStatus {
         crate::platform::MeetingStatus {
             capture_active: None,
@@ -1916,6 +2007,8 @@ mod tests {
         assert!(!timer.observe_meeting_if_current(stale_epoch, 750, &meeting_status(&["Zoom"])));
         assert!(timer.snapshot.live_meeting_status.is_none());
     }
+    /// Verify that live status separates unsupported and inactive probes while discarding
+    /// private metadata.
     #[test]
     fn live_status_distinguishes_unknown_and_inactive_without_private_metadata() {
         let mut timer = live_meeting_timer();
@@ -2255,6 +2348,8 @@ mod tests {
             [(1500, 1750, "Zoom"), (2250, 2500, "Zoom")]
         );
     }
+    /// Verify that private titles and URLs become unknown attribution while later recognized
+    /// applications remain identifiable.
     #[test]
     fn unknown_attribution_is_preserved_without_accepting_private_metadata() {
         let mut timer = meeting_timer();
@@ -2623,6 +2718,8 @@ mod tests {
         timer.observe_meeting(1300, &meeting_status(&[]));
         assert!(!timer.observe_camera_presence(epoch, 1000, Some(false), 1500));
     }
+    /// Build a short strict timer configuration with meeting features disabled and no token
+    /// associating a break with a meeting.
     fn input() -> TimerInput {
         TimerInput {
             total_ms: 2000.,

@@ -19,8 +19,11 @@ const child = spawn(executable, ['--autostart'], { env: { ...process.env,
   BLINCHO_SMOKE_PRESENCE: '1', BLINCHO_SMOKE_MEETINGS: '1' }, stdio: ['ignore', 'inherit', 'inherit'] });
 let launchError, sequence = 0;
 child.once('error', error => { launchError = error; });
+/** Yield to the native app and renderer for the requested milliseconds. */
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+/** Read the isolated app's latest diagnostics, propagating missing or partial-file errors. */
 const read = () => JSON.parse(fs.readFileSync(path.join(directory, 'runtime-diagnostics.json'), 'utf8'));
+/** Poll diagnostics until predicate matches; tolerate partial writes and fail on exit or timeout. */
 async function until(predicate, timeout = 20000) {
   const deadline = Date.now() + timeout;
   let state;
@@ -33,6 +36,7 @@ async function until(predicate, timeout = 20000) {
   }
   throw Error('Warning smoke timed out: ' + JSON.stringify(state));
 }
+/** Atomically submit a numbered test command and require its matching successful response. */
 async function control(operation, args = {}) {
   const id = ++sequence;
   fs.writeFileSync(path.join(directory, 'control.tmp'), JSON.stringify({ id, operation, ...args }));
@@ -46,11 +50,13 @@ async function control(operation, args = {}) {
   }
   throw Error('Control timed out: ' + operation);
 }
+/** Request a fresh renderer probe and wait for its unique marker in native diagnostics. */
 async function inspect() {
   const marker = ++sequence;
   await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,warningProbe:${marker},control:!!document.querySelector("[data-meeting-control]"),breakControl:!!document.querySelector("[data-meeting-break-control]"),warning:!!document.getElementById('meeting-warning-title'),breakDialog:!!document.querySelector('.fullscreen-break-takeover'),buttons:Array.from(document.querySelectorAll('[aria-labelledby="meeting-warning-title"] button')).map(b=>b.textContent),overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth}})` });
   return until(state => state.renderer?.warningProbe === marker);
 }
+/** Set a new timer version with strict meeting detection while retaining the requested manual pause. */
 async function configure(remainingMs, manualPaused = false) {
   const state = read();
   await control('configure', { input: { totalMs: 1200000, remainingMs, version: state.timer.version + 1,
@@ -58,6 +64,7 @@ async function configure(remainingMs, manualPaused = false) {
     breakSeconds: 60, strictMode: true, idleEnabled: false, idleThresholdSeconds: 60,
     meetingEnabled: true, meetingHistoryEnabled: false, autoTakeover: true } });
 }
+/** Force expiry and verify the four warning actions appear before any native strict shield. */
 async function prepareWarning() {
   await configure(1000);
   await until(value => value.timer.meetingWarningEndAt > Date.now());

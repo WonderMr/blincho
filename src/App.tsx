@@ -47,6 +47,7 @@ import {
 
 type PendingMeetingTimer = Pick<TimerSession, 'version' | 'totalMs' | 'remainingMs' | 'manualPaused' | 'expiryPending' | 'breakActive' | 'exercising'>;
 
+/** Coordinate the shared UI, timer state and native presence, meeting and break events. */
 export const App: React.FC = () => {
   useI18n();
   const updates = useUpdates();
@@ -195,6 +196,10 @@ export const App: React.FC = () => {
     recordTimerProgress(focus, activity, meetings);
     refreshStats();
   };
+  /**
+   * Queue timer settings with their history-consent generation and meeting break token.
+   * During a meeting action, retain local edits until its native reply can be reconciled.
+   */
   const synchronizeTimer = () => {
     if (meetingControlBusyRef.current) {
       meetingPendingTimerRef.current = { version: session.version, totalMs: session.totalMs, remainingMs: session.remainingMs,
@@ -414,6 +419,11 @@ export const App: React.FC = () => {
     presenceInFlightRef.current = pending;
     return pending;
   };
+  /**
+   * Start a break only while present and outside another break or exercise.
+   * Automatic starts respect a pending meeting action or pause, and carry the
+   * current meeting token so only their associated break can later be cancelled.
+   */
   const beginBreak = (automatic = false) => {
     if (!session.present || session.breakActive || session.exercising) return;
     if (automatic && (meetingControlBusyRef.current || meetingControlRef.current?.paused)) return;
@@ -498,6 +508,11 @@ export const App: React.FC = () => {
     }
     return false;
   };
+  /**
+   * Resolve one expiry after fresh presence and meeting checks.
+   * Recheck the timer version across awaits and honor the native strict-warning
+   * deadline before allowing automatic takeover or the reminder-only path.
+   */
   const handleTimerExpired = async () => {
     if (expiryInFlightRef.current) return;
     expiryInFlightRef.current = true;
@@ -534,6 +549,11 @@ export const App: React.FC = () => {
       else { soundSynth.playZenBowl(); restartWork(); }
     } finally { expiryInFlightRef.current = false; }
   };
+  /**
+   * Submit the visible warning's version and epoch once, then apply its native reply.
+   * A null duration pauses reminders until meeting end; a late reply must not
+   * overwrite the notice from a newer automatic restoration.
+   */
   const handleDeferMeetingWarning = async (minutes: number | null) => {
     if (!meetingWarning || meetingWarningBusyRef.current) return;
     meetingWarningBusyRef.current = true;
@@ -555,6 +575,11 @@ export const App: React.FC = () => {
       if (mountedRef.current) setMeetingWarningBusy(false);
     }
   };
+  /**
+   * Toggle the token-bound meeting pause, or request its removal when finish is true.
+   * Serialize clicks and reconcile newer local reset or manual-pause edits with
+   * the native result before synchronizing settings again. Surface IPC failures.
+   */
   const handleMeetingReminders = async (finish = false) => {
     const control = meetingControlRef.current;
     if (!control || meetingControlBusyRef.current) return;
@@ -931,6 +956,11 @@ export const App: React.FC = () => {
     session.lastUpdated = Date.now();
     let polling = false;
     const nativeFocus = nativeFocusRef.current;
+    /**
+     * Apply each native tick once, keeping newer local timer versions intact.
+     * Reconcile token-bound break cancellation, warning and meeting notices by
+     * epoch, then ingest permitted history and dispatch due timer transitions.
+     */
     const applyNative = (snapshot: NativeTimerSnapshot) => {
       if (!mountedRef.current || snapshot.totalMs < 1000 || snapshot.tickCount <= nativeTickRef.current) return;
       nativeTickRef.current = snapshot.tickCount;

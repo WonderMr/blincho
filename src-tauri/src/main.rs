@@ -137,6 +137,8 @@ extern "C" fn notification_clicked() {
         });
     }
 }
+/// Queue foreground presentation for a still-current expiry after rechecking timer policy and
+/// meeting-warning readiness on the UI thread.
 fn foreground_expiry(
     app: &tauri::AppHandle,
     version: u64,
@@ -257,6 +259,8 @@ fn maintain_strict_focus_on_main(app: &tauri::AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+/// Queue strict-mode presentation or release after rechecking the current timer state on the UI
+/// thread.
 fn presentation(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(), String> {
     let handle = app.clone();
     app.run_on_main_thread(move || {
@@ -409,6 +413,8 @@ fn configure_timer(input: TimerInput, app: tauri::AppHandle) -> Result<Snapshot,
     ui::finish_hidden_startup(&app)?;
     Ok(snapshot)
 }
+/// Sample native state and apply a versioned meeting-warning postponement or pause, returning
+/// the updated snapshot.
 #[tauri::command]
 fn defer_meeting_break(
     version: u64,
@@ -434,6 +440,8 @@ fn timer_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
     sample(&mut timer);
     Ok(timer.snapshot.clone())
 }
+/// Apply the current meeting reminder action and release native presentation if it cancels the
+/// associated break.
 #[tauri::command]
 fn set_meeting_reminders_paused(
     token: u64,
@@ -452,6 +460,8 @@ fn set_meeting_reminders_paused(
     }
     Ok(snapshot)
 }
+/// Begin a camera presence check only after a fresh meeting probe and matching presence and
+/// meeting epochs permit it.
 #[tauri::command]
 async fn presence_check_begin(app: tauri::AppHandle) -> Result<Option<Value>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -748,6 +758,8 @@ async fn update_open_download() -> Result<bool, String> {
         .await
         .map(|_| true)
 }
+/// Probe meeting state off the UI thread, reject stale observations, and return the timer's
+/// effective break-blocking decision.
 #[tauri::command]
 async fn check_meeting_active(app: tauri::AppHandle) -> Result<platform::MeetingStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -867,6 +879,8 @@ fn test_control(app: &tauri::AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || test_control_on_main(&handle));
 }
+/// Execute one file-based desktop test command on the UI thread and write its response in the
+/// isolated test directory.
 fn test_control_on_main(app: &tauri::AppHandle) {
     let runtime = app.state::<Runtime>();
     let Some(directory) = &runtime.test_dir else {
@@ -1055,6 +1069,8 @@ fn test_control_on_main(app: &tauri::AppHandle) {
     };
     let _ = std::fs::write(directory.join("response.json"), response.to_string());
 }
+/// Initialize the desktop runtime, register IPC handlers, and run timer and window event
+/// processing.
 fn main() {
     startup_trace("main-entry");
     let hidden = std::env::args_os().any(|arg| arg == "--autostart");

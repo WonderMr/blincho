@@ -6,16 +6,19 @@
 static bool legacy, audioFailure, cameraFailure, partialAudio, partialCamera;
 static UInt32 audioRunning, cameraRunning;
 static UInt32 deviceCount = 2;
+/** Select the process-input probe or legacy device fallback without using real devices. */
 static Boolean has_property(AudioObjectID object, const AudioObjectPropertyAddress *address) {
     (void)object; (void)address;
     return !legacy;
 }
+/** Supply fixture list or input-stream sizes, optionally failing the audio scan. */
 static OSStatus audio_size(AudioObjectID object, const AudioObjectPropertyAddress *address, UInt32 qualifierSize, const void *qualifier, UInt32 *size) {
     (void)object; (void)qualifierSize; (void)qualifier;
     if (audioFailure) return -1;
     *size = address->mSelector == kAudioDevicePropertyStreams ? sizeof(AudioStreamID) : deviceCount * sizeof(AudioObjectID);
     return noErr;
 }
+/** Supply fixture audio IDs or running bits, including a failed first-device observation. */
 static OSStatus audio_data(AudioObjectID object, const AudioObjectPropertyAddress *address, UInt32 qualifierSize, const void *qualifier, UInt32 *size, void *data) {
     (void)qualifierSize; (void)qualifier;
     if (address->mSelector == kAudioHardwarePropertyDevices || address->mSelector == kAudioHardwarePropertyProcessObjectList) {
@@ -29,12 +32,14 @@ static OSStatus audio_data(AudioObjectID object, const AudioObjectPropertyAddres
     *size = sizeof(UInt32);
     return noErr;
 }
+/** Supply the fixture camera-list size or simulate a failed enumeration. */
 static OSStatus camera_size(CMIOObjectID object, const CMIOObjectPropertyAddress *address, UInt32 qualifierSize, const void *qualifier, UInt32 *size) {
     (void)object; (void)address; (void)qualifierSize; (void)qualifier;
     if (cameraFailure) return -1;
     *size = deviceCount * sizeof(CMIODeviceID);
     return noErr;
 }
+/** Supply fixture camera IDs or running bits while reporting the exact bytes written. */
 static OSStatus camera_data(CMIOObjectID object, const CMIOObjectPropertyAddress *address, UInt32 qualifierSize, const void *qualifier, UInt32 size, UInt32 *used, void *data) {
     (void)qualifierSize; (void)qualifier;
     if (address->mSelector == kCMIOHardwarePropertyDevices) {
@@ -56,6 +61,7 @@ static OSStatus camera_data(CMIOObjectID object, const CMIOObjectPropertyAddress
 #define CMIOObjectGetPropertyData camera_data
 #include "../../src-tauri/native/capture.m"
 
+/** Verify tri-state aggregation for both probe paths, partial failures and empty device lists. */
 int main(void) {
     for (int old = 0; old <= 1; ++old) {
         legacy = old;
