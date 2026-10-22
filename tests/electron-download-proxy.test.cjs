@@ -1,11 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const { mkdtemp, rm } = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { promisify } = require('node:util');
 
 test('Electron builder downloader retains proxy and no-proxy support with the security override', async t => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'blincho-electron-download-'));
+  t.after(() => rm(tempRoot, { recursive: true, force: true }));
   const requests = [];
   const proxy = http.createServer((request, response) => {
     requests.push(request.url);
@@ -21,8 +26,8 @@ test('Electron builder downloader retains proxy and no-proxy support with the se
   const directUrl = `http://127.0.0.1:${direct.address().port}/artifact.zip`;
   const { stdout } = await promisify(execFile)(process.execPath, ['-e', `
     const assert = require('node:assert/strict');
-    const http = require('node:http');
-    const { initializeProxy } = require(${JSON.stringify(downloader)});
+    const { readFile } = require('node:fs/promises');
+    const { initializeProxy, downloadArtifact, ElectronDownloadCacheMode } = require(${JSON.stringify(downloader)});
     initializeProxy();
     const agent = global.GLOBAL_AGENT;
     assert.ok(agent, 'initializeProxy must not swallow a load or bootstrap error');
@@ -30,15 +35,19 @@ test('Electron builder downloader retains proxy and no-proxy support with the se
     assert.equal(agent.HTTPS_PROXY, ${JSON.stringify(proxyUrl)});
     initializeProxy();
     assert.equal(global.GLOBAL_AGENT, agent);
-    const read = url => new Promise((resolve, reject) => {
-      http.get(url, response => {
-        let body = '';
-        response.setEncoding('utf8');
-        response.on('data', chunk => { body += chunk; });
-        response.on('end', () => resolve(body));
-        response.on('error', reject);
-      }).on('error', reject);
-    });
+    const read = async url => {
+      const downloaded = await downloadArtifact({
+        // This synthetic fixture predates Electron's checksum manifests.
+        version: '1.0.0',
+        artifactName: 'artifact.zip',
+        isGeneric: true,
+        cacheMode: ElectronDownloadCacheMode.Bypass,
+        cacheRoot: ${JSON.stringify(path.join(tempRoot, 'cache'))},
+        tempDirectory: ${JSON.stringify(tempRoot)},
+        mirrorOptions: { resolveAssetURL: async () => url },
+      });
+      return readFile(downloaded, 'utf8');
+    };
     (async () => {
       assert.equal(await read('http://download.invalid/artifact.zip'), 'proxied download');
       assert.equal(await read(${JSON.stringify(directUrl)}), 'direct download');
