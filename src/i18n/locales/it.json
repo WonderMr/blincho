@@ -627,5 +627,13 @@
   "Камера Blincho активна": "Blincho sta usando la fotocamera",
   "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Alla prima attivazione, il modello della videocamera (19 MB) viene scaricato da GitHub. In seguito, i controlli funzionano senza connessione Internet.",
   "Загрузка модели камеры… {percent}%": "Download del modello della videocamera… {percent}%",
-  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Impossibile scaricare il modello della videocamera. Controlla la connessione Internet e attiva di nuovo questa opzione."
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Impossibile scaricare il modello della videocamera. Controlla la connessione Internet e attiva di nuovo questa opzione.",
+  "Напоминания приостановлены до конца встречи.": "I promemoria sono sospesi fino al termine della riunione.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Impossibile rimandare la pausa. Riprova.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "La riunione è terminata. I promemoria delle pause sono ripresi.",
+  "Перерыв начнётся через {seconds} с.": "La pausa inizierà tra {seconds} s.",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "La fotocamera e il microfono non sono in uso da 5 minuti. I promemoria delle pause sono ripresi.",
+  "Напоминания о перерывах возобновлены": "Promemoria delle pause ripresi",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Sei in riunione? Rimanda la pausa o sospendi i promemoria fino al termine della riunione.",
+  "До конца встречи": "Fino al termine della riunione"
 }

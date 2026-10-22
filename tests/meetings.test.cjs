@@ -40,8 +40,11 @@ fs.writeFileSync(nativeFixture, `
       advance(now: number) { this.lastUpdated = now; return false; }
       drainActivity() { super.drainActivity(); return []; }
     }
+    export function deferNativeMeetingBreak(version: number, warningEpoch: number, minutes: number | null) {
+      return window.testDeferMeetingBreak(version, warningEpoch, minutes);
+    }
     export function hasNativeTimer() { return true; }
-    export function readNativeTimer() { return Promise.resolve(null); }
+    export function readNativeTimer() { return window.testReadNativeTimer ? window.testReadNativeTimer() : Promise.resolve(null); }
     let commandQueue = Promise.resolve();
     let historyEnabled: boolean | undefined;
     let historyEpoch = 0;
@@ -252,6 +255,143 @@ test('detector preserves boolean-only responses and sanitizes optional applicati
     window.desktopAPI.checkMeetingActive = async () => ({ inMeeting: false, applications: ['Zoom'] });
     assert.deepEqual((await detector.detectActiveMeeting()).applications, []);
   } finally { if (previous === undefined) delete global.window; else global.window = previous; }
+});
+
+test('native media resumption announces once per epoch and respects notification settings and manual pause', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  for (const enabled of [true, false]) {
+    const previous = window.__TAURI__;
+    window.__TAURI__ = { core: { invoke: async () => undefined } };
+    const h = createHarness({ meetingDetectionEnabled: true, notificationsEnabled: enabled }, false, false,
+      at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: nativeFixture });
+    try {
+      await h.settle();
+      const frame = { totalMs: 1200000, remainingMs: 600000, manualPaused: true, breakActive: false, exercising: false,
+        expiryPending: false, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+        suspended: false, breakElapsed: false, focusByDate: {}, meetingResumedEpoch: 1 };
+      window.testNativeFrame({ ...frame, tickCount: 1 });
+      await h.settle();
+      assert.equal(h.notifications, enabled ? 1 : 0);
+      assert.equal(h.captured.TimerWidget.phase, 'manual');
+      assert.equal(h.captured.TimerWidget.secondsRemaining, 600);
+      assert.equal(h.active.has('BreakOverlay'), false);
+      assert.match(h.host.textContent, /Камера и микрофон не используются 5 минут/);
+      window.testNativeFrame({ ...frame, tickCount: 2 });
+      await h.settle();
+      assert.equal(h.notifications, enabled ? 1 : 0, 'repeated frames cannot notify twice');
+      window.testNativeFrame({ ...frame, tickCount: 3, meetingResumedEpoch: 2 });
+      await h.settle();
+      assert.equal(h.notifications, enabled ? 2 : 0, 'a new inactive episode can notify again');
+    } finally {
+      h.destroy();
+      if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+      delete window.testNativeFrame;
+    }
+  }
+});
+
+test('renderer expiry leaves meeting postponement and notification ownership with the native timer', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const previous = window.__TAURI__;
+  window.__TAURI__ = { core: { invoke: async () => undefined } };
+  const h = createHarness({ meetingDetectionEnabled: true }, false, false,
+    at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: nativeFixture });
+  try {
+    await h.settle();
+    let probes = 0;
+    h.electronAPI.checkMeetingActive = async () => { probes++; return { inMeeting: true, supported: true }; };
+    const frame = { totalMs: 1200000, remainingMs: 0, manualPaused: false, breakActive: false, exercising: false,
+      expiryPending: true, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+      suspended: false, breakElapsed: false, focusByDate: {} };
+    window.testNativeFrame({ ...frame, tickCount: 1 });
+    await h.settle();
+    assert.equal(probes, 1, 'renderer reached meeting expiry before the heartbeat');
+    assert.equal(h.captured.TimerWidget.secondsRemaining, 0, 'renderer must not invent its own postponement');
+    assert.equal(h.notifications, 0);
+    window.testNativeFrame({ ...frame, tickCount: 2, remainingMs: 300000, expiryPending: false, version: 2, meetingPostponedEpoch: 1 });
+    await h.settle();
+    assert.equal(h.notifications, 1);
+    window.testNativeFrame({ ...frame, tickCount: 3, version: 3, meetingPostponedEpoch: 1, meetingResumedEpoch: 1 });
+    await h.settle();
+    assert.equal(h.captured.TimerWidget.secondsRemaining, 0, 'the already due break is reclaimed at resumption');
+    assert.equal(h.notifications, 2, 'one postponement notice and one resumption notice');
+  } finally {
+    h.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+    delete window.testNativeFrame;
+  }
+});
+
+test('strict meeting warning appears before takeover and dispatches versioned duration or until-end actions', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  for (const minutes of [5, 10, 15, null]) {
+    const previous = window.__TAURI__;
+    window.__TAURI__ = { core: { invoke: async () => undefined } };
+    const h = createHarness({ strictMode: true, meetingDetectionEnabled: true }, false, false,
+      at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: nativeFixture });
+    try {
+      await h.settle();
+      const frame = { totalMs: 1200000, remainingMs: 0, manualPaused: false, breakActive: false, exercising: false,
+        expiryPending: true, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+        suspended: false, breakElapsed: false, focusByDate: {}, meetingWarningRequired: true,
+        meetingWarningReady: false, meetingWarningEndAt: h.now + 30000, meetingWarningEpoch: 1 };
+      window.testNativeFrame({ ...frame, tickCount: 1 });
+      await h.settle();
+      assert.equal(h.active.has('MeetingBreakWarning'), true);
+      assert.equal(h.active.has('BreakOverlay'), false);
+      assert.equal(h.notifications, 1);
+      window.testNativeFrame({ ...frame, tickCount: 2 });
+      await h.settle();
+      assert.equal(h.notifications, 1, 'warning alert is deduplicated');
+      const calls = [];
+      window.testDeferMeetingBreak = async (...args) => {
+        calls.push(args);
+        return { ...frame, tickCount: 3, version: 2, expiryPending: false, remainingMs: (minutes ?? 5) * 60000,
+          meetingWarningEndAt: null, meetingRemindersPaused: minutes === null };
+      };
+      await h.call('MeetingBreakWarning', 'onDefer', minutes);
+      assert.deepEqual(calls, [[1, 1, minutes]]);
+      assert.equal(h.active.has('MeetingBreakWarning'), false);
+      assert.equal(h.active.has('BreakOverlay'), false);
+      assert.equal(h.captured.TimerWidget.secondsRemaining, (minutes ?? 5) * 60);
+      if (minutes === null) assert.match(h.host.textContent, /Напоминания приостановлены до конца встречи/);
+    } finally {
+      h.destroy();
+      if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+      delete window.testNativeFrame; delete window.testDeferMeetingBreak;
+    }
+  }
+});
+
+test('native snapshot expiry gate blocks takeover during warning and permits it only after native completion', async () => {
+  const { createHarness } = require('./app.test.cjs');
+  const previous = window.__TAURI__;
+  window.__TAURI__ = { core: { invoke: async () => undefined } };
+  const h = createHarness({ strictMode: true, meetingDetectionEnabled: true }, false, false,
+    at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: nativeFixture });
+  try {
+    await h.settle();
+    let tick = 1;
+    let current = { totalMs: 1200000, remainingMs: 0, manualPaused: false, breakActive: false, exercising: false,
+      expiryPending: true, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
+      suspended: false, breakElapsed: false, focusByDate: {}, meetingWarningRequired: true,
+      meetingWarningReady: false, meetingWarningEndAt: h.now + 30000, meetingWarningEpoch: 1 };
+    window.testReadNativeTimer = async () => ({ ...current, tickCount: ++tick });
+    window.testNativeFrame({ ...current, tickCount: tick });
+    await h.settle();
+    assert(tick > 1, 'expiry consumed a native snapshot rather than the null fallback');
+    assert.equal(h.active.has('MeetingBreakWarning'), true);
+    assert.equal(h.active.has('BreakOverlay'), false, 'pending native warning prevents fullscreen');
+    current = { ...current, meetingWarningReady: true, meetingWarningEndAt: null };
+    window.testNativeFrame({ ...current, tickCount: ++tick });
+    await h.settle();
+    assert.equal(h.active.has('MeetingBreakWarning'), false);
+    assert.equal(h.active.has('BreakOverlay'), true, 'ready native warning allows the strict break');
+  } finally {
+    h.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+    delete window.testNativeFrame; delete window.testReadNativeTimer;
+  }
 });
 
 test('App persists native call samples during manual pause, preserves overlap and flushes on unmount', async () => {

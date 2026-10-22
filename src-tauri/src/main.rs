@@ -158,6 +158,7 @@ fn foreground_expiry(
             || !timer.snapshot.expiry_pending
             || timer.snapshot.manual_paused
             || !timer.snapshot.reasons.is_empty()
+            || !timer.meeting_warning_allows_break()
         {
             return;
         }
@@ -406,6 +407,24 @@ fn configure_timer(input: TimerInput, app: tauri::AppHandle) -> Result<Snapshot,
     Ok(snapshot)
 }
 #[tauri::command]
+fn defer_meeting_break(
+    version: u64,
+    warning_epoch: u64,
+    minutes: Option<u8>,
+    app: tauri::AppHandle,
+) -> Result<Snapshot, String> {
+    let runtime = app.state::<Runtime>();
+    let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+    sample(&mut timer);
+    timer.defer_meeting_warning(
+        version,
+        warning_epoch,
+        minutes,
+        Utc::now().timestamp_millis(),
+    )?;
+    Ok(timer.snapshot.clone())
+}
+#[tauri::command]
 fn timer_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
     let runtime = app.state::<Runtime>();
     let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
@@ -427,17 +446,19 @@ async fn presence_check_begin(app: tauri::AppHandle) -> Result<Option<Value>, St
         let meeting = runtime.meeting.check_fresh(meeting_epoch);
         let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
         sample(&mut timer);
+        if !timer.observe_meeting_if_current(meeting_epoch, Utc::now().timestamp_millis(), &meeting)
+        {
+            return Ok(None);
+        }
         if epoch != timer.snapshot.presence_epoch
             || !timer.presence_check_may_start()
             || !meeting.supported
             || meeting.in_meeting
+            || timer.meeting_blocks_break()
         {
             return Ok(None);
         }
         let now = Utc::now().timestamp_millis();
-        if !timer.observe_meeting_if_current(meeting_epoch, now, &meeting) {
-            return Ok(None);
-        }
         timer.begin_camera_check(now);
         Ok(Some(json!({"epoch":epoch,"startedAt":now})))
     })
@@ -732,7 +753,9 @@ async fn check_meeting_active(app: tauri::AppHandle) -> Result<platform::Meeting
         {
             platform::MeetingStatus::inactive(false)
         } else if timer.observe_meeting_if_current(epoch, Utc::now().timestamp_millis(), &status) {
-            status
+            let mut effective = status;
+            effective.in_meeting = timer.meeting_blocks_break();
+            effective
         } else {
             platform::MeetingStatus::inactive(false)
         }
@@ -1057,7 +1080,7 @@ fn main() {
                 return true;
             }
             let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
-            configure_timer, symbiote_icons::set_symbiote_build,
+            configure_timer, defer_meeting_break, symbiote_icons::set_symbiote_build,
             camera_activity::camera_activity_generation, camera_activity::camera_activity_update,
             symbiote_shortcuts::sync_symbiote_shortcut, symbiote_shortcuts::create_symbiote_shortcut,
             symbiote_shortcuts::symbiote_shortcut_status, symbiote_shortcuts::show_symbiote_shortcut,
@@ -1280,7 +1303,7 @@ fn main() {
                         let Ok(timer) = runtime.timer.lock() else {
                             break;
                         };
-                        let expired = timer.snapshot.expiry_pending && !timer.snapshot.manual_paused && timer.snapshot.reasons.is_empty() && handled_expiry!=timer.input.as_ref().map(|input|(timer.snapshot.version,input.meeting_enabled,input.auto_takeover,input.strict_mode,timer.meeting_epoch()));
+                        let expired = timer.snapshot.expiry_pending && !timer.snapshot.manual_paused && timer.snapshot.reasons.is_empty() && (handled_expiry!=timer.input.as_ref().map(|input|(timer.snapshot.version,input.meeting_enabled,input.auto_takeover,input.strict_mode,timer.meeting_epoch())) || timer.snapshot.meeting_warning_end_at.is_some_and(|end| Utc::now().timestamp_millis() >= end));
                         (
                             expired,
                             timer.strict(),
@@ -1315,9 +1338,10 @@ fn main() {
                                 }
                             }
                             let current = same_epoch && timer.expiry_still_current(expected_version, expected_absence_epoch, expected_policy);
-                            let meeting = meeting_status.as_ref().is_some_and(|status|status.in_meeting);
+                            let meeting = timer.meeting_blocks_break();
                             let postponed = current && meeting && timer.postpone_meeting(expected_version,Utc::now().timestamp_millis());
-                            let allowed = current && !postponed
+                            let warning = current && !postponed && timer.hold_for_meeting_warning(Utc::now().timestamp_millis());
+                            let allowed = current && !postponed && !warning
                                 && timer.input.as_ref().is_some_and(|input|input.auto_takeover || input.strict_mode);
                             snapshot=timer.snapshot.clone(); allowed
                         };

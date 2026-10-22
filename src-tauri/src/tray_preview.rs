@@ -948,6 +948,8 @@ mod tests {
         let mut snapshot = crate::timer::Timer::new(0).snapshot;
         snapshot.live_meeting_enabled = false;
         snapshot.live_meeting_status = Some(crate::platform::MeetingStatus {
+            capture_active: None,
+            capture_supported: false,
             in_meeting: true,
             supported: true,
             applications: vec!["Zoom".into()],
@@ -988,6 +990,8 @@ mod tests {
         assert!(!call_active(&snapshot));
         assert_eq!(meeting_label(&summary, &snapshot), "Нет активного звонка");
         snapshot.live_meeting_status = Some(crate::platform::MeetingStatus {
+            capture_active: None,
+            capture_supported: false,
             in_meeting: true,
             supported: false,
             applications: vec!["Zoom".into()],

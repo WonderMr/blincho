@@ -627,5 +627,13 @@
   "Камера Blincho активна": "Blincho đang sử dụng camera",
   "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Khi bật lần đầu, mô hình camera (19 MB) sẽ được tải xuống từ GitHub. Sau đó, việc kiểm tra hoạt động mà không cần internet.",
   "Загрузка модели камеры… {percent}%": "Đang tải mô hình camera… {percent}%",
-  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Không thể tải mô hình camera. Hãy kiểm tra kết nối internet rồi bật lại tùy chọn này."
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Không thể tải mô hình camera. Hãy kiểm tra kết nối internet rồi bật lại tùy chọn này.",
+  "Напоминания приостановлены до конца встречи.": "Lời nhắc được tạm dừng cho đến khi cuộc họp kết thúc.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Không thể hoãn giờ nghỉ. Hãy thử lại.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Cuộc họp đã kết thúc. Lời nhắc nghỉ đã hoạt động trở lại.",
+  "Перерыв начнётся через {seconds} с.": "Giờ nghỉ bắt đầu sau {seconds} giây.",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Camera và micrô không được sử dụng trong 5 phút. Lời nhắc nghỉ đã được tiếp tục.",
+  "Напоминания о перерывах возобновлены": "Đã tiếp tục nhắc nghỉ",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Bạn đang họp? Hoãn giờ nghỉ hoặc tạm dừng lời nhắc cho đến khi cuộc họp kết thúc.",
+  "До конца встречи": "Đến khi cuộc họp kết thúc"
 }
