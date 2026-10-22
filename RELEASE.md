@@ -6,6 +6,26 @@ The publication jobs also launch the exact Windows portable executable, Linux Ap
 
 Native jobs also exercise the local MCP settings switch, authenticated initialization, public aggregate data, timer actions and immediate listener shutdown in an isolated profile. MCP remains off by default in user profiles.
 
+## Vulnerability gate
+
+`Vulnerability scan` checks the complete npm and Cargo lockfiles on pull requests,
+merge queues, pushes to `main`, manual runs and a daily schedule. A separate npm
+registry audit covers advisories beyond Trivy's database. It sends the public
+npm package inventory to the public npm advisory API without installing packages
+or running scripts. Trivy 0.76.1
+includes development and platform-specific locked packages, all severities, and
+issues without a known fix. Scanner/database errors and missing or unparsed
+lockfiles fail the check. Repository ignore policies are disabled.
+
+The inventory follows the exact commit: historical Electron-only releases require
+the npm lock; commits declaring the Rust app also require its Cargo lock.
+The release workflow scans the exact commit resolved by `prepare` before validation,
+packaging, publication or website deployment. A scan failure stops that chain.
+Require `Vulnerability scan` in the `main` branch rules after this workflow lands;
+workflow failure alone does not prevent a merge into an unprotected branch.
+Remediate dependencies before retrying. Rolling back this policy requires reverting
+the workflow change and updating its required-check rule together.
+
 ## Publication
 
 After reviewing and merging the version and changelog, create and push its version tag or dispatch the release workflow on main with that tag. A retry accepts an existing immutable version tag. Never move or recreate an existing tag.

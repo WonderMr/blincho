@@ -47,8 +47,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-  validate:
+  vulnerability-scan:
     needs: prepare
+    uses: ./.github/workflows/vulnerability-scan.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+
+  validate:
+    needs: [prepare, vulnerability-scan]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
