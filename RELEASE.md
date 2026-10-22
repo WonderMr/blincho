@@ -23,7 +23,10 @@ The release workflow scans the exact commit resolved by `prepare` before validat
 packaging, publication or website deployment. A scan failure stops that chain.
 Require `Vulnerability scan` in the `main` branch rules after this workflow lands;
 workflow failure alone does not prevent a merge into an unprotected branch.
-Remediate dependencies before retrying. Rolling back this policy requires reverting
+When dependency remediation changes source or locks, create a new release version
+and tag. The original immutable tag still points to its original dependencies;
+retrying that tag does not pick up later fixes. An advisory database correction
+can be rechecked against the same unchanged tag. Rolling back this policy requires reverting
 the workflow change and updating its required-check rule together.
 
 ## Publication
