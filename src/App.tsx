@@ -38,11 +38,13 @@ import { useLocalMcp } from './utils/localMcp';
 import { buildMcpStats } from './utils/mcpStats';
 import { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities } from './utils/symbiote';
 import { updateDocumentSymbioteIcon } from './utils/symbioteIcons';
-import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory, deferNativeMeetingBreak } from './utils/tauriBridge';
+import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory, deferNativeMeetingBreak, setNativeMeetingRemindersPaused } from './utils/tauriBridge';
 
 import {
   BookOpen, Play, Lock, Video, UserCheck
 } from 'lucide-react';
+
+type PendingMeetingTimer = Pick<TimerSession, 'version' | 'totalMs' | 'remainingMs' | 'manualPaused' | 'expiryPending' | 'breakActive' | 'exercising'>;
 
 export const App: React.FC = () => {
   useI18n();
@@ -87,7 +89,14 @@ export const App: React.FC = () => {
   const nativeMeetingEpochRef = useRef(0);
   const nativeMeetingResumedEpochRef = useRef(0);
   const nativeMeetingWarningEpochRef = useRef(0);
-  const nativeMeetingPauseEndedEpochRef = useRef(0);
+  const nativeMeetingBreakCancelledEpochRef = useRef(0);
+  const [meetingControl, setMeetingControl] = useState<{ token: number; paused: boolean; breakCancellable: boolean } | null>(null);
+  const meetingControlRef = useRef(meetingControl);
+  const breakMeetingTokenRef = useRef<number | null>(null);
+  const [meetingControlBusy, setMeetingControlBusy] = useState(false);
+  const meetingControlBusyRef = useRef(false);
+  const meetingPendingTimerRef = useRef<PendingMeetingTimer | null>(null);
+  const [meetingControlError, setMeetingControlError] = useState(false);
   const [meetingWarning, setMeetingWarning] = useState<MeetingBreakWarningState | null>(null);
   const [meetingWarningBusy, setMeetingWarningBusy] = useState(false);
   const [meetingWarningError, setMeetingWarningError] = useState(false);
@@ -184,6 +193,11 @@ export const App: React.FC = () => {
     refreshStats();
   };
   const synchronizeTimer = () => {
+    if (meetingControlBusyRef.current) {
+      meetingPendingTimerRef.current = { version: session.version, totalMs: session.totalMs, remainingMs: session.remainingMs,
+        manualPaused: session.manualPaused, expiryPending: session.expiryPending, breakActive: session.breakActive, exercising: session.exercising };
+      return;
+    }
     const generation = nativeHistoryConsentGenerationRef.current;
     const historyEnabled = settingsRef.current.meetingHistoryEnabled;
     synchronizeNativeTimer(session, settingsRef.current, snapshot => {
@@ -195,7 +209,7 @@ export const App: React.FC = () => {
       nativeHistoryMinimumEpochRef.current = Math.max(nativeHistoryMinimumEpochRef.current, epoch);
       nativeHistoryEpochRef.current = Math.max(nativeHistoryEpochRef.current, epoch);
       nativeHistoryAcknowledgedGenerationRef.current = generation;
-    });
+    }, breakMeetingTokenRef.current);
   };
   const sync = () => {
     if (mountedRef.current) {
@@ -397,12 +411,14 @@ export const App: React.FC = () => {
     presenceInFlightRef.current = pending;
     return pending;
   };
-  const beginBreak = () => {
+  const beginBreak = (automatic = false) => {
     if (!session.present || session.breakActive || session.exercising) return;
+    if (automatic && (meetingControlBusyRef.current || meetingControlRef.current?.paused)) return;
     cameraAbortRef.current?.abort();
     session.advance(Date.now());
     flushFocus();
     session.breakActive = true;
+    breakMeetingTokenRef.current = automatic && !meetingControlRef.current?.paused ? meetingControlRef.current?.token ?? null : null;
     session.expiryPending = false;
     session.version += 1;
     breakIdRef.current = nextEventId('break');
@@ -502,16 +518,16 @@ export const App: React.FC = () => {
           return;
         }
       }
-      if (hasNativeTimer() && settingsRef.current.strictMode) {
+      if (hasNativeTimer()) {
         const snapshot = await readNativeTimer();
         if (!snapshot || !mountedRef.current || snapshot.version !== version) return;
         applyNativeRef.current(snapshot);
-        if (snapshot.meetingWarningRequired && !snapshot.meetingWarningReady) return;
+        if (snapshot.meetingRemindersPaused || (settingsRef.current.strictMode && snapshot.meetingWarningRequired && !snapshot.meetingWarningReady)) return;
       }
       if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting) return;
       setInMeetingActive(false);
       if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"), t("Отведите взгляд от экрана и дайте глазам отдохнуть."));
-      if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak();
+      if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak(true);
       else { soundSynth.playZenBowl(); restartWork(); }
     } finally { expiryInFlightRef.current = false; }
   };
@@ -524,13 +540,45 @@ export const App: React.FC = () => {
       const snapshot = await deferNativeMeetingBreak(meetingWarning.version, meetingWarning.epoch, minutes);
       if (!mountedRef.current) return;
       applyNativeRef.current(snapshot);
-      if (minutes === null) setNoticeMessage("Напоминания приостановлены до конца встречи.");
+      if (minutes === null) setNoticeMessage("Напоминания отключены. Верните их, когда встреча закончится.");
     } catch (error) {
       console.warn('Blincho: Meeting warning action failed:', error);
       if (mountedRef.current) setMeetingWarningError(true);
     } finally {
       meetingWarningBusyRef.current = false;
       if (mountedRef.current) setMeetingWarningBusy(false);
+    }
+  };
+  const handleMeetingReminders = async (finish = false) => {
+    const control = meetingControlRef.current;
+    if (!control || meetingControlBusyRef.current) return;
+    meetingControlBusyRef.current = true;
+    setMeetingControlBusy(true);
+    setMeetingControlError(false);
+    const startedVersion = session.version;
+    meetingPendingTimerRef.current = null;
+    try {
+      const snapshot = await setNativeMeetingRemindersPaused(control.token, finish ? false : !control.paused);
+      if (mountedRef.current) {
+        applyNativeRef.current(snapshot);
+        const pending = meetingPendingTimerRef.current as PendingMeetingTimer | null;
+        if (pending && pending.version > startedVersion && !pending.breakActive && !pending.exercising) {
+          // Preserve an explicit reset or manual pause made while IPC was in
+          // flight. Settings-only synchronization keeps the native clock.
+          session.totalMs = pending.totalMs;
+          session.remainingMs = pending.remainingMs;
+          session.manualPaused = pending.manualPaused;
+          session.expiryPending = pending.expiryPending && !snapshot.meetingRemindersPaused;
+          session.version = Math.max(session.version, snapshot.version, pending.version) + 1;
+        }
+      }
+    } catch (error) {
+      console.warn('Blincho: Meeting reminder action failed:', error);
+      if (mountedRef.current) setMeetingControlError(true);
+    } finally {
+      meetingControlBusyRef.current = false;
+      if (mountedRef.current) { setMeetingControlBusy(false); sync(); }
+      meetingPendingTimerRef.current = null;
     }
   };
   const handleTriggerInstantBreak = async () => {
@@ -877,6 +925,20 @@ export const App: React.FC = () => {
         session.expiryPending = snapshot.expiryPending;
         session.version = snapshot.version;
       }
+      if ((snapshot.meetingBreakCancelledEpoch ?? 0) > nativeMeetingBreakCancelledEpochRef.current && breakMeetingTokenRef.current !== null) {
+          session.breakActive = false;
+          breakIdRef.current = null;
+          breakMeetingTokenRef.current = null;
+          pendingBreakRef.current = null;
+          setIsBreakActive(false);
+          releaseDesktopBreak();
+      }
+      nativeMeetingBreakCancelledEpochRef.current = Math.max(nativeMeetingBreakCancelledEpochRef.current, snapshot.meetingBreakCancelledEpoch ?? 0);
+      const control = settingsRef.current.meetingDetectionEnabled && snapshot.meetingResumeToken
+        ? { token: snapshot.meetingResumeToken, paused: !!snapshot.meetingRemindersPaused, breakCancellable: !!snapshot.meetingBreakCancellable }
+        : null;
+      meetingControlRef.current = control;
+      setMeetingControl(control);
       if ((snapshot.meetingPostponedEpoch ?? 0) > nativeMeetingEpochRef.current) {
         nativeMeetingEpochRef.current = snapshot.meetingPostponedEpoch ?? 0;
         setInMeetingActive(true);
@@ -895,12 +957,6 @@ export const App: React.FC = () => {
             + ' ' + t("Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания."));
         }
       } else setMeetingWarning(null);
-      if ((snapshot.meetingPauseEndedEpoch ?? 0) > nativeMeetingPauseEndedEpochRef.current) {
-        nativeMeetingPauseEndedEpochRef.current = snapshot.meetingPauseEndedEpoch ?? 0;
-        setInMeetingActive(false);
-        setNoticeMessage("Встреча завершена. Напоминания о перерывах возобновлены.");
-        if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Напоминания о перерывах возобновлены"), t("Встреча завершена. Напоминания о перерывах возобновлены."));
-      }
       if ((snapshot.meetingResumedEpoch ?? 0) > nativeMeetingResumedEpochRef.current) {
         nativeMeetingResumedEpochRef.current = snapshot.meetingResumedEpoch ?? 0;
         setInMeetingActive(false);
@@ -1185,7 +1241,7 @@ export const App: React.FC = () => {
 
       {notice && <TransientNotice key={notice.id} message={notice.message}
         durationMs={notice.canUndo ? 15000 : 6000}
-        suspended={isIdlePaused || isSettingsOpen || isBreakActive || !!activeTechnique}
+        suspended={isIdlePaused || isSettingsOpen || isBreakActive || !!activeTechnique || !!meetingControl}
         onUndo={notice.canUndo && savedRemainingBeforeReset !== null ? handleUndoReset : undefined}
         onDismiss={() => {
           if (noticeRef.current?.id !== notice.id) return;
@@ -1197,12 +1253,26 @@ export const App: React.FC = () => {
       {meetingWarning && !isBreakActive && <MeetingBreakWarning warning={meetingWarning}
         busy={meetingWarningBusy} error={meetingWarningError} onDefer={minutes => { void handleDeferMeetingWarning(minutes); }} />}
 
+      {meetingControl && !isBreakActive && !activeTechnique && !meetingWarning && <aside data-meeting-control role="status"
+        style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 1050,
+          width: 'min(480px, calc(100vw - 32px))', padding: 18, borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border-control)', boxShadow: 'var(--shadow-lg)' }}>
+        <p>{t(meetingControl.paused ? 'Напоминания отключены. Верните их, когда встреча закончится.' : 'Перерывы возобновлены во время встречи.')}</p>
+        <button className="btn btn-secondary" disabled={meetingControlBusy} onClick={() => { void handleMeetingReminders(); }}>
+          {t(meetingControl.paused ? 'Вернуть напоминания' : 'Я ещё на встрече: отключить перерывы')}</button>
+        {!meetingControl.paused && <button className="btn btn-secondary" disabled={meetingControlBusy}
+          onClick={() => { void handleMeetingReminders(true); }}>{t('Закрыть')}</button>}
+        {meetingControlError && <p role="alert">{t('Не удалось изменить напоминания. Попробуйте ещё раз.')}</p>}
+      </aside>}
+
       {/* Full-Screen Break Overlay (When timer finishes or triggered) */}
       {isBreakActive && (
         <BreakOverlay
           initialSeconds={activeBreakSeconds}
           strictMode={settings.strictMode}
           waitForNativeCompletion={hasNativeTimer()}
+          onPauseMeeting={meetingControl?.breakCancellable && breakMeetingTokenRef.current === meetingControl.token ? () => { void handleMeetingReminders(); } : undefined}
+          meetingBusy={meetingControlBusy}
+          meetingError={meetingControlError}
           onElapsed={deadlineMonotonicAt => handleBreakElapsed(breakEventId, deadlineMonotonicAt)}
           onClose={() => handleCloseBreakOverlay(breakEventId)}
           onPostpone={minutes => handlePostponeBreak(minutes, breakEventId)}

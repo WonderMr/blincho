@@ -632,5 +632,10 @@
   "До конца встречи": "Hasta que termine la reunión",
   "Напоминания приостановлены до конца встречи.": "Los recordatorios están en pausa hasta que termine la reunión.",
   "Встреча завершена. Напоминания о перерывах возобновлены.": "La reunión ha terminado. Los recordatorios de descanso se han reanudado.",
-  "Не удалось отложить перерыв. Попробуйте ещё раз.": "No se pudo posponer el descanso. Inténtalo de nuevo."
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "No se pudo posponer el descanso. Inténtalo de nuevo.",
+  "Перерывы возобновлены во время встречи.": "Los descansos se han reanudado durante la reunión.",
+  "Я ещё на встрече: отключить перерывы": "Sigo en una reunión: desactivar los descansos",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Los recordatorios están desactivados. Vuelve a activarlos cuando termine la reunión.",
+  "Вернуть напоминания": "Volver a activar los recordatorios",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "No se han podido cambiar los recordatorios. Inténtalo de nuevo."
 }

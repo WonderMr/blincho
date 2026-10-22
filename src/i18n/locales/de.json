@@ -632,5 +632,10 @@
   "До конца встречи": "Bis zum Ende der Besprechung",
   "Напоминания приостановлены до конца встречи.": "Die Erinnerungen sind bis zum Ende der Besprechung pausiert.",
   "Встреча завершена. Напоминания о перерывах возобновлены.": "Die Besprechung ist beendet. Die Pausenerinnerungen sind wieder aktiv.",
-  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Die Pause konnte nicht verschoben werden. Versuchen Sie es erneut."
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Die Pause konnte nicht verschoben werden. Versuchen Sie es erneut.",
+  "Перерывы возобновлены во время встречи.": "Die Pausen wurden während der Besprechung wieder aktiviert.",
+  "Я ещё на встрече: отключить перерывы": "Ich bin noch in einer Besprechung: Pausen ausschalten",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Erinnerungen sind ausgeschaltet. Schalten Sie sie nach der Besprechung wieder ein.",
+  "Вернуть напоминания": "Erinnerungen wieder einschalten",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Die Erinnerungen konnten nicht geändert werden. Versuchen Sie es erneut."
 }

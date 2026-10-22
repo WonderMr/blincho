@@ -632,5 +632,10 @@
   "До конца встречи": "Până la sfârșitul întâlnirii",
   "Напоминания приостановлены до конца встречи.": "Mementourile sunt suspendate până la sfârșitul întâlnirii.",
   "Встреча завершена. Напоминания о перерывах возобновлены.": "Întâlnirea s-a încheiat. Mementourile pentru pauze au fost reluate.",
-  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Pauza nu a putut fi amânată. Încearcă din nou."
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Pauza nu a putut fi amânată. Încearcă din nou.",
+  "Перерывы возобновлены во время встречи.": "Pauzele au fost reluate în timpul întâlnirii.",
+  "Я ещё на встрече: отключить перерывы": "Sunt încă într-o întâlnire: dezactivează pauzele",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Mementourile sunt dezactivate. Reactivează-le când se termină întâlnirea.",
+  "Вернуть напоминания": "Reactivează mementourile",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Mementourile nu au putut fi modificate. Încearcă din nou."
 }

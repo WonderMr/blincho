@@ -267,7 +267,10 @@ fn presentation(app: &tauri::AppHandle, strict: bool, release: bool) -> Result<(
             };
             (
                 strict && timer.strict(),
-                release && (!timer.snapshot.reasons.is_empty() || timer.snapshot.break_elapsed),
+                release
+                    && (!timer.snapshot.break_active
+                        || !timer.snapshot.reasons.is_empty()
+                        || timer.snapshot.break_elapsed),
             )
         };
         if let Err(error) = presentation_on_main(&handle, strict, release) {
@@ -430,6 +433,24 @@ fn timer_snapshot(app: tauri::AppHandle) -> Result<Snapshot, String> {
     let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
     sample(&mut timer);
     Ok(timer.snapshot.clone())
+}
+#[tauri::command]
+fn set_meeting_reminders_paused(
+    token: u64,
+    paused: bool,
+    app: tauri::AppHandle,
+) -> Result<Snapshot, String> {
+    let runtime = app.state::<Runtime>();
+    let mut timer = runtime.timer.lock().map_err(|e| e.to_string())?;
+    sample(&mut timer);
+    let was_break = timer.snapshot.break_active;
+    timer.set_meeting_reminders_paused(token, paused, Utc::now().timestamp_millis())?;
+    let snapshot = timer.snapshot.clone();
+    drop(timer);
+    if was_break && !snapshot.break_active {
+        presentation(&app, false, true)?;
+    }
+    Ok(snapshot)
 }
 #[tauri::command]
 async fn presence_check_begin(app: tauri::AppHandle) -> Result<Option<Value>, String> {
@@ -895,6 +916,11 @@ fn test_control_on_main(app: &tauri::AppHandle) {
                     command["active"].as_bool().ok_or("Missing meeting state")?,
                     applications,
                 );
+                if let Some(supported) = command["captureSupported"].as_bool() {
+                    runtime
+                        .meeting
+                        .set_test_capture(command["captureActive"].as_bool(), supported);
+                }
             }
             "configure" => {
                 let input: TimerInput =
@@ -1080,7 +1106,7 @@ fn main() {
                 return true;
             }
             let handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
-            configure_timer, defer_meeting_break, symbiote_icons::set_symbiote_build,
+            configure_timer, defer_meeting_break, set_meeting_reminders_paused, symbiote_icons::set_symbiote_build,
             camera_activity::camera_activity_generation, camera_activity::camera_activity_update,
             symbiote_shortcuts::sync_symbiote_shortcut, symbiote_shortcuts::create_symbiote_shortcut,
             symbiote_shortcuts::symbiote_shortcut_status, symbiote_shortcuts::show_symbiote_shortcut,

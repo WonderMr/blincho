@@ -632,5 +632,10 @@
   "До конца встречи": "Tot de vergadering is afgelopen",
   "Напоминания приостановлены до конца встречи.": "Herinneringen zijn gepauzeerd tot de vergadering is afgelopen.",
   "Встреча завершена. Напоминания о перерывах возобновлены.": "De vergadering is afgelopen. Pauzeherinneringen zijn hervat.",
-  "Не удалось отложить перерыв. Попробуйте ещё раз.": "De pauze kon niet worden uitgesteld. Probeer het opnieuw."
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "De pauze kon niet worden uitgesteld. Probeer het opnieuw.",
+  "Перерывы возобновлены во время встречи.": "Pauzes zijn tijdens de vergadering hervat.",
+  "Я ещё на встрече: отключить перерывы": "Ik zit nog in een vergadering: pauzes uitschakelen",
+  "Напоминания отключены. Верните их, когда встреча закончится.": "Herinneringen zijn uitgeschakeld. Schakel ze weer in als de vergadering afgelopen is.",
+  "Вернуть напоминания": "Herinneringen weer inschakelen",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Herinneringen konden niet worden gewijzigd. Probeer het opnieuw."
 }
