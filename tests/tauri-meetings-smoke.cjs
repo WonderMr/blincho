@@ -135,8 +135,9 @@ async function verifyStrictMeetingExpiry() {
   assert.equal(repeated.focused, false);
   assert.equal(repeated.strict, false);
   await control('meeting', { active: false, applications: [] });
-  const ended = await until(value => value.timer.liveMeetingStatus?.inMeeting === false);
-  await control('configure', { input: { ...input, version: ended.timer.version + 1 } });
+  await until(value => value.timer.liveMeetingStatus?.inMeeting === false);
+  // Keep the due postponement intact while call end is confirmed. The native
+  // timer must reclaim it automatically, without a synthetic expiry command.
   const strictBreak = await until(value => value.timer.breakActive && value.strict && value.visible &&
     (process.platform !== 'darwin' || value.strictShieldCount > 0));
   assert.equal(strictBreak.closable, false, 'A resumed strict break must keep its native close guard');
