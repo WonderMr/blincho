@@ -1,5 +1,8 @@
 # Blincho
 
+[![App and website validation (main)](https://github.com/WonderMr/blincho/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/WonderMr/blincho/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
+[![Vulnerability scan (main)](https://github.com/WonderMr/blincho/actions/workflows/vulnerability-scan.yml/badge.svg?branch=main&event=push)](https://github.com/WonderMr/blincho/actions/workflows/vulnerability-scan.yml?query=branch%3Amain+event%3Apush)
+
 A free screen-break companion for macOS, Windows and Linux. Every feature is free.
 
 Blincho is an open-source break reminder for people who spend long hours at a computer. It reminds you to take short screen breaks and rest your eyes (for example with the 20-20-20 rule), offers short exercises, pauses when you step away and keeps work-time statistics on your device. No account is required.
@@ -51,6 +54,15 @@ The Linux desktop uses the maintained GTK 0.19 bindings and GLib 0.22, which inc
 On macOS, run `npm run tauri:test` for Rust and history migration checks, `npm run tauri:build:mac` to build `release/tauri-macos/Blincho.app`, or `npm run tauri:test:mac` for an isolated native smoke test. Install Blincho in `/Applications` before using its login startup feature so the registered executable has a stable path. Windows and Linux builds use `npm run tauri:build:win` and `npm run tauri:build:linux`.
 
 Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at several window sizes, through resize/restore and across all five pages in all 30 languages at three widths. It verifies that Settings and sound share a row whenever they fit, translated controls remain unclipped, and statistics fit the content pane. It uses synthetic settings and a separate WebKit profile. The document and titlebar stay fixed; long page content and sidebar controls retain their own scrolling. AppKit can clamp requested dimensions to the screen's available work area. The reopen check reports a skip when macOS cannot confirm presence, while the viewport checks still run.
+
+## Checks
+
+The badges show the latest workflow runs triggered by pushes to `main`. Pull-request results appear in each PR's checks.
+
+- [App and website validation](.github/workflows/ci.yml) runs on pull requests and pushes to `main`. It checks the Node test suite, TypeScript/Vite build and website build, plus Rust formatting, checks and tests, native smoke tests and package verification across macOS, Windows and Linux on ARM64 and x64.
+- [Vulnerability scan](.github/workflows/vulnerability-scan.yml) runs on pull requests, merge groups, pushes to `main`, a daily schedule and manual requests. The release workflow also calls it before validation and packaging. It checks the committed npm and Cargo dependency inventories with npm audit and Trivy, includes development and platform dependencies, and fails on known vulnerabilities at every severity, including those without fixes.
+
+After `npm ci`, run `npm test`, `npm run build` and `npm run site:build` locally. For desktop changes, also run `cargo fmt --manifest-path src-tauri/Cargo.toml --check` and `npm run tauri:test` with the native prerequisites described above.
 
 ## Local MCP
 
