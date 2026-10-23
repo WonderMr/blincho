@@ -60,7 +60,7 @@ Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at severa
 The badges show the latest workflow runs triggered by pushes to `main`. Pull-request results appear in each PR's checks.
 
 - [App and website validation](.github/workflows/ci.yml) runs on pull requests and pushes to `main`. It checks the Node test suite, TypeScript/Vite build and website build, plus Rust formatting, checks and tests, native smoke tests and package verification across macOS, Windows and Linux on ARM64 and x64.
-- [Vulnerability scan](.github/workflows/vulnerability-scan.yml) runs on pull requests, merge groups, pushes to `main`, a daily schedule and manual requests. The release workflow also calls it before validation and packaging. It checks the committed npm and Cargo dependency inventories with npm audit and Trivy, includes development and platform dependencies, and fails on known vulnerabilities at every severity, including those without fixes.
+- [Vulnerability scan](.github/workflows/vulnerability-scan.yml) runs on pull requests, merge groups, pushes to `main`, a daily schedule and manual requests. The release workflow also calls it before validation and packaging. It validates npm and Cargo manifests against their committed locks without building or running lifecycle scripts, then checks those dependency inventories with npm audit and Trivy. It includes development and platform dependencies, and fails on known vulnerabilities at every severity, including those without fixes.
 
 After `npm ci`, run `npm test`, `npm run build` and `npm run site:build` locally. For desktop changes, also run `cargo fmt --manifest-path src-tauri/Cargo.toml --check` and `npm run tauri:test` with the native prerequisites described above.
 
