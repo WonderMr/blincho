@@ -41,7 +41,7 @@ The static site is generated in 30 languages from `site/locales`. It follows the
 
 ## Releases
 
-See [RELEASE.md](../RELEASE.md) for the tag-driven build and publication pipeline. Update the package version, lockfile, changelog and localized release summary together. A pushed `vX.Y.Z` tag builds release packages, publishes checksums and updates the website and desktop update feeds after successful validation. Production deployment requires the configured Cloudflare Actions secret.
+See [RELEASE.md](../RELEASE.md) for the tag-driven build and publication pipeline. Update the package version, lockfile, changelog and localized release summary together. A pushed `vX.Y.Z` tag builds release packages, publishes checksums and updates the website and desktop update feeds after successful validation. Releases can also be started or retried through `workflow_dispatch` with a `tag` input; run the workflow on `main` when creating a new tag. Production deployment requires both `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` Actions secrets.
 
 Current Tauri packages on all operating systems use manual download and installation. They check for newer releases after one minute and every six hours while running, and offer a website download. Choosing not to show updates again disables background checks persistently; manual checking remains available in settings. Historical Electron releases keep their compatible verified update feeds. No update forces an immediate restart.
 
