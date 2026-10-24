@@ -1,115 +1,107 @@
-# Blincho
+<p align="center">
+  <a href="https://blincho.app">
+    <img src="assets/icon.png" width="112" height="112" alt="Blincho app icon: a mint-green character winking">
+  </a>
+</p>
+
+<h1 align="center">Blincho</h1>
+
+<p align="center">
+  <strong>Small breaks. A calmer day at your screen.</strong><br>
+  A free, open-source screen-break companion for macOS, Windows and Linux.
+</p>
+
+<p align="center">
+  <a href="https://blincho.app/#download"><strong>Download Blincho</strong></a> ·
+  <a href="https://blincho.app">Website</a> ·
+  <a href="https://github.com/WonderMr/blincho/releases">Releases</a> ·
+  <a href="#development">Contribute</a>
+</p>
+
+<p align="center">Every feature is free · No account required · 30 languages · MIT licensed</p>
 
 [![App and website validation (main)](https://github.com/WonderMr/blincho/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/WonderMr/blincho/actions/workflows/ci.yml?query=branch%3Amain+event%3Apush)
 [![Vulnerability scan (main)](https://github.com/WonderMr/blincho/actions/workflows/vulnerability-scan.yml/badge.svg?branch=main&event=push)](https://github.com/WonderMr/blincho/actions/workflows/vulnerability-scan.yml?query=branch%3Amain+event%3Apush)
 
-A free screen-break companion for macOS, Windows and Linux. Every feature is free.
+Blincho reminds you to step away from the screen, rest your eyes and move a little. Set your rhythm, let the timer handle the reminders, and keep your journal and statistics on your own device.
 
-Blincho is an open-source break reminder for people who spend long hours at a computer. It reminds you to take short screen breaks and rest your eyes (for example with the 20-20-20 rule), offers short exercises, pauses when you step away and keeps work-time statistics on your device. No account is required.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/blincho-dark.png">
+  <img src="docs/images/blincho-light.png" width="1200" alt="Blincho's English home screen with a break countdown, quick exercises and sidebar navigation">
+</picture>
 
-From version 1.6.0, all desktop apps use Tauri, Rust and the system WebView (WKWebView on macOS, WebView2 on Windows and WebKitGTK on Linux). All desktop versions share the same React interface, local statistics and 30 languages.
+<p align="center"><sub>The shared app interface, shown in the browser build. Light and dark themes follow your GitHub theme.</sub></p>
 
-Website: https://blincho.app
+## Make room for a break
 
-## What it does
+| Your day | How Blincho helps |
+| --- | --- |
+| **Long stretches at the screen** | Configurable work and break intervals, including the 20–20–20 rule. |
+| **Stepping away from your desk** | Desktop timing pauses during absence, screen lock and sleep. |
+| **Calls that run over** | Optional call detection postpones automatic breaks while a call is detected. |
+| **A moment to move** | Short exercises and a personal comfort journal. |
+| **Understanding your habits** | Local work-time statistics, break counts and daily activity history. |
+| **Making it feel like yours** | 30 languages, light/dark/system themes and calming color palettes. |
 
-- Reminds you to take short breaks and supports configurable work/break intervals.
-- Pauses timing when you are away, the screen locks or the computer sleeps.
-- Can check for a person with the camera after a timed break finishes, locking the computer if no one is detected. Disabled by default. Enabling it in desktop Settings immediately checks camera access and requests permission when needed. Denied or unavailable access leaves the setting off. Frames are processed locally, never saved or uploaded. The camera turns off after each check. Automatic checks require a supported call detector, skip detected calls and stop when a call is detected. An unavailable check skips locking and preserves normal timer behavior.
-- Optional enhanced presence checks start after one minute without keyboard or mouse input when a fresh system call check confirms no call. A short camera check keeps reading time active when a person is present. Confirmed absence pauses work, with a separate opt-in to lock the session. New input, calls, sleep and settings changes invalidate pending decisions. Unknown camera results fall back to input-idle handling and never lock. The mode requires the native app, camera support and a supported call detector.
-- Optional input statistics keep only key-down, click, scroll and mouse-motion event counts in five-minute intervals, with a daily chart and local CSV export. No text, key identities, apps, coordinates or individual event timestamps are recorded. macOS requires Input Monitoring permission; Windows uses passive hooks; Linux requires a native X11 session with XInput2. Wayland and browser builds report unsupported. Counts depend on device and OS event delivery, including repeat and scrolling behavior, and do not provide medical diagnoses. Collection is off by default and can be disabled independently. Deleting input statistics leaves other history intact. Detailed input buckets are excluded from Local MCP.
-- Keeps the desktop timer running in Rust when the window is hidden or minimized.
-- When call postponement is enabled, detected calls delay automatic breaks by five minutes, including in strict mode. Blincho checks again at the next deadline; strict break behavior resumes when the call is no longer detected.
-- Restores the window on its previous monitor after lock or sleep, keeping hidden and minimized windows in the background. If that monitor is disconnected, the window returns to an available screen.
-- Includes exercises, a personal comfort journal and local statistics.
-- Uses a compact sidebar with fully visible controls and statistics that adapt to the available content width. Drag the native desktop window from empty page or sidebar space while retaining text selection, scrolling and controls.
-- Shows a small tray preview with the next break countdown, recorded work time, completed breaks and current call status on macOS and Windows. A phone badge marks a detected call on the tray icon. Linux exposes the live summary and call application in its tray menu.
-- Records daily work, absence, lock, sleep, manual pauses and rest intervals locally. Browse previous days, average and longest work intervals, and weekly averages per calendar day or day of use. Older totals stay available; missing time records remain unknown.
-- Optionally records detected calls with their application, observed start/end and duration after you enable call history. Browse daily call lanes and per-app totals, average call lengths and weekly call time. Browser calls identify the browser; detection is approximate.
-- Adapts the Blinchiborg character and localized build name to six optional features, with 64 combinations. In Settings, choose Create shortcut to add a desktop shortcut whose name and icon follow the build. macOS uses a separate .blincho document, preserving the signed app; Windows uses .lnk and Linux uses .desktop.
-- Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
-- Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.
+The desktop timer keeps running when the window is hidden or minimized. Optional camera presence checks, input activity counts, call history and a local MCP connection are available in Settings. Camera features, input statistics, call history and Local MCP are off by default.
 
-Blincho is a general wellness tool. It does not diagnose or treat eye conditions. Windows and Linux lock/sleep behavior has automated coverage but has not yet been validated on physical hardware. The download page identifies each package's signing and update support. Operating systems can show publisher warnings for unsigned packages.
+[Explore all features, platform support and optional permissions →](docs/FEATURES.md)
 
-Camera use is identified by a camera badge on Blincho's tray icon and a localized label. It follows live capture, including presence checks and permission probes, and clears when the final stream is released.
+## Get started
 
-## Development
+1. **[Download the package for your computer](https://blincho.app/#download).** Choose macOS, Windows or Linux and the matching architecture.
+2. **Set your rhythm.** Use the default 20-minute work cycle and 20-second break, or choose your own intervals.
+3. **Take a pause when reminded.** Look away from the screen or try a short exercise. Your statistics stay on your device.
 
-Use Node.js 22.12 or newer. Desktop builds need Rust and CMake. macOS also needs Xcode Command Line Tools. Windows needs the MSVC build tools and WebView2. With Visual Studio 2026 on Windows ARM64, install Ninja and set `CMAKE_GENERATOR=Ninja` when using the pinned CMake version. Linux needs Clang, WebKitGTK 4.1, GTK 3, AppIndicator, X11/Xss and D-Bus development libraries. Linux packages use the Ubuntu 24.04 build baseline. Portable Windows packages require an installed WebView2 runtime. CI pins Rust 1.92.0 and CMake 3.31.10; CMake 4 is incompatible with the bundled LevelDB history migration dependency. The macOS bundle targets macOS 14 or newer. Release builds select `aarch64-apple-darwin` for ARM64 or `x86_64-apple-darwin` for Intel explicitly and verify the packaged executable architecture.
+The download page lists signing and update support for each package. Unsigned packages may show an operating-system publisher warning. Current desktop packages use manual download and installation for updates.
 
-```sh
-npm ci
-npm test
-npm run build
-npm start
-```
+Blincho is a general wellness tool. It does not diagnose or treat eye conditions. Windows and Linux lock/sleep behavior has automated coverage but has not yet been validated on physical hardware.
 
-`npm start` launches Tauri on every supported OS. Use `npm run dev` for the browser interface. The browser build only sees activity within its own page and pauses when hidden. Desktop packages provide system-wide activity, lock and sleep integration. Linux presence uses the desktop D-Bus interfaces or X11. Unsupported desktop services pause timing until presence can be confirmed.
-
-The Linux desktop uses the maintained GTK 0.19 bindings and GLib 0.22, which include the fix for [GHSA-wrw7-89jp-8q8g](https://github.com/advisories/GHSA-wrw7-89jp-8q8g). Until the coordinated integration is released, `src-tauri/Cargo.toml` pins the official [Tauri GTK 0.19 migration](https://github.com/tauri-apps/tauri/pull/16170) and its Tao, Wry, WebKitGTK, menu and tray dependencies to the immutable revisions in [the upstream migration lockfile](https://github.com/tauri-apps/tauri/blob/899ca2105ffd06293013b6d2bff4416987d99010/Cargo.lock). These are genuine upstream sources with their original package versions; GTK 3, WebKitGTK 4.1 and AppIndicator support remain enabled. Cargo resolves registry packages with their published checksums. To update these pins, use a compatible coordinated upstream revision, regenerate the lockfile, and run the complete vulnerability scan and native platform matrix. Remove the patches together once released versions provide the same fixed binding chain. The vulnerability scan continues to check the complete locked dependency inventory, including development and platform dependencies, at every severity.
-
-On macOS, run `npm run tauri:test` for Rust and history migration checks, `npm run tauri:build:mac` to build `release/tauri-macos/Blincho.app`, or `npm run tauri:test:mac` for an isolated native smoke test. Install Blincho in `/Applications` before using its login startup feature so the registered executable has a stable path. Windows and Linux builds use `npm run tauri:build:win` and `npm run tauri:build:linux`.
-
-Run `npm run tauri:test:layout` on macOS to check the actual WKWebView at several window sizes, through resize/restore and across all five pages in all 30 languages at three widths. It verifies that Settings and sound share a row whenever they fit, translated controls remain unclipped, and statistics fit the content pane. It uses synthetic settings and a separate WebKit profile. The document and titlebar stay fixed; long page content and sidebar controls retain their own scrolling. AppKit can clamp requested dimensions to the screen's available work area. The reopen check reports a skip when macOS cannot confirm presence, while the viewport checks still run.
-
-## Checks
-
-The badges show the latest workflow runs triggered by pushes to `main`. Pull-request results appear in each PR's checks.
-
-- [App and website validation](.github/workflows/ci.yml) runs on pull requests and pushes to `main`. It checks the Node test suite, TypeScript/Vite build and website build, plus Rust formatting, checks and tests, native smoke tests and package verification across macOS, Windows and Linux on ARM64 and x64.
-- [Vulnerability scan](.github/workflows/vulnerability-scan.yml) runs on pull requests, merge groups, pushes to `main`, a daily schedule and manual requests. The release workflow also calls it before validation and packaging. It validates npm and Cargo manifests against their committed locks without building or running lifecycle scripts, then checks those dependency inventories with npm audit and Trivy. It includes development and platform dependencies, and fails on known vulnerabilities at every severity, including those without fixes.
-
-After `npm ci`, run `npm test`, `npm run build` and `npm run site:build` locally. For desktop changes, also run `cargo fmt --manifest-path src-tauri/Cargo.toml --check` and `npm run tauri:test` with the native prerequisites described above.
-
-## Local MCP
-
-Desktop settings include an optional **Local MCP** switch, off by default. Turn it on to connect a local AI client, then choose **Copy connection** for the server URL and Bearer token in MCP JSON format. The listener binds only to `127.0.0.1`, prefers port `47831`, and uses a free local port if that port is occupied. Disabling the switch closes the listener and discards pending commands. Re-enabling or restarting changes the token, so copy the connection again.
-
-The stateless Streamable HTTP endpoint supports `get_status`, `get_settings`, `get_today_stats`, `get_data_range`, `get_stats`, `start_break`, `pause_timer`, `resume_timer` and `skip_break`. Actions are queued requests, then checked against the current app state. They respect presence checks, active exercises, pending camera checks and strict breaks. Poll `get_status` to observe the result. Settings and daily aggregate totals are shared; detailed activity/call history, journal answers and camera frames are excluded. Browser access is not supported.
-
-`get_data_range` reports `dataStartDate`, `dataEndDate`, `activityStartDate`, `recordedDays` and the device's `timeZone`. The first two dates describe saved daily counters; `activityStartDate` is the first saved date with activity observations and can be later or `null` for older history. These are available-data boundaries, not the installation date or a guarantee of continuous recording.
-
-`get_stats` accepts inclusive local calendar dates `startDate` and `endDate` (`YYYY-MM-DD`) and `groupBy: "day"` (default) or `"week"` (Monday through Sunday). Omitted bounds use the first and last saved dates. For one day, set both dates to that day. Each result includes focus minutes, completed breaks/exercises and observed work, away, manual pause, rest and recorded minutes. Observed work is separate from older focus counters. Missing dates have no period record; `recordedDays` and `calendarDays` make gaps visible. Weekly bounds are clipped to the requested range. `totals` always covers the entire range; paginate `periods` with `offset` (default 0) and `limit` (default 100, maximum 366), following `hasMore`. Empty history has `null` data boundaries and zero totals.
-
-For example, call `get_stats` with `{"startDate":"2026-10-01","endDate":"2026-10-18","groupBy":"week"}` to compare calendar weeks in that range. Neither tool returns individual activity intervals or call names. The MCP projection omits invalid calendar dates and keeps the first saved record for a duplicate date. Completion counts are rounded down to nonnegative safe integers and invalid numeric totals become zero; these rules do not modify saved history.
-
-In Codex, use the copied URL in an HTTP MCP entry and provide the token through an environment variable:
-
-```toml
-[mcp_servers.blincho]
-url = "http://127.0.0.1:47831/mcp"
-bearer_token_env_var = "BLINCHO_MCP_TOKEN"
-```
-
-Use the actual URL shown by Blincho when its port differs. Keep the token private. See the [MCP transport specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) and [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
-
-## Website
-
-```sh
-npm run site:build
-python3 -m http.server 5184 --directory site-dist
-```
-
-The static site is generated in 30 languages from `site/locales`. It follows the system theme until a visitor chooses a theme. The only website storage is the language/theme choice. There are no advertising or analytics scripts. Cloudflare hosts the website; GitHub hosts release downloads. Those providers receive ordinary request metadata.
-
-## Releases
-
-See [RELEASE.md](RELEASE.md) for the tag-driven build and publication pipeline. Update the package version, lockfile, changelog and localized release summary together. A pushed `vX.Y.Z` tag builds release packages, publishes checksums and updates the website and desktop update feeds after successful validation. Production deployment requires the configured Cloudflare Actions secret.
-
-Current Tauri packages on all operating systems use manual download and installation. They check for newer releases after one minute and every six hours while running, and offer a website download. Choosing not to show updates again disables background checks persistently; manual checking remains available in settings. Historical Electron releases keep their compatible verified update feeds. No update forces an immediate restart.
-
-Primary domain: `blincho.app`. Aliases `blincho.com`, `www.blincho.com` and `www.blincho.app` redirect to it, preserving the path and query.
-
-## Data and compatibility
+## Your data stays with you
 
 Settings, journal answers and statistics remain on the device. Unless background update checks are turned off, packages contact `blincho.app` for update metadata. Downloads come from GitHub. These requests do not send journal answers or activity history. No account is required.
+
+- **Camera checks run locally.** Frames are never saved or uploaded, and the camera turns off after each check.
+- **Optional tracking has separate controls.** Input statistics count events without recording typed text. Call history stores observed times and normalized application names, without conversation content.
+- **Local MCP is opt-in.** It binds to `127.0.0.1` and shares settings and daily aggregate totals. Detailed activity/call history, journal answers and camera frames are excluded.
+
+[Local MCP setup and API reference →](docs/LOCAL_MCP.md)
+
+<details>
+<summary><strong>Call history and migration from older versions</strong></summary>
 
 The tray shows the current detected call and its application while either call feature is enabled. This transient status does not enable recording. Call history is off by default and has its own switch, separate from postponing breaks during calls. It stores only observed times and normalized application names locally, without conversation content, audio, participants, meeting titles or URLs. Turn recording off to stop future records, or delete call history from Statistics while keeping your other local history.
 
 The application identity remains `com.myeyes.app`. Legacy Electron releases used the `myeyes` profile. On the first Tauri desktop launch, Blincho imports settings, journal answers and statistics from a private copy of that profile into the system WebView storage. It does not change the original Electron database or overwrite an existing Tauri profile. Quit the old Electron app before the first migration so its database is stable. Windows paths that cannot be represented in the legacy LevelDB encoding require an available short path; otherwise the app shows the history recovery screen without modifying the source. Later launches use the migrated profile without importing it again.
 
 If history migration fails, a localized recovery screen appears before the app creates settings or history. Close the old Electron app and choose Retry after correcting the source. Continue without history records an explicit choice for this Tauri profile and allows new local records; later launches do not attempt the legacy import. The original Electron database remains unchanged.
+
+</details>
+
+## Development
+
+The desktop app uses **Tauri 2 + Rust** with the system WebView. **React + TypeScript** power the shared desktop and browser interface.
+
+Use Node.js 22.12 or newer, plus the [native prerequisites for your OS](docs/DEVELOPMENT.md).
+
+```sh
+git clone https://github.com/WonderMr/blincho.git
+cd blincho
+npm ci
+npm start
+```
+
+Use `npm run dev` for the browser UI. The browser build sees activity only within its own page and pauses when hidden; system-wide activity, lock and sleep detection require the desktop app.
+
+Before proposing a change:
+
+```sh
+npm test
+npm run build
+npm run site:build
+```
+
+[Builds and native tests](docs/DEVELOPMENT.md) · [CI and security checks](docs/DEVELOPMENT.md#checks) · [Release pipeline](RELEASE.md) · [Changelog](CHANGELOG.md)
 
 ## Contributing
 
