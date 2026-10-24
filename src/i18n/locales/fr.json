@@ -624,5 +624,8 @@
   "Показать ярлык": "Afficher le raccourci",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Le raccourci sur le bureau suit votre configuration.",
   "Не удалось сохранить ярлык.": "Impossible d’enregistrer le raccourci.",
-  "Камера Blincho активна": "Blincho utilise la caméra"
+  "Камера Blincho активна": "Blincho utilise la caméra",
+  "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Lors de la première activation, le modèle de caméra (19 Mo) est téléchargé depuis GitHub. Les vérifications fonctionnent ensuite sans connexion Internet.",
+  "Загрузка модели камеры… {percent}%": "Téléchargement du modèle de caméra… {percent}%",
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Impossible de télécharger le modèle de caméra. Vérifiez votre connexion Internet et activez à nouveau cette option."
 }

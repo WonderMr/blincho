@@ -31,6 +31,7 @@ test('an early native completion still fails immediately and retains countdown e
       const command = JSON.parse(fs.readFileSync(from, 'utf8'));
       response = { id: command.id, ok: true };
       if (command.operation === 'eval') {
+        if (command.script.includes('cameraModelCacheReady:true')) runtime.renderer = { ready: true, cameraModelCacheReady: true };
         const marker = command.script.match(/completionMarker:(\d+)/);
         if (marker) runtime.renderer = { ready: true, completionMarker: Number(marker[1]),
           settings: { cameraLockEnabled: true, strictMode: true },

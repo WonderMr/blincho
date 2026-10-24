@@ -624,5 +624,8 @@
   "Показать ярлык": "Tampilkan pintasan",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Pintasan desktop mengikuti konfigurasi Anda.",
   "Не удалось сохранить ярлык.": "Pintasan tidak dapat disimpan.",
-  "Камера Blincho активна": "Blincho sedang menggunakan kamera"
+  "Камера Blincho активна": "Blincho sedang menggunakan kamera",
+  "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Saat pertama kali diaktifkan, model kamera (19 MB) diunduh dari GitHub. Setelah itu, pemeriksaan berfungsi tanpa internet.",
+  "Загрузка модели камеры… {percent}%": "Mengunduh model kamera… {percent}%",
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Model kamera tidak dapat diunduh. Periksa koneksi internet dan aktifkan opsi ini lagi."
 }

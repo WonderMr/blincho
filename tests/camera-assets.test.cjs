@@ -5,6 +5,9 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const repo = path.resolve(__dirname, '..');
 const assets = path.join(repo, 'public/camera');
+const modelAssets = path.join(repo, 'camera-model');
+const downloadManifest = require('../src/data/cameraModelManifest.json');
+const assetDirectory = name => name.endsWith('.wasm') ? assets : modelAssets;
 const hashes = {
   'model.json': '3770b2528339b1e3340cb74360e1e40401816b009779aeb8d0cce3a4353ea3a9',
   'group1-shard1of5': '0e7af0f713e98521252321f7f84892c31cefccccec3ac64c84e5065b75ed5646',
@@ -19,7 +22,7 @@ const hashes = {
 
 test('offline camera assets match pinned upstream bytes and integrity manifest', () => {
   for (const [name, hash] of Object.entries(hashes)) {
-    const shipped = fs.readFileSync(path.join(assets, name));
+    const shipped = fs.readFileSync(path.join(assetDirectory(name), name));
     assert.equal(createHash('sha256').update(shipped).digest('hex'), hash, name);
     if (name.endsWith('.wasm')) {
       const upstream = fs.readFileSync(path.join(repo, 'node_modules/@tensorflow/tfjs-backend-wasm/dist', name));
@@ -27,12 +30,14 @@ test('offline camera assets match pinned upstream bytes and integrity manifest',
       assert.equal(shipped.subarray(0, 4).toString('hex'), '0061736d');
     }
   }
-  assert.equal(fs.readFileSync(path.join(assets, 'SHA256SUMS.txt'), 'utf8'), Object.entries(hashes).map(([name, hash]) => `${hash}  ${name}\n`).join(''));
+  for (const directory of [assets, modelAssets]) assert.equal(fs.readFileSync(path.join(directory, 'SHA256SUMS.txt'), 'utf8'), Object.entries(hashes).filter(([name]) => assetDirectory(name) === directory).map(([name, hash]) => `${hash}  ${name}\n`).join(''));
+  assert.deepEqual(downloadManifest.files, Object.entries(hashes).filter(([name]) => !name.endsWith('.wasm')).map(([name, sha256]) => ({ name, bytes: fs.statSync(path.join(modelAssets, name)).size, sha256 })));
+  assert.match(downloadManifest.baseUrl, /^https:\/\/raw\.githubusercontent\.com\/WonderMr\/blincho\/[a-f0-9]{40}\/public\/camera\/$/);
   assert.match(fs.readFileSync(path.join(assets, 'LICENSE.txt'), 'utf8'), /Apache License/);
 });
 
 test('model weights only reference complete bundled shards and match manifest sizes', () => {
-  const model = JSON.parse(fs.readFileSync(path.join(assets, 'model.json'), 'utf8'));
+  const model = JSON.parse(fs.readFileSync(path.join(modelAssets, 'model.json'), 'utf8'));
   assert(Array.isArray(model.modelTopology.node));
   for (const group of model.weightsManifest) {
     for (const shard of group.paths) {
@@ -45,9 +50,10 @@ test('model weights only reference complete bundled shards and match manifest si
       assert(itemBytes, `known model dtype ${dtype}`);
       return total + weight.shape.reduce((size, dim) => size * dim, 1) * itemBytes;
     }, 0);
-    assert.equal(group.paths.reduce((total, shard) => total + fs.statSync(path.join(assets, shard)).size, 0), bytes);
+    assert.equal(group.paths.reduce((total, shard) => total + fs.statSync(path.join(modelAssets, shard)).size, 0), bytes);
   }
-  assert.deepEqual(fs.readdirSync(assets).sort(), [...Object.keys(hashes), 'LICENSE.txt', 'README.txt', 'SHA256SUMS.txt'].sort());
+  for (const directory of [assets, modelAssets]) assert.deepEqual(fs.readdirSync(directory).sort(), [...Object.keys(hashes).filter(name => assetDirectory(name) === directory), 'LICENSE.txt', 'README.txt', 'SHA256SUMS.txt'].sort());
+  assert(!fs.existsSync(path.join(assets, 'model.json')), 'model stays outside bundled public assets');
 });
 
 test('detector dependencies stay pinned without MediaPipe or any WebGL runtime', () => {

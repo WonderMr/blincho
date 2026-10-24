@@ -45,6 +45,8 @@ Blincho reminds you to step away from the screen, rest your eyes and move a litt
 
 The desktop timer keeps running when the window is hidden or minimized. Optional camera presence checks, input activity counts, call history and a local MCP connection are available in Settings. Camera features, input statistics, call history and Local MCP are off by default.
 
+At first camera opt-in, Blincho downloads an approximately 19 MB person-detection model from a pinned commit in WonderMr/blincho on GitHub. It verifies every file's size and SHA-256, then caches the complete model locally in IndexedDB. Later camera checks work offline. A failed or cancelled download leaves the option off so it can be retried. Clearing application storage can remove the cache. GitHub receives ordinary download request metadata; camera frames stay on the device and are never stored or uploaded.
+
 [Explore all features, platform support and optional permissions →](docs/FEATURES.md)
 
 ## Get started

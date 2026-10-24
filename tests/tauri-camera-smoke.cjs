@@ -1,4 +1,4 @@
-// Runs the bundled detector in the real system WebView, without acquiring a
+// Downloads the pinned model, then runs offline inference in the real system WebView, without acquiring a
 // camera or locking the desktop. The native test profile rejects lock requests.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -77,9 +77,29 @@ async function stop() {
 (async () => {
   try {
     await until(value => value.renderer?.ready && value.timer.totalMs > 0);
+    // Use the actual opt-in flow with a synthetic permission probe. No hardware is opened.
+    await evaluate(`(async()=>{const media=navigator.mediaDevices;const descriptor=Object.getOwnPropertyDescriptor(media,'getUserMedia');try{
+      Object.defineProperty(media,'getUserMedia',{configurable:true,value:async()=>({getTracks:()=>[{stop(){}}]})});
+      document.querySelector('.nav-settings-button').click();await new Promise(resolve=>setTimeout(resolve,100));
+      const toggle=document.getElementById('camera-lock-enabled');if(!toggle||toggle.disabled)throw Error('Camera opt-in unavailable');toggle.click();
+      const deadline=Date.now()+150000;while(JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==true){
+        if(Date.now()>deadline)throw Error('Model preparation did not complete: '+document.body.innerText.slice(-1500));await new Promise(resolve=>setTimeout(resolve,100));
+      }
+      document.getElementById('camera-lock-enabled').click();await new Promise(resolve=>setTimeout(resolve,100));
+      await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraCachePrepared:true}});
+    }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraCachePrepared:false,error:String(error)}})}finally{
+      if(descriptor)Object.defineProperty(media,'getUserMedia',descriptor);else delete media.getUserMedia;
+    }})()`);
+    const prepared = await until(value => value.renderer?.cameraCachePrepared !== undefined, 180000);
+    assert.equal(prepared.renderer.cameraCachePrepared, true, JSON.stringify(prepared.renderer));
+    // Reload discards the verified in-memory copy; inference must reopen IndexedDB offline.
+    await evaluate('location.reload()');
+    await until(value => value.renderer?.ready && value.renderer.cameraCachePrepared === undefined);
     await evaluate(`(async()=>{let detector;const errors=[];const originalError=console.error;console.error=(...args)=>{errors.push(args.map(String).join(' ').slice(0,500));if(errors.length>8)errors.shift();originalError.apply(console,args)};
     let webglRequests=0;const prototypes=[HTMLCanvasElement.prototype,...(typeof OffscreenCanvas==='function'?[OffscreenCanvas.prototype]:[])];const originals=prototypes.map(prototype=>prototype.getContext);prototypes.forEach((prototype,index)=>{prototype.getContext=function(kind,...args){if(String(kind).toLowerCase().includes('webgl')){webglRequests++;throw Error('Camera detection must not initialize WebGL')}return originals[index].call(this,kind,...args)}});try{
-      const module=await import('./assets/${modelChunk}'); detector=await Object.values(module)[0]();
+      const module=await import('./assets/${modelChunk}');
+      const originalFetch=globalThis.fetch;globalThis.fetch=(url,options)=>{if(String(url).startsWith('https://raw.githubusercontent.com/'))throw Error('Model inference must work offline');return originalFetch(url,options)};
+      detector=await module.loadPersonDetector();
       const canvas=document.createElement('canvas');canvas.width=320;canvas.height=240;
       const ctx=canvas.getContext('2d');const gradient=ctx.createLinearGradient(0,0,320,240);gradient.addColorStop(0,'#263342');gradient.addColorStop(1,'#a8bbc9');ctx.fillStyle=gradient;ctx.fillRect(0,0,320,240);
       const result=await detector.detect(canvas);if(!Array.isArray(result.detections))throw Error('Invalid real model result');
@@ -89,7 +109,7 @@ async function stop() {
       const toggle=document.getElementById('camera-lock-enabled');
       await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:true,detections:result.detections.length,webglRequests,cameraAPI:typeof navigator.mediaDevices?.getUserMedia==='function',lockAPI:typeof window.desktopAPI.lockComputer==='function',lockRejected,defaultDisabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==true,toggleReady:!!toggle&&!toggle.checked&&!toggle.disabled}}});
     }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:false,error:String(error),stack:error?.stack,webglRequests,errors}}})}finally{prototypes.forEach((prototype,index)=>{prototype.getContext=originals[index]});console.error=originalError;detector?.close()}})()`);
-    const probe = (await until(value => value.renderer?.cameraSmoke)).renderer.cameraSmoke;
+    const probe = (await until(value => value.renderer?.cameraSmoke, 180000)).renderer.cameraSmoke;
     assert.equal(probe.passed, true, JSON.stringify(probe)); assert.equal(probe.webglRequests, 0); assert.equal(probe.cameraAPI, true); assert.equal(probe.lockAPI, true); assert.equal(probe.lockRejected, true); assert.equal(probe.defaultDisabled, true); assert.equal(probe.toggleReady, true);
     console.log(JSON.stringify({ ...probe, executable, profile: directory, limitation: 'Actual camera hardware and physical locking were not invoked.' }, null, 2));
   } finally {

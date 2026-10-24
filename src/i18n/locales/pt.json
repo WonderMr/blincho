@@ -624,5 +624,8 @@
   "Показать ярлык": "Mostrar atalho",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "O atalho no ambiente de trabalho acompanha a sua configuração.",
   "Не удалось сохранить ярлык.": "Não foi possível guardar o atalho.",
-  "Камера Blincho активна": "Blincho está usando a câmera"
+  "Камера Blincho активна": "Blincho está usando a câmera",
+  "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Na primeira ativação, o modelo da câmera (19 MB) é baixado do GitHub. Depois, as verificações funcionam sem internet.",
+  "Загрузка модели камеры… {percent}%": "Baixando o modelo da câmera… {percent}%",
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Não foi possível baixar o modelo da câmera. Verifique a conexão com a internet e ative esta opção novamente."
 }

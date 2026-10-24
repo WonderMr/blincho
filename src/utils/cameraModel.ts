@@ -1,3 +1,4 @@
+import { getCameraModelArtifacts } from './cameraAssets';
 import * as tf from '@tensorflow/tfjs-core';
 import { loadGraphModel } from '@tensorflow/tfjs-converter';
 import { setWasmPaths } from '@tensorflow/tfjs-backend-wasm';
@@ -10,7 +11,7 @@ export async function loadPersonDetector() {
   setWasmPaths(assets);
   if (!await tf.setBackend('wasm')) throw new Error('Camera WASM runtime unavailable');
   await tf.ready();
-  const model = await loadGraphModel(`${assets}model.json`);
+  const model = await loadGraphModel(tf.io.fromMemory(await getCameraModelArtifacts()));
 
   let closed = false, disposed = false, active = 0;
   const dispose = () => {

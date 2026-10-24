@@ -624,5 +624,8 @@
   "Показать ярлык": "Kısayolu göster",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Masaüstü kısayolu yapılandırmanıza göre değişir.",
   "Не удалось сохранить ярлык.": "Kısayol kaydedilemedi.",
-  "Камера Blincho активна": "Blincho kamerayı kullanıyor"
+  "Камера Blincho активна": "Blincho kamerayı kullanıyor",
+  "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "İlk etkinleştirmede kamera modeli (19 MB) GitHub üzerinden indirilir. Ardından kontroller internet bağlantısı olmadan çalışır.",
+  "Загрузка модели камеры… {percent}%": "Kamera modeli indiriliyor… {percent}%",
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Kamera modeli indirilemedi. İnternet bağlantınızı kontrol edin ve bu seçeneği yeniden etkinleştirin."
 }
