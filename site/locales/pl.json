@@ -149,5 +149,6 @@
   "release.1.10.0": "Wygląd i nazwa zależą od włączonych funkcji. Skrót na pulpicie zmienia się wraz z konfiguracją.",
   "release.1.10.1": "Wygląd i nazwa zależą od włączonych funkcji. Skrót na pulpicie zmienia się wraz z konfiguracją. Oznaczenie kamery na ikonie Blincho pokazuje, kiedy aplikacja używa kamery, i znika po zakończeniu przechwytywania.",
   "release.1.10.2": "Automatyczne kontrole kamerą są pomijane podczas wykrytych połączeń i przerywane, jeśli połączenie zostanie wykryte w trakcie kontroli.",
-  "release.1.10.4": "Wersje na komputery korzystają teraz wyłącznie z technologii Rust i Tauri. Usunięto starsze narzędzia do budowania wersji Electron. Migracja istniejącej historii jest nadal dostępna."
+  "release.1.10.4": "Wersje na komputery korzystają teraz wyłącznie z technologii Rust i Tauri. Usunięto starsze narzędzia do budowania wersji Electron. Migracja istniejącej historii jest nadal dostępna.",
+  "release.1.10.6": "Przypomnienia o przerwach wznawiają się podczas spotkania po pięciu minutach bez użycia kamery i mikrofonu, z wcześniejszym ostrzeżeniem i możliwością cofnięcia zmiany."
 }

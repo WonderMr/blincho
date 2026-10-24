@@ -2,6 +2,17 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.10.6]
+
+### Added
+
+- Resume break reminders after a detected meeting stops using the camera and microphone for five minutes. Show a 30-second warning before a due break, with controls to keep working, continue the meeting or undo the change.
+- Keep manual pauses intact and restore the previous countdown when undoing a meeting action. Cancel stale warning actions when the meeting, settings or camera state changes.
+
+### Changed
+
+- Document Local MCP setup for Claude Code and Cursor.
+
 ## [1.10.5]
 
 ### Changed

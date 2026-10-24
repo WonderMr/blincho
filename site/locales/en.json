@@ -149,5 +149,6 @@
   "release.1.10.0": "The appearance and name depend on the features you enable. The desktop shortcut follows your build.",
   "release.1.10.1": "The appearance and name depend on the features you enable. The desktop shortcut follows your build. A camera badge in the tray identifies Blincho while it uses the camera and clears when capture ends.",
   "release.1.10.2": "Automatic camera checks are skipped during detected calls and stop if a call is detected during a check.",
-  "release.1.10.4": "Desktop builds now use only Rust and Tauri. Legacy Electron build tools have been removed. Existing history migration remains available."
+  "release.1.10.4": "Desktop builds now use only Rust and Tauri. Legacy Electron build tools have been removed. Existing history migration remains available.",
+  "release.1.10.6": "Break reminders resume during a meeting after five minutes without camera or microphone use, with advance warning and undo controls."
 }

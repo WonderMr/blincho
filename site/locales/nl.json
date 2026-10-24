@@ -149,5 +149,6 @@
   "release.1.10.0": "Het uiterlijk en de naam hangen af van de ingeschakelde functies. De snelkoppeling op het bureaublad volgt je configuratie.",
   "release.1.10.1": "Het uiterlijk en de naam hangen af van de ingeschakelde functies. De snelkoppeling op het bureaublad volgt je configuratie. Een camerateken op het Blincho-pictogram toont wanneer de camera wordt gebruikt en verdwijnt zodra de opname stopt.",
   "release.1.10.2": "Automatische cameracontroles worden overgeslagen bij gedetecteerde gesprekken en stoppen als tijdens een controle een gesprek wordt gedetecteerd.",
-  "release.1.10.4": "Desktopbuilds gebruiken nu alleen Rust en Tauri. De oude Electron-buildtools zijn verwijderd. Migratie van bestaande geschiedenis blijft beschikbaar."
+  "release.1.10.4": "Desktopbuilds gebruiken nu alleen Rust en Tauri. De oude Electron-buildtools zijn verwijderd. Migratie van bestaande geschiedenis blijft beschikbaar.",
+  "release.1.10.6": "Pauzeherinneringen worden tijdens een vergadering hervat na vijf minuten zonder camera- of microfoongebruik, met een waarschuwing vooraf en de mogelijkheid om dit ongedaan te maken."
 }
