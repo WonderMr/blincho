@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { once } = require('node:events');
+const { performance } = require('node:perf_hooks');
 const { createProtocolServer } = require('./support/syncProtocolServer.cjs');
 // Operators with the private backend checked out can also run the same client
 // suite against its real factory by supplying an absolute server.cjs path.
@@ -28,8 +29,8 @@ const invitation = 'test-registration-code-for-local-only';
 const password = 'test password for account sync';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check) {
-  const end = Date.now() + 7000;
-  while (!check()) { assert(Date.now() < end, 'condition timed out'); await sleep(30); }
+  const end = performance.now() + 7000;
+  while (!check()) { assert(performance.now() < end, 'condition timed out'); await sleep(30); }
 }
 function storage() {
   const values = new Map();
