@@ -1,0 +1,24 @@
+# Features and behavior
+
+[Back to the overview](../README.md)
+
+- Reminds you to take short breaks and supports configurable work/break intervals.
+- Pauses timing when you are away, the screen locks or the computer sleeps.
+- Can check for a person with the camera after a timed break finishes, locking the computer if no one is detected. Disabled by default. Enabling it in desktop Settings immediately checks camera access and requests permission when needed. Denied or unavailable access leaves the setting off. Frames are processed locally, never saved or uploaded. The camera turns off after each check. Automatic checks require a supported call detector, skip detected calls and stop when a call is detected. An unavailable check skips locking and preserves normal timer behavior.
+- Optional enhanced presence checks start after one minute without keyboard or mouse input when a fresh system call check confirms no call. A short camera check keeps reading time active when a person is present. Confirmed absence pauses work, with a separate opt-in to lock the session. New input, calls, sleep and settings changes invalidate pending decisions. Unknown camera results fall back to input-idle handling and never lock. The mode requires the native app, camera support and a supported call detector.
+- Optional input statistics keep only key-down, click, scroll and mouse-motion event counts in five-minute intervals, with a daily chart and local CSV export. No text, key identities, apps, coordinates or individual event timestamps are recorded. macOS requires Input Monitoring permission; Windows uses passive hooks; Linux requires a native X11 session with XInput2. Wayland and browser builds report unsupported. Counts depend on device and OS event delivery, including repeat and scrolling behavior, and do not provide medical diagnoses. Collection is off by default and can be disabled independently. Deleting input statistics leaves other history intact. Detailed input buckets are excluded from Local MCP.
+- Keeps the desktop timer running in Rust when the window is hidden or minimized.
+- When call postponement is enabled, detected calls delay automatic breaks by five minutes, including in strict mode. Blincho checks again at the next deadline; strict break behavior resumes when the call is no longer detected.
+- Restores the window on its previous monitor after lock or sleep, keeping hidden and minimized windows in the background. If that monitor is disconnected, the window returns to an available screen.
+- Includes exercises, a personal comfort journal and local statistics.
+- Uses a compact sidebar with fully visible controls and statistics that adapt to the available content width. Drag the native desktop window from empty page or sidebar space while retaining text selection, scrolling and controls.
+- Shows a small tray preview with the next break countdown, recorded work time, completed breaks and current call status on macOS and Windows. A phone badge marks a detected call on the tray icon. Linux exposes the live summary and call application in its tray menu.
+- Records daily work, absence, lock, sleep, manual pauses and rest intervals locally. Browse previous days, average and longest work intervals, and weekly averages per calendar day or day of use. Older totals stay available; missing time records remain unknown.
+- Optionally records detected calls with their application, observed start/end and duration after you enable call history. Browse daily call lanes and per-app totals, average call lengths and weekly call time. Browser calls identify the browser; detection is approximate.
+- Adapts the Blinchiborg character and localized build name to six optional features, with 64 combinations. In Settings, choose Create shortcut to add a desktop shortcut whose name and icon follow the build. macOS uses a separate .blincho document, preserving the signed app; Windows uses .lnk and Linux uses .desktop.
+- Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
+- Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.
+
+Blincho is a general wellness tool. It does not diagnose or treat eye conditions. Windows and Linux lock/sleep behavior has automated coverage but has not yet been validated on physical hardware. The download page identifies each package's signing and update support. Operating systems can show publisher warnings for unsigned packages.
+
+Camera use is identified by a camera badge on Blincho's tray icon and a localized label. It follows live capture, including presence checks and permission probes, and clears when the final stream is released.
