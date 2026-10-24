@@ -300,7 +300,7 @@ test('renderer expiry leaves meeting postponement and notification ownership wit
   try {
     await h.settle();
     let probes = 0;
-    h.electronAPI.checkMeetingActive = async () => { probes++; return { inMeeting: true, supported: true }; };
+    h.desktopAPI.checkMeetingActive = async () => { probes++; return { inMeeting: true, supported: true }; };
     const frame = { totalMs: 1200000, remainingMs: 0, manualPaused: false, breakActive: false, exercising: false,
       expiryPending: true, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
       suspended: false, breakElapsed: false, focusByDate: {} };
@@ -445,7 +445,7 @@ test('meeting undo cancels a begun strict break without completion credit or kee
     at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: nativeFixture });
   try {
     await h.settle();
-    const strictCommands = []; h.electronAPI.setStrictLock = enabled => strictCommands.push(enabled);
+    const strictCommands = []; h.desktopAPI.setStrictLock = enabled => strictCommands.push(enabled);
     let tick = 0;
     let current = { totalMs: 1200000, remainingMs: 0, manualPaused: false, breakActive: false, exercising: false,
       expiryPending: true, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,

@@ -46,7 +46,7 @@ for (const mode of ['expiry', 'reset', 'settings']) test(`meeting suspension rem
     let resolveIdle;
     if (mode === 'expiry') {
       let reads = 0;
-      h.electronAPI.getSystemIdleTime = () => ++reads === 2 ? new Promise(resolve => { resolveIdle = resolve; }) : Promise.resolve(0);
+      h.desktopAPI.getSystemIdleTime = () => ++reads === 2 ? new Promise(resolve => { resolveIdle = resolve; }) : Promise.resolve(0);
       native = { ...native, remainingMs: 0, expiryPending: true, meetingWarningRequired: true, meetingWarningReady: true, tickCount: ++tick };
       window.testNativeFrame({ ...native }); await h.settle();
       assert(resolveIdle, 'expiry reached its final presence query');
