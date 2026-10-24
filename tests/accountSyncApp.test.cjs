@@ -199,3 +199,51 @@ test('a newly received remote command preserves an existing manual pause', async
     assert.equal(h.captured.TimerWidget.isRunning, false);
   } finally { h.destroy(); }
 });
+
+test('the real sync hook preserves timer generations while a shared POST is pending', async () => {
+  const { webcrypto } = require('node:crypto');
+  const accountId = 'a'.repeat(32), raw = new Uint8Array(32).fill(42);
+  const secret = Buffer.from(raw).toString('base64url');
+  const encode = value => new TextEncoder().encode(value);
+  const material = await webcrypto.subtle.importKey('raw', raw, 'HKDF', false, ['deriveKey']);
+  const key = await webcrypto.subtle.deriveKey({
+    name: 'HKDF', hash: 'SHA-256', salt: encode('blincho-sync:v1:' + accountId),
+    info: encode('blincho-sync:v1:encryption'),
+  }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+  const iv = new Uint8Array(12).fill(1);
+  const ciphertext = await webcrypto.subtle.encrypt({
+    name: 'AES-GCM', iv, additionalData: encode('blincho-sync:v1:' + accountId + ':key-check'),
+  }, key, encode(JSON.stringify({ check: 'blincho-sync-v1' })));
+  const keyCheck = { v: 1, iv: Buffer.from(iv).toString('base64url'), ciphertext: Buffer.from(ciphertext).toString('base64url') };
+  for (const action of ['reset-and-resume', 'pause-and-resume']) {
+    let finishPost;
+    const fetcher = async (url, init) => {
+      let payload = {};
+      if (url.endsWith('/v1/login')) payload = { accountId, token: 'x'.repeat(43), keyCheck };
+      else if (url.endsWith('/v1/state')) payload = { documents: [] };
+      else if (init.method === 'PUT') payload = { revision: 1 };
+      else if (url.includes('/v1/events?')) payload = { instance: 'fixture', cursor: 0, events: [] };
+      else if (url.endsWith('/v1/events')) {
+        await new Promise(resolve => { finishPost = resolve; }); payload = { seq: 1 };
+      }
+      return new Response(JSON.stringify(payload), { status: 200 });
+    };
+    const h = createHarness({ syncEnabled: true, theme: 'system', colorPalette: 'sage', workMinutes: 20 },
+      false, false, 1791712800000, {}, undefined,
+      { URL, crypto: webcrypto, fetch: fetcher, TextEncoder, TextDecoder, btoa, atob });
+    try {
+      await h.settle(); await h.call('Navbar', 'onOpenSettings');
+      await h.captured.SettingsModal.accountSync.connect('login', 'test@example.test', 'local test password', secret, '');
+      await h.settle(); assert.equal(h.captured.SettingsModal.accountSync.status, 'connected');
+      await h.call('TimerWidget', 'onTriggerInstantBreak');
+      for (let i = 0; i < 20 && !finishPost; i++) await h.settle();
+      assert.equal(typeof finishPost, 'function');
+      if (action === 'reset-and-resume') await h.call('TimerWidget', 'onReset');
+      else await h.call('TimerWidget', 'onTogglePlay');
+      await h.call('TimerWidget', 'onTogglePlay');
+      finishPost(); await h.settle(); await h.advance(2500);
+      assert(!h.active.has('BreakOverlay'), action);
+      assert.equal(h.captured.TimerWidget.isRunning, true);
+    } finally { finishPost?.(); h.destroy(); }
+  }
+});

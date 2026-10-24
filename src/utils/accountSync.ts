@@ -322,6 +322,7 @@ export function useAccountSync(enabled: boolean, callbacks: Omit<Callbacks, 'sta
       let client: AccountSyncSession | undefined;
       try {
         client = new AccountSyncSession({ snapshot: () => current.current.snapshot(), settings: value => current.current.settings(value),
+        breakGeneration: () => current.current.breakGeneration?.() ?? 0,
         stats: values => { if (mounted.current && session.current === client) current.current.stats(values); },
         break: (event, isCurrent) => current.current.break(event, () => isCurrent() && session.current === client), status: status => {
           if (mounted.current && session.current === client) {
