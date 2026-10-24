@@ -30,7 +30,7 @@ Website: https://blincho.app
 - Offers 30 languages, automatic language detection, light/dark/system themes and calming color palettes.
 - Includes Armenian, Bengali, Indonesian, Vietnamese, Thai, Persian, Urdu, Hebrew, Dutch, Swedish, Czech, Romanian, Greek, Tamil and Telugu alongside the original English, Russian, Spanish, French, German, Italian, Portuguese, Chinese, Japanese, Korean, Arabic, Hindi, Turkish, Polish and Ukrainian.
 
-Blincho is a general wellness tool. It does not diagnose or treat eye conditions. Windows and Linux lock/sleep behavior has automated coverage but has not yet been validated on physical hardware. The download page identifies each package's signing and update support. Operating systems can show publisher warnings for unsigned packages.
+Blincho is a general wellness tool. It does not diagnose or treat eye conditions. The download page identifies each package's signing and update support. Operating systems can show publisher warnings for unsigned packages.
 
 Camera use is identified by a camera badge on Blincho's tray icon and a localized label. It follows live capture, including presence checks and permission probes, and clears when the final stream is released.
 
@@ -76,7 +76,11 @@ The stateless Streamable HTTP endpoint supports `get_status`, `get_settings`, `g
 
 For example, call `get_stats` with `{"startDate":"2026-10-01","endDate":"2026-10-18","groupBy":"week"}` to compare calendar weeks in that range. Neither tool returns individual activity intervals or call names. The MCP projection omits invalid calendar dates and keeps the first saved record for a duplicate date. Completion counts are rounded down to nonnegative safe integers and invalid numeric totals become zero; these rules do not modify saved history.
 
-In Codex, use the copied URL in an HTTP MCP entry and provide the token through an environment variable:
+Run the desktop app and your AI client on the same computer. Set `BLINCHO_MCP_TOKEN` in the client's environment to the token from **Copy connection**, and use the actual URL shown by Blincho if its port differs from the examples. Blincho includes the MCP server, so no separate server package is needed. Keep the token private and out of committed configuration; reconnect the client with the new token after Blincho restarts or Local MCP is re-enabled.
+
+### Codex
+
+Use the copied URL in an HTTP MCP entry and provide the token through an environment variable:
 
 ```toml
 [mcp_servers.blincho]
@@ -84,7 +88,48 @@ url = "http://127.0.0.1:47831/mcp"
 bearer_token_env_var = "BLINCHO_MCP_TOKEN"
 ```
 
-Use the actual URL shown by Blincho when its port differs. Keep the token private. See the [MCP transport specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) and [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+See [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+
+### Claude Code
+
+Add the following entry to `.mcp.json` in your project, merging it with any existing `mcpServers`. Claude Code expands `${BLINCHO_MCP_TOKEN}` from its environment:
+
+```json
+{
+  "mcpServers": {
+    "blincho": {
+      "type": "http",
+      "url": "http://127.0.0.1:47831/mcp",
+      "headers": {
+        "Authorization": "Bearer ${BLINCHO_MCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Start Claude Code with the token available in its environment, approve the project server when prompted, and use `/mcp` to check the connection. See [Claude Code MCP configuration](https://code.claude.com/docs/en/mcp).
+
+### Cursor
+
+Merge this entry into `.cursor/mcp.json` for one project or `~/.cursor/mcp.json` for all projects. Cursor uses `${env:BLINCHO_MCP_TOKEN}` for environment-variable interpolation:
+
+```json
+{
+  "mcpServers": {
+    "blincho": {
+      "url": "http://127.0.0.1:47831/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:BLINCHO_MCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Make the token available to the Cursor process, then restart or reconnect the server. In Agent chat, enable the `blincho` tools and ask for your current break status or work-time statistics. See [Cursor MCP configuration](https://cursor.com/docs/mcp).
+
+All examples use Blincho's [Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports). The tool reference and agent usage rules are in [AGENTS.md](AGENTS.md#local-mcp-client-tools).
 
 ## Website
 
