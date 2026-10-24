@@ -624,5 +624,17 @@
   "Показать ярлык": "Mostra collegamento",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Il collegamento sul desktop segue la tua configurazione.",
   "Не удалось сохранить ярлык.": "Impossibile salvare il collegamento.",
-  "Камера Blincho активна": "Blincho sta usando la fotocamera"
+  "Камера Blincho активна": "Blincho sta usando la fotocamera",
+  "Напоминания о перерывах возобновлены": "Promemoria delle pause ripresi",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "La fotocamera e il microfono non sono in uso da 5 minuti. I promemoria delle pause sono ripresi.",
+  "Перерыв начнётся через {seconds} с.": "La pausa inizierà tra {seconds} s.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Sei in riunione? Rimanda la pausa o sospendi i promemoria fino al termine della riunione.",
+  "До конца встречи": "Fino al termine della riunione",
+  "Напоминания приостановлены до конца встречи.": "I promemoria sono sospesi fino al termine della riunione.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "La riunione è terminata. I promemoria delle pause sono ripresi.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Impossibile rimandare la pausa. Riprova.",
+  "Перерывы возобновлены во время встречи.": "Le pause sono riprese durante la riunione.",
+  "Я ещё на встрече: отключить перерывы": "Sono ancora in riunione: disattiva le pause",
+  "Вернуть напоминания": "Riattiva i promemoria",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Impossibile modificare i promemoria. Riprova."
 }

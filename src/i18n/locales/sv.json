@@ -624,5 +624,17 @@
   "Показать ярлык": "Visa genväg",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Genvägen på skrivbordet följer din konfiguration.",
   "Не удалось сохранить ярлык.": "Det gick inte att spara genvägen.",
-  "Камера Blincho активна": "Blincho använder kameran"
+  "Камера Blincho активна": "Blincho använder kameran",
+  "Напоминания о перерывах возобновлены": "Pauspåminnelser återupptagna",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kameran och mikrofonen har inte använts på 5 minuter. Pauspåminnelser har återupptagits.",
+  "Перерыв начнётся через {seconds} с.": "Pausen börjar om {seconds} sek.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Är du på ett möte? Skjut upp pausen eller pausa påminnelserna tills mötet är slut.",
+  "До конца встречи": "Tills mötet är slut",
+  "Напоминания приостановлены до конца встречи.": "Påminnelserna är pausade tills mötet är slut.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Mötet är slut. Pauspåminnelserna har återupptagits.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Det gick inte att skjuta upp pausen. Försök igen.",
+  "Перерывы возобновлены во время встречи.": "Pauserna har återupptagits under mötet.",
+  "Я ещё на встрече: отключить перерывы": "Jag är fortfarande på ett möte: stäng av pauser",
+  "Вернуть напоминания": "Slå på påminnelser igen",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Det gick inte att ändra påminnelserna. Försök igen."
 }

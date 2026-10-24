@@ -624,5 +624,17 @@
   "Показать ярлык": "Kısayolu göster",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Masaüstü kısayolu yapılandırmanıza göre değişir.",
   "Не удалось сохранить ярлык.": "Kısayol kaydedilemedi.",
-  "Камера Blincho активна": "Blincho kamerayı kullanıyor"
+  "Камера Blincho активна": "Blincho kamerayı kullanıyor",
+  "Напоминания о перерывах возобновлены": "Mola hatırlatıcıları devam ediyor",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kamera ve mikrofon 5 dakikadır kullanılmıyor. Mola hatırlatıcıları yeniden başladı.",
+  "Перерыв начнётся через {seconds} с.": "Mola {seconds} sn. sonra başlayacak.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Toplantıda mısınız? Molayı erteleyin veya toplantı bitene kadar hatırlatıcıları duraklatın.",
+  "До конца встречи": "Toplantı bitene kadar",
+  "Напоминания приостановлены до конца встречи.": "Hatırlatıcılar toplantı bitene kadar duraklatıldı.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Toplantı sona erdi. Mola hatırlatıcıları devam ediyor.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Mola ertelenemedi. Tekrar deneyin.",
+  "Перерывы возобновлены во время встречи.": "Molalar toplantı sırasında yeniden başladı.",
+  "Я ещё на встрече: отключить перерывы": "Hâlâ toplantıdayım: molaları kapat",
+  "Вернуть напоминания": "Hatırlatıcıları yeniden aç",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Hatırlatıcılar değiştirilemedi. Yeniden deneyin."
 }

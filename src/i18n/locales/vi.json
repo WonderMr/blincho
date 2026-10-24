@@ -624,5 +624,17 @@
   "Показать ярлык": "Hiện lối tắt",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Lối tắt trên màn hình thay đổi theo cấu hình của bạn.",
   "Не удалось сохранить ярлык.": "Không thể lưu lối tắt.",
-  "Камера Blincho активна": "Blincho đang sử dụng camera"
+  "Камера Blincho активна": "Blincho đang sử dụng camera",
+  "Напоминания о перерывах возобновлены": "Đã tiếp tục nhắc nghỉ",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Camera và micrô không được sử dụng trong 5 phút. Lời nhắc nghỉ đã được tiếp tục.",
+  "Перерыв начнётся через {seconds} с.": "Giờ nghỉ bắt đầu sau {seconds} giây.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Bạn đang họp? Hoãn giờ nghỉ hoặc tạm dừng lời nhắc cho đến khi cuộc họp kết thúc.",
+  "До конца встречи": "Đến khi cuộc họp kết thúc",
+  "Напоминания приостановлены до конца встречи.": "Lời nhắc được tạm dừng cho đến khi cuộc họp kết thúc.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Cuộc họp đã kết thúc. Lời nhắc nghỉ đã hoạt động trở lại.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Không thể hoãn giờ nghỉ. Hãy thử lại.",
+  "Перерывы возобновлены во время встречи.": "Đã tiếp tục nhắc nghỉ trong cuộc họp.",
+  "Я ещё на встрече: отключить перерывы": "Tôi vẫn đang họp: tắt giờ nghỉ",
+  "Вернуть напоминания": "Bật lại lời nhắc",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Không thể thay đổi lời nhắc. Vui lòng thử lại."
 }

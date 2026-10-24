@@ -624,5 +624,17 @@
   "Показать ярлык": "Show shortcut",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "The desktop shortcut follows your build.",
   "Не удалось сохранить ярлык.": "Could not save the shortcut.",
-  "Камера Blincho активна": "Blincho is using the camera"
+  "Камера Blincho активна": "Blincho is using the camera",
+  "Напоминания о перерывах возобновлены": "Break reminders resumed",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "The camera and microphone have not been used for 5 minutes. Break reminders have resumed.",
+  "Перерыв начнётся через {seconds} с.": "The break starts in {seconds} s.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Are you in a meeting? Delay the break or pause reminders until it ends.",
+  "До конца встречи": "Until the meeting ends",
+  "Напоминания приостановлены до конца встречи.": "Reminders are paused until the meeting ends.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "The meeting has ended. Break reminders have resumed.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Could not delay the break. Try again.",
+  "Перерывы возобновлены во время встречи.": "Breaks have resumed during the meeting.",
+  "Я ещё на встрече: отключить перерывы": "I'm still in a meeting: turn off breaks",
+  "Вернуть напоминания": "Turn reminders back on",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Couldn't change reminders. Try again."
 }

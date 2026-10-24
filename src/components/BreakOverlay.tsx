@@ -14,8 +14,16 @@ interface BreakOverlayProps {
   onElapsed?: (deadlineMonotonicAt: number) => void;
   onPostpone: (minutes: number) => void;
   onOpenExercises: () => void;
+  onPauseMeeting?: () => void;
+  meetingBusy?: boolean;
+  meetingError?: boolean;
 }
 
+/**
+ * Render the break countdown with strict-mode dismissal rules and optional meeting undo.
+ * Native completion remains authoritative when requested; otherwise report the
+ * local monotonic deadline once through onElapsed.
+ */
 export const BreakOverlay: React.FC<BreakOverlayProps> = ({
   initialSeconds = 20,
   strictMode = false,
@@ -24,6 +32,9 @@ export const BreakOverlay: React.FC<BreakOverlayProps> = ({
   onElapsed,
   onPostpone,
   onOpenExercises,
+  onPauseMeeting,
+  meetingBusy,
+  meetingError,
 }) => {
   useI18n();
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
@@ -110,6 +121,10 @@ export const BreakOverlay: React.FC<BreakOverlayProps> = ({
       </div>
 
       {/* Calming Breathing Aura */}
+      {onPauseMeeting && <div data-meeting-break-control style={{ position: 'absolute', bottom: 24, maxWidth: 'calc(100vw - 48px)', textAlign: 'center' }}>
+        <button className="btn btn-secondary" disabled={meetingBusy} onClick={onPauseMeeting}>{t('Я ещё на встрече: отключить перерывы')}</button>
+        {meetingError && <p role="alert">{t('Не удалось изменить напоминания. Попробуйте ещё раз.')}</p>}
+      </div>}
       <div className="break-orb-pulse" />
 
       {!isFinished ? (
