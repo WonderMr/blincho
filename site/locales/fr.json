@@ -149,5 +149,6 @@
   "release.1.10.0": "L’apparence et le nom dépendent des fonctionnalités activées. Le raccourci sur le bureau suit votre configuration.",
   "release.1.10.1": "L’apparence et le nom dépendent des fonctionnalités activées. Le raccourci sur le bureau suit votre configuration. Un badge caméra sur l’icône de Blincho indique quand l’application utilise la caméra et disparaît à la fin de la capture.",
   "release.1.10.2": "Les vérifications automatiques par caméra sont ignorées pendant les appels détectés et s’arrêtent si un appel est détecté en cours de vérification.",
-  "release.1.10.4": "Les versions pour ordinateur utilisent désormais uniquement Rust et Tauri. Les anciens outils de compilation pour Electron ont été supprimés. La migration de l’historique existant reste disponible."
+  "release.1.10.4": "Les versions pour ordinateur utilisent désormais uniquement Rust et Tauri. Les anciens outils de compilation pour Electron ont été supprimés. La migration de l’historique existant reste disponible.",
+  "release.1.10.6": "macOS: Les rappels de pause reprennent pendant une réunion après cinq minutes sans utilisation de la caméra ni du microphone, avec une option d’annulation."
 }
