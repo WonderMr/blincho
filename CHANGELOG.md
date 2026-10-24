@@ -6,7 +6,7 @@ Release notes are curated here before a version tag is pushed. The website keeps
 
 ### Added
 
-- Resume break reminders after a detected meeting stops using the camera and microphone for five minutes. Show a 30-second warning before a due break, with controls to keep working, continue the meeting or undo the change.
+- On macOS, resume break reminders after a detected meeting stops using the camera and microphone for five minutes. Show a 30-second warning before a strict automatic meeting break, with controls to keep working, continue the meeting or undo the change.
 - Keep manual pauses intact and restore the previous countdown when undoing a meeting action. Cancel stale warning actions when the meeting, settings or camera state changes.
 
 ### Changed

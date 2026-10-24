@@ -150,5 +150,5 @@
   "release.1.10.1": "Vzhled a název závisejí na zapnutých funkcích. Zástupce na ploše se mění podle konfigurace. Odznak kamery v ikoně Blincho ukazuje používání kamery a po ukončení snímání zmizí.",
   "release.1.10.2": "Automatické kontroly kamerou se při rozpoznaném hovoru přeskočí a zastaví se, pokud je hovor rozpoznán během kontroly.",
   "release.1.10.4": "Desktopová sestavení nyní používají pouze Rust a Tauri. Staré sestavovací nástroje pro Electron byly odstraněny. Migrace stávající historie je nadále dostupná.",
-  "release.1.10.6": "Připomínky přestávek se během schůzky obnoví po pěti minutách bez použití kamery a mikrofonu, s upozorněním předem a možností vrátit změnu."
+  "release.1.10.6": "macOS: Připomínky přestávek se během schůzky obnoví po pěti minutách bez použití kamery a mikrofonu, s možností vrátit změnu."
 }
