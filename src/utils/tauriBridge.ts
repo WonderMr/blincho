@@ -31,7 +31,6 @@ const breaks = new Set<() => void>();
 const updateListeners = new Set<(state: UpdateState) => void>();
 let latest: NativeTimerSnapshot | null = null;
 let commandQueue = Promise.resolve();
-let exportTimer: ReturnType<typeof setTimeout> | undefined;
 let bridgeInitialization: Promise<void> | undefined;
 let historyRecovery: ReturnType<typeof createHistoryRecovery> | undefined;
 
@@ -73,17 +72,8 @@ export async function clearNativeMeetingHistory(): Promise<NativeTimerSnapshot |
   commandQueue = cleared.then(snapshot => { latest = snapshot; }).catch(() => {});
   return cleared;
 }
-export function scheduleLegacyHistoryExport(): void {
-  if (!window.electronAPI?.isElectron || window.electronAPI.platform !== 'darwin' || !window.electronAPI.exportLegacyHistory || window.__TAURI__) return;
-  clearTimeout(exportTimer);
-  exportTimer = setTimeout(() => {
-    try { void window.electronAPI!.exportLegacyHistory!(gatherLegacyHistory(localStorage))
-      .catch(error => console.warn('Blincho: History export failed:', error)); }
-    catch (error) { console.warn('Blincho: History collection failed:', error); }
-  }, 300);
-}
 export function initializeTauriBridge(): Promise<void> {
-  if (!window.__TAURI__) { scheduleLegacyHistoryExport(); return Promise.resolve(); }
+  if (!window.__TAURI__) return Promise.resolve();
   if (!bridgeInitialization) bridgeInitialization = installTauriBridge().catch(error => { bridgeInitialization = undefined; throw error; });
   return bridgeInitialization;
 }
@@ -119,8 +109,8 @@ async function installTauriBridge(): Promise<void> {
   document.documentElement.dataset.platform = info.platform;
   document.documentElement.dataset.runtime = 'tauri';
   const command = (operation: string, flag?: boolean) => api.core.invoke<void>('desktop_command', { operation, flag: flag ?? null });
-  window.electronAPI = {
-    isElectron: true, // Compatibility adapter for the existing shared UI and desktop detection.
+  window.desktopAPI = {
+    isDesktop: true,
     platform: info.platform,
     meetingDetectionSupported: info.meetingDetectionSupported,
     configureLocalMcp: enabled => api.core.invoke('local_mcp_configure', { enabled }),

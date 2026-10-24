@@ -15,7 +15,7 @@ function harness(strictMode = true, canvasContext = null, scopedSynth = null) {
   const soundSynth = scopedSynth || { enabled: true, playZenBowl() {}, playSoftBeep() {}, playCompletionChime() { chimes++; } };
   window.matchMedia = () => ({ matches: true });
   window.getComputedStyle = () => ({ getPropertyValue: () => '#9bc9ad' });
-  window.electronAPI = { setStrictLock: value => locks.push(value), setAlwaysOnTop() {} };
+  window.desktopAPI = { setStrictLock: value => locks.push(value), setAlwaysOnTop() {} };
   window.addEventListener = (name, callback) => { if (!events.has(name)) events.set(name, new Set()); events.get(name).add(callback); };
   window.removeEventListener = (name, callback) => events.get(name)?.delete(callback);
   const FakeDate = class extends Date {
@@ -431,4 +431,4 @@ test('undo notice lasts fifteen seconds and close remains immediately available'
   assert.equal(h.host.textContent,''); h.advance(20000); assert.equal(dismissed,2); h.destroy();
 });
 
-console.log(JSON.stringify({ passed: results.length, results, limitation: 'Real React/ReactDOM and synthetic DOM; no browser layout, Canvas visual QA or Electron E2E' }, null, 2));
+console.log(JSON.stringify({ passed: results.length, results, limitation: 'Real React/ReactDOM and synthetic DOM; no browser layout, Canvas visual QA or native E2E' }, null, 2));

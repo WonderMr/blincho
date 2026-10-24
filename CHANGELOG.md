@@ -2,6 +2,13 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.10.4]
+
+### Changed
+
+- Remove the legacy Electron desktop runtime, dependencies, development scripts and packaging tools. Desktop builds now use only Rust and Tauri.
+- Keep migration from existing Electron profiles and compatible update feeds for previously published releases.
+
 ## [1.10.3]
 
 ### Fixed

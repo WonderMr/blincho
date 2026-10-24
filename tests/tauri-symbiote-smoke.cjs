@@ -59,7 +59,7 @@ async function applied(mask, active) {
   await control('meeting', { active: true, applications: ['Zoom'] });
   await applied(0, true);
   const before = diagnostics();
-  assert.equal(await evaluate(`(async()=>{for(let mask=0;mask<64;mask++)await window.electronAPI.setSymbioteBuild(mask);return true;})()`), true);
+  assert.equal(await evaluate(`(async()=>{for(let mask=0;mask<64;mask++)await window.desktopAPI.setSymbioteBuild(mask);return true;})()`), true);
   const full = await applied(63, true);
   assert(full.symbioteAppearance.updates >= initial.symbioteAppearance.updates + 63);
   assert.equal(full.symbioteAppearance.error, null);
@@ -68,14 +68,14 @@ async function applied(mask, active) {
   assert.equal(full.nativeActivationPolicy, initial.nativeActivationPolicy);
   if (process.platform === 'darwin') assert.equal(full.trayPreview.native.frontmostPid, before.trayPreview.native.frontmostPid);
   for (const invalid of [-1, 64, 1.5, '63']) {
-    assert.equal(await evaluate(`window.electronAPI.setSymbioteBuild(${JSON.stringify(invalid)}).then(()=>false,()=>true)`), true);
+    assert.equal(await evaluate(`window.desktopAPI.setSymbioteBuild(${JSON.stringify(invalid)}).then(()=>false,()=>true)`), true);
   }
   assert.equal(await evaluate(`window.__TAURI__.core.invoke('set_symbiote_build',{selection:{mask:1,path:'/tmp/icon.png'}}).then(()=>false,()=>true)`), true);
-  await evaluate(`(async()=>{await Promise.all([1,32,16,63,0,31,2,48].map(mask=>window.electronAPI.setSymbioteBuild(mask)));await window.electronAPI.setSymbioteBuild(63);return true;})()`);
+  await evaluate(`(async()=>{await Promise.all([1,32,16,63,0,31,2,48].map(mask=>window.desktopAPI.setSymbioteBuild(mask)));await window.desktopAPI.setSymbioteBuild(63);return true;})()`);
   await applied(63, true);
   await control('meeting', { active: false, applications: [] });
   await applied(63, false);
-  await evaluate(`window.electronAPI.setSymbioteBuild(0).then(()=>true)`);
+  await evaluate(`window.desktopAPI.setSymbioteBuild(0).then(()=>true)`);
   await applied(0, false);
   await evaluate(`new Promise((resolve,reject)=>{document.querySelector('.nav-settings-button').click();let attempts=0;const check=()=>{const strict=document.querySelector('#strict-mode');if(strict){strict.click();resolve(true);}else if(++attempts>100)reject(Error('Settings unavailable'));else setTimeout(check,20)};check();})`);
   await applied(16, false);

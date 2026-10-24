@@ -6,7 +6,7 @@ const { createHarness } = require('./app.test.cjs');
 function recordPresentation(h) {
   const calls = [];
   for (const name of ['setBreakFullscreen', 'bringToFront', 'setStrictLock', 'setAlwaysOnTop']) {
-    h.electronAPI[name] = value => calls.push([name, value]);
+    h.desktopAPI[name] = value => calls.push([name, value]);
   }
   return calls;
 }
@@ -35,7 +35,7 @@ test('sampled lock without a native event holds the deadline until a fresh unloc
   try {
     await h.settle();
     let locked = true;
-    h.electronAPI.getPowerState = async () => ({ suspended: false, locked });
+    h.desktopAPI.getPowerState = async () => ({ suspended: false, locked });
     const calls = recordPresentation(h);
     await h.advance(30000);
     assert.equal(h.active.has('BreakOverlay'), false);
@@ -55,12 +55,12 @@ test('failed session probe cancels a strict rest and stale completion cannot cre
     const calls = recordPresentation(h);
     await h.call('TimerWidget', 'onTriggerInstantBreak');
     const elapsed = h.captured.BreakOverlay.onElapsed;
-    h.electronAPI.getPowerState = async () => { throw new Error('session unavailable'); };
+    h.desktopAPI.getPowerState = async () => { throw new Error('session unavailable'); };
     await h.advance(30000);
     assert.equal(h.active.has('BreakOverlay'), false);
     assert(calls.some(([name, value]) => name === 'setBreakFullscreen' && value === false));
     assert(calls.some(([name, value]) => name === 'setStrictLock' && value === false));
-    h.electronAPI.getPowerState = async () => ({ suspended: false, locked: false });
+    h.desktopAPI.getPowerState = async () => ({ suspended: false, locked: false });
     await h.advance(2000);
     await elapsed();
     await h.settle();

@@ -148,5 +148,6 @@
   "release.1.8.15": "Místní MCP nyní poskytuje statistiky podle dne, kalendářního týdne nebo období, s daty dostupných záznamů a viditelnými mezerami. Poloha a velikost okna se zachovávají po uzamčení, spánku a přestávkách.",
   "release.1.10.0": "Vzhled a název závisejí na zapnutých funkcích. Zástupce na ploše se mění podle konfigurace.",
   "release.1.10.1": "Vzhled a název závisejí na zapnutých funkcích. Zástupce na ploše se mění podle konfigurace. Odznak kamery v ikoně Blincho ukazuje používání kamery a po ukončení snímání zmizí.",
-  "release.1.10.2": "Automatické kontroly kamerou se při rozpoznaném hovoru přeskočí a zastaví se, pokud je hovor rozpoznán během kontroly."
+  "release.1.10.2": "Automatické kontroly kamerou se při rozpoznaném hovoru přeskočí a zastaví se, pokud je hovor rozpoznán během kontroly.",
+  "release.1.10.4": "Desktopová sestavení nyní používají pouze Rust a Tauri. Staré sestavovací nástroje pro Electron byly odstraněny. Migrace stávající historie je nadále dostupná."
 }

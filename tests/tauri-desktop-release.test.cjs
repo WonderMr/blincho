@@ -12,7 +12,7 @@ async function runPackager(platform, arch, scenario = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-native-package-test-'));
   try {
     await mkdir(path.join(directory, 'src-tauri'));
-    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version, build: { appId: 'com.myeyes.app' } }));
+    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version }));
     await writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ version, packages: { '': { version } } }));
     await writeFile(path.join(directory, 'src-tauri/tauri.conf.json'), JSON.stringify({ version, identifier: 'com.myeyes.app', productName: 'Blincho', bundle: { active: true, createUpdaterArtifacts: false }, ...scenario.config }));
     const mock = path.join(directory, 'mock-native.mjs');
@@ -185,6 +185,16 @@ async function runPackager(platform, arch, scenario = {}) {
     return { ...result, receipt: parsed, calls: calls ? calls.toString().trim().split('\n').map(JSON.parse) : [], packages };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
+
+test('retired Windows and Linux versions cannot invoke Electron packaging', async t => {
+  for (const platform of ['windows', 'linux']) await t.test(platform, async () => {
+    const result = await runPackager(platform, 'x64', { version: '1.5.3' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /only packages Tauri desktop releases/);
+    assert.deepEqual(result.calls, []);
+    assert.equal(result.receipt, null);
+  });
+});
 
 test('current Windows and Linux use locked native Tauri bundles and verified manual receipts on both architectures', async t => {
   const { validateReceipt } = await import('../scripts/release-lib.mjs');

@@ -4,7 +4,7 @@ Blincho is a free, open-source screen-break reminder for macOS, Windows and Linu
 presence and lock/sleep detection, call postponement, exercises, a comfort journal and local
 statistics in 30 languages. Desktop apps use Tauri 2 with Rust and the system WebView; the same
 React + TypeScript UI also builds as a browser app, and `site/` generates the website
-https://blincho.app. Version 1.8.15, under active development.
+https://blincho.app. Version 1.10.4, under active development.
 User-facing overview: `README.md`; release pipeline: `RELEASE.md`.
 
 ## User-facing text style
@@ -27,8 +27,6 @@ rule. Tests enforce this for the UI and website catalogues.
   the legacy Electron profile), `src/local_mcp.rs`, `src/tray_preview/`, `src/updates.rs`,
   `src/window_session.rs`; `native/*.m` (macOS Objective-C); `locales.json` (tray and menu
   strings); `tauri.conf.json`.
-- `electron/`: legacy Electron runtime (`main.cjs` is the npm `main`), kept for `electron:*` scripts
-  and historical update feeds.
 - `public/`: PWA manifest and the offline camera model (`public/camera/`, TensorFlow.js weights
   and WASM backends with `SHA256SUMS.txt`).
 - `site/`: website generator (`build.mjs`, `locales/<lang>.json`, `index.html`, `site.js`,
@@ -58,7 +56,6 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
 
 - macOS: `npm run tauri:build:mac`, `tauri:test:mac`, `tauri:test:layout`, `tauri:test:strict`,
   `tauri:test:mcp`. Windows and Linux packages: `tauri:build:win`, `tauri:build:linux`.
-- Electron (legacy): `npm run electron:dev`, `electron:build`, `electron:build:<mac|win|linux>`.
 - Release checks without publishing: the "Local validation" block in `RELEASE.md`.
 
 ## Conventions
@@ -68,8 +65,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
   the same `{placeholders}` and URLs, and no Cyrillic outside `ru` and `uk`
   (`tests/i18nCatalogs.test.cjs`). Add a new string to every catalogue in the same change.
 - Website catalogues `site/locales/<lang>.json` must match the key set of `site/locales/en.json`
-  (checked by `site/build.mjs`). Native tray and menu strings live in `src-tauri/locales.json`,
-  Electron strings in `electron/locales.cjs`.
+  (checked by `site/build.mjs`). Native tray and menu strings live in `src-tauri/locales.json`.
 - Versions in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`,
   `src-tauri/tauri.conf.json`, the `CHANGELOG.md` section and the `vX.Y.Z` tag must match. README
   also asks to update the localized release summary with them (`release.<version>` keys in
@@ -84,7 +80,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
   migration and published update feeds depend on it.
 - Never move or recreate an existing release tag, and never replace published assets.
 - Git-ignored outputs, never commit: `dist/`, `site-dist/`, `release/`, `release-upload/`,
-  `src-tauri/target`, `src-tauri/gen`, `electron/update-support.json`, `site/releases.json`,
+  `src-tauri/target`, `src-tauri/gen`, `site/releases.json`,
   `site/copy-source.json`, `site/DESIGN.txt`, `history.md`, `.env*`, `.dev.vars*`.
 - `public/camera/*` is binary and hash-pinned: a model change must update both
   `public/camera/SHA256SUMS.txt` and the hashes in `tests/camera-assets.test.cjs`.

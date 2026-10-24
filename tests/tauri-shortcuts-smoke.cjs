@@ -101,15 +101,15 @@ function name(mask, language = 'en') {
 }
 (async () => {
   await until(diagnostics, value => value.renderer?.ready && value.symbioteAppearance?.applied === 0);
-  const initial = await evaluate('window.electronAPI.getSymbioteShortcutStatus()'); assert.equal(initial.supported, true); assert.equal(initial.exists, false);
+  const initial = await evaluate('window.desktopAPI.getSymbioteShortcutStatus()'); assert.equal(initial.supported, true); assert.equal(initial.exists, false);
   await evaluate(`(()=>{document.querySelector('.nav-settings-button').click();return true;})()`);
   await until(() => evaluate(`Boolean(document.querySelector('[data-shortcut-create]'))`));
   await evaluate(`(()=>{document.querySelector('[data-shortcut-create]').click();return true;})()`);
-  let status = await until(() => evaluate('window.electronAPI.getSymbioteShortcutStatus()'), value => value.exists);
+  let status = await until(() => evaluate('window.desktopAPI.getSymbioteShortcutStatus()'), value => value.exists);
   const fileIdentity = fs.statSync(status.path).ino;
   const icons = new Set();
   for (let mask = 0; mask < 64; mask++) {
-    status = await evaluate(`(async()=>{await window.electronAPI.setSymbioteBuild(${mask});return window.electronAPI.syncSymbioteShortcut(${mask},${JSON.stringify(name(mask))});})()`);
+    status = await evaluate(`(async()=>{await window.desktopAPI.setSymbioteBuild(${mask});return window.desktopAPI.syncSymbioteShortcut(${mask},${JSON.stringify(name(mask))});})()`);
     assert.equal(status.exists, true); assert.equal(path.dirname(status.path), desktop);
     assert.equal(path.basename(status.path), (mask ? 'Blincho · ' + name(mask) : 'Blincho') + '.blincho');
     assert.equal(fs.statSync(status.path).ino, fileIdentity);
@@ -118,45 +118,24 @@ function name(mask, language = 'en') {
   }
   assert.equal(icons.size, 64, 'macOS must read all 64 distinct portraits');
   for (const language of fs.readdirSync(path.join(root, 'src/i18n/locales')).map(file => file.replace(/\.json$/, ''))) {
-    status = await evaluate(`window.electronAPI.syncSymbioteShortcut(63,${JSON.stringify(name(63, language))})`);
+    status = await evaluate(`window.desktopAPI.syncSymbioteShortcut(63,${JSON.stringify(name(63, language))})`);
     assert.equal(path.basename(status.path), 'Blincho · ' + name(63, language) + '.blincho');
   }
   for (const value of [{ mask: 64, name: 'bad' }, { mask: '63', name: 'bad' }, { mask: 1, name: 'bad\nname' }, { mask: 1, name: 'x', path: '/tmp/file' }]) {
     assert.equal(await evaluate(`window.__TAURI__.core.invoke('sync_symbiote_shortcut',{selection:${JSON.stringify(value)}}).then(()=>false,()=>true)`), true);
   }
   fs.unlinkSync(status.path);
-  status = await evaluate(`window.electronAPI.syncSymbioteShortcut(63,${JSON.stringify(name(63))})`); assert.equal(status.exists, false);
-  status = await evaluate(`window.electronAPI.createSymbioteShortcut(63,${JSON.stringify(name(63))})`); assert.equal(status.exists, true);
+  status = await evaluate(`window.desktopAPI.syncSymbioteShortcut(63,${JSON.stringify(name(63))})`); assert.equal(status.exists, false);
+  status = await evaluate(`window.desktopAPI.createSymbioteShortcut(63,${JSON.stringify(name(63))})`); assert.equal(status.exists, true);
   const collision = path.join(desktop, 'Blincho · Collision.blincho'); fs.writeFileSync(collision, 'foreign');
-  assert.equal(await evaluate(`window.electronAPI.syncSymbioteShortcut(1,'Collision').then(()=>false,()=>true)`), true);
+  assert.equal(await evaluate(`window.desktopAPI.syncSymbioteShortcut(1,'Collision').then(()=>false,()=>true)`), true);
   assert.equal(fs.readFileSync(collision, 'utf8'), 'foreign'); fs.unlinkSync(collision);
-  status = await evaluate(`window.electronAPI.syncSymbioteShortcut(63,${JSON.stringify(name(63))})`);
+  status = await evaluate(`window.desktopAPI.syncSymbioteShortcut(63,${JSON.stringify(name(63))})`);
   // Exercise the real JXA/AppKit bridge too; fake-OS unit tests cannot detect
   // JavaScript null being bridged to NSNull instead of an Objective-C nil image.
-  const electronDesktop = path.join(directory, 'electron-desktop');
-  const electronProfile = path.join(directory, 'electron-profile');
-  fs.mkdirSync(electronDesktop); fs.mkdirSync(electronProfile);
-  const { createShortcutController } = require('../electron/desktopShortcuts.cjs');
-  const electron = createShortcutController({
-    app: { isPackaged: true, getAppPath: () => root,
-      getPath: kind => ({ desktop: electronDesktop, userData: electronProfile })[kind] },
-    shell: {},
-    // Approved assets are already 256 pixels; test the actual platform helper.
-    nativeImage: { createFromPath: file => ({ isEmpty: () => false,
-      resize: () => ({ toPNG: () => fs.readFileSync(file) }) }) },
-  });
-  const electronIcons = new Set();
-  for (const mask of [63, 0]) {
-    const result = await electron.create({ mask, name: name(mask) });
-    assert.equal(result.error, undefined); assert.equal(result.exists, true);
-    assert.equal(await electron.isShortcutFile(result.path), true);
-    electronIcons.add(execFileSync(helper, [result.path], { encoding: 'utf8' }).trim());
-    assert.equal(fs.readdirSync(electronDesktop).filter(file => !file.startsWith('.')).length, 1);
-  }
-  assert.equal(electronIcons.size, 2, 'Electron AppKit helper must apply distinct actual icons');
   verify(); assert.deepEqual(hashes(bundle), before);
   if (finderMode) {
-    await evaluate('window.electronAPI.showSymbioteShortcut()');
+    await evaluate('window.desktopAPI.showSymbioteShortcut()');
     const warmBefore = diagnostics().events.filter(event => event.source === 'shortcut-open').length;
     phase('finder-warm-ready', { shortcut: status.path, pid: diagnostics().pid, warmBefore });
     await until(() => fs.existsSync(path.join(directory, 'finder-warm-done')), Boolean, 300000);

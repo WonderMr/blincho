@@ -148,5 +148,6 @@
   "release.1.8.15": "MCP lokal kini melaporkan statistik menurut hari, minggu kalender, atau rentang tanggal, dengan tanggal ketersediaan data dan celah yang terlihat. Posisi dan ukuran jendela dipertahankan setelah penguncian, mode tidur, dan istirahat.",
   "release.1.10.0": "Tampilan dan nama bergantung pada fitur yang diaktifkan. Pintasan desktop mengikuti konfigurasi Anda.",
   "release.1.10.1": "Tampilan dan nama bergantung pada fitur yang diaktifkan. Pintasan desktop mengikuti konfigurasi Anda. Lencana kamera pada ikon Blincho menunjukkan saat kamera digunakan dan menghilang setelah pengambilan gambar selesai.",
-  "release.1.10.2": "Pemeriksaan kamera otomatis dilewati saat panggilan terdeteksi dan dihentikan jika panggilan terdeteksi selama pemeriksaan."
+  "release.1.10.2": "Pemeriksaan kamera otomatis dilewati saat panggilan terdeteksi dan dihentikan jika panggilan terdeteksi selama pemeriksaan.",
+  "release.1.10.4": "Build desktop kini hanya menggunakan Rust dan Tauri. Alat build Electron lama telah dihapus. Migrasi riwayat yang ada tetap tersedia."
 }

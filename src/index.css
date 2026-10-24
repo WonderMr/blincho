@@ -156,7 +156,6 @@ input, select, textarea {
 }
 
 .mac-titlebar-drag {
-  -webkit-app-region: drag;
   height: 38px;
   flex-shrink: 0;
   width: 100%;
@@ -171,10 +170,6 @@ input, select, textarea {
 }
 
 html[data-platform="darwin"] .mac-titlebar-drag { display: flex; }
-
-.no-drag {
-  -webkit-app-region: no-drag;
-}
 
 .main-content {
   flex: 1;
@@ -1155,7 +1150,6 @@ input:checked + .slider:before {
 }
 body { user-select: text; }
 button, input, select, textarea { font: inherit; }
-button { -webkit-app-region: no-drag; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible {
   outline: 3px solid #bae6fd;
   outline-offset: 4px;

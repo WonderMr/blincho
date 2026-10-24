@@ -7,14 +7,12 @@ const { createHash } = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const library = import('../scripts/release-lib.mjs');
 const feeds = import('../scripts/update-feed.mjs');
-const packaging = import('../scripts/update-package.mjs');
 const github = import('../scripts/release-github.mjs');
 const version = '1.4.0';
 const hash = (bytes, algorithm = 'sha256', encoding = 'hex') => createHash(algorithm).update(bytes).digest(encoding);
 
 async function fixture(releaseVersion = version, signed = false, { legacy = false } = {}) {
   const lib = await library;
-  const { packageSupport } = await packaging;
   const names = lib.expectedArtifacts(releaseVersion, { legacy });
   const files = new Map(names.map(name => {
     const item = lib.describeArtifact(name, releaseVersion);
@@ -31,7 +29,7 @@ async function fixture(releaseVersion = version, signed = false, { legacy = fals
       const item = lib.describeArtifact(name, releaseVersion);
       const target = item.format === 'zip' ? 'zip' : item.format === 'exe' ? item.kind === 'installer' ? 'nsis' : 'portable' : item.format;
       if (lib.usesTauriPlatform(releaseVersion, platform)) return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: 'manual', signed: false, notarized: false, updaterConfig: false, bundleVerified: true };
-      const support = packageSupport(platform, arch, target, platform === 'darwin' && signed);
+      const support = { signed: platform === 'darwin' && signed, packageType: platform === 'darwin' && signed ? 'mac-signed' : target === 'nsis' ? 'nsis' : target === 'AppImage' ? 'appimage' : 'manual' };
       return { name, size: files.get(name).length, sha256: hash(files.get(name)), sha512: hash(files.get(name), 'sha512', 'base64'), packageType: support.packageType, signed: support.signed, notarized: support.signed, updaterConfig: true };
     }),
   })));
@@ -159,44 +157,6 @@ test('publisher strictly validates real published URLs without draft projection'
   });
 });
 
-test('mac signing is optional only when no inputs exist and fails closed for every incomplete set', async () => {
-  const { macSigningMode, SIGNING_INPUTS, verifyMacSignature } = await packaging;
-  assert.equal(macSigningMode({}), false);
-  const complete = Object.fromEntries(SIGNING_INPUTS.map(key => [key, 'fixture']));
-  complete.APPLE_TEAM_ID = 'A123456789';
-  assert.equal(macSigningMode(complete), true);
-  for (const key of SIGNING_INPUTS) {
-    assert.throws(() => macSigningMode({ ...complete, [key]: '' }), /Incomplete/);
-    assert.throws(() => macSigningMode({ [key]: 'fixture' }), /Incomplete/);
-  }
-  assert.throws(() => macSigningMode({ ...complete, BLINCHO_MAC_SIGNING_IDENTITY: '-' }), /ad-hoc/);
-  assert.throws(() => macSigningMode({ ...complete, APPLE_TEAM_ID: 'invalid' }), /team ID/);
-  const calls = [];
-  const run = (command, args) => { calls.push([command, args]); return { status: 0, stdout: 'Authority=Developer ID Application: Fixture\nTeamIdentifier=A123456789\nflags=0x10000(runtime)\n' }; };
-  verifyMacSignature('/test/Blincho.app', complete.APPLE_TEAM_ID, run);
-  assert.equal(calls.length, 4);
-  for (let failure = 0; failure < 4; failure++) {
-    let index = 0;
-    assert.throws(() => verifyMacSignature('/test/Blincho.app', complete.APPLE_TEAM_ID, (command, args) => index++ === failure ? { status: 1 } : run(command, args)), /verification failed/);
-  }
-  assert.throws(() => verifyMacSignature('/test/Blincho.app', complete.APPLE_TEAM_ID, () => ({ status: 0, stdout: 'Signature=adhoc\n' })), /Developer ID/);
-});
-
-test('package support distinguishes signed mac, NSIS, AppImage and manual archives', async () => {
-  const { packageSupport, builderArtifactName } = await packaging;
-  for (const arch of ['x64', 'arm64']) {
-    assert.equal(packageSupport('darwin', arch, 'zip', false).packageType, 'manual');
-    assert.equal(packageSupport('darwin', arch, 'zip', true).packageType, 'mac-signed');
-    assert.equal(packageSupport('win32', arch, 'nsis').packageType, 'nsis');
-    assert.equal(packageSupport('win32', arch, 'portable').packageType, 'manual');
-    assert.equal(packageSupport('linux', arch, 'AppImage').packageType, 'appimage');
-    assert.equal(packageSupport('linux', arch, 'tar.gz').packageType, 'manual');
-  }
-  assert.equal(builderArtifactName('Blincho-1.4.0-linux-x64.AppImage', 'linux', 'x64'), 'Blincho-1.4.0-linux-x86_64.AppImage');
-  assert.equal(builderArtifactName('Blincho-1.4.0-linux-x64.tar.gz', 'linux', 'x64'), 'Blincho-1.4.0-linux-x64.tar.gz');
-  assert.throws(() => packageSupport('win32', 'x64', 'nsis', true));
-});
-
 test('local gate checks both digest algorithms against bytes and requires all six metadata receipts', async () => {
   const lib = await library;
   const { files, receipts } = await fixture();
@@ -241,31 +201,6 @@ test('published receipts require canonical URLs, hashes and exact architecture c
   assert.throws(() => lib.createManifest([f.release], { ...f.options, receiptsByTag: new Map() }), /verified update receipts/);
   const tampered = structuredClone(f.release); tampered.assets[0].digest = `sha256:${'a'.repeat(64)}`;
   assert.throws(() => lib.createManifest([tampered], f.options), /digest/);
-});
-
-test('installed electron-updater 6.8.9 parses every native feed at its exact channel filename', async () => {
-  const { GenericProvider } = require('electron-updater/out/providers/GenericProvider');
-  const { createUpdateFeeds } = await feeds;
-  const f = await fixture(version, true);
-  const generated = createUpdateFeeds(f.manifest);
-  assert.equal(generated.length, 6);
-  const saved = process.env.TEST_UPDATER_ARCH;
-  try {
-    for (const feed of generated) {
-      const [, platform, arch, filename] = feed.path.split('/');
-      process.env.TEST_UPDATER_ARCH = arch;
-      const base = `https://blincho.app/updates/${platform}/${arch}/`;
-      const provider = new GenericProvider({ provider: 'generic', url: base }, {}, { platform, executor: {} });
-      provider.httpRequest = async url => { assert.equal(url.href, base + filename); return JSON.stringify(feed.info); };
-      const info = await provider.getLatestVersion();
-      const resolved = provider.resolveFiles(info);
-      assert.equal(resolved.length, 1);
-      assert.equal(resolved[0].url.href, feed.info.files[0].url);
-      assert.ok(resolved[0].url.href.includes(`-${arch}`));
-      assert.equal(resolved[0].info.sha512, hash(f.files.get(resolved[0].url.pathname.split('/').at(-1)), 'sha512', 'base64'));
-      assert.ok(!resolved[0].url.href.endsWith('-portable.exe') && !resolved[0].url.href.endsWith('.tar.gz'));
-    }
-  } finally { if (saved === undefined) delete process.env.TEST_UPDATER_ARCH; else process.env.TEST_UPDATER_ARCH = saved; }
 });
 
 test('unsigned mac is manual, signing stays per asset and older retry cannot lower the feed version', async () => {
@@ -461,31 +396,6 @@ test('1.5.0 publication gate requires Tauri bundle verification and exact packag
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-
-test('real asar bundles retain target-specific support and reject missing or redirected updater config', async () => {
-  const { createPackage } = require('@electron/asar');
-  const { packageSupport, verifyPackagedSupport } = await packaging;
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-package-support-'));
-  const source = path.join(directory, 'source');
-  const resources = path.join(directory, 'resources');
-  const feed = 'https://blincho.app/updates/win32/x64/';
-  try {
-    await mkdir(path.join(source, 'electron'), { recursive: true });
-    await mkdir(resources);
-    for (const target of ['nsis', 'portable']) {
-      const support = packageSupport('win32', 'x64', target);
-      await writeFile(path.join(source, 'electron/update-support.json'), JSON.stringify(support));
-      await createPackage(source, path.join(resources, 'app.asar'));
-      await writeFile(path.join(resources, 'app-update.yml'), JSON.stringify({ provider: 'generic', url: feed }));
-      await verifyPackagedSupport(resources, support, feed);
-      await assert.rejects(verifyPackagedSupport(resources, { ...support, arch: 'arm64' }, feed), /support does not match/);
-      await writeFile(path.join(resources, 'app-update.yml'), JSON.stringify({ provider: 'generic', url: 'https://evil.example/' }));
-      await assert.rejects(verifyPackagedSupport(resources, support, feed), /canonical target/);
-      await rm(path.join(resources, 'app-update.yml'));
-      await assert.rejects(verifyPackagedSupport(resources, support, feed), /ENOENT/);
-    }
-  } finally { await rm(directory, { recursive: true, force: true }); }
-});
 
 test('feed writer creates isolated architecture paths and refuses a hashless manifest injection before writing', async () => {
   const { writeUpdateFeeds } = await feeds;

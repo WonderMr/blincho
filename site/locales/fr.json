@@ -148,5 +148,6 @@
   "release.1.8.15": "MCP local fournit désormais des statistiques par jour, semaine calendaire ou période, avec les dates des données disponibles et des lacunes visibles. La position et la taille de la fenêtre sont conservées après un verrouillage, une mise en veille et les pauses.",
   "release.1.10.0": "L’apparence et le nom dépendent des fonctionnalités activées. Le raccourci sur le bureau suit votre configuration.",
   "release.1.10.1": "L’apparence et le nom dépendent des fonctionnalités activées. Le raccourci sur le bureau suit votre configuration. Un badge caméra sur l’icône de Blincho indique quand l’application utilise la caméra et disparaît à la fin de la capture.",
-  "release.1.10.2": "Les vérifications automatiques par caméra sont ignorées pendant les appels détectés et s’arrêtent si un appel est détecté en cours de vérification."
+  "release.1.10.2": "Les vérifications automatiques par caméra sont ignorées pendant les appels détectés et s’arrêtent si un appel est détecté en cours de vérification.",
+  "release.1.10.4": "Les versions pour ordinateur utilisent désormais uniquement Rust et Tauri. Les anciens outils de compilation pour Electron ont été supprimés. La migration de l’historique existant reste disponible."
 }

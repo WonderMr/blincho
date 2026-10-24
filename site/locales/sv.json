@@ -148,5 +148,6 @@
   "release.1.8.15": "Lokal MCP rapporterar nu statistik per dag, kalendervecka eller datumintervall, med datum för tillgängliga uppgifter och synliga luckor. Fönstrets placering och storlek bevaras efter låsning, viloläge och pauser.",
   "release.1.10.0": "Utseendet och namnet beror på vilka funktioner som är aktiverade. Genvägen på skrivbordet följer din konfiguration.",
   "release.1.10.1": "Utseendet och namnet beror på vilka funktioner som är aktiverade. Genvägen på skrivbordet följer din konfiguration. En kameramarkering på Blinchos ikon visar när kameran används och försvinner när bildinsamlingen avslutas.",
-  "release.1.10.2": "Automatiska kamerakontroller hoppas över vid upptäckta samtal och avbryts om ett samtal upptäcks under kontrollen."
+  "release.1.10.2": "Automatiska kamerakontroller hoppas över vid upptäckta samtal och avbryts om ett samtal upptäcks under kontrollen.",
+  "release.1.10.4": "Skrivbordsversionerna använder nu endast Rust och Tauri. De gamla byggverktygen för Electron har tagits bort. Migrering av befintlig historik är fortfarande tillgänglig."
 }

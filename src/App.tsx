@@ -146,8 +146,8 @@ export const App: React.FC = () => {
     let retry: ReturnType<typeof setTimeout> | undefined;
     const apply = async () => {
       try {
-        await window.electronAPI?.setSymbioteBuild?.(symbioteBuild.mask);
-        if (!cancelled) await window.electronAPI?.syncSymbioteShortcut?.(symbioteBuild.mask, symbioteName);
+        await window.desktopAPI?.setSymbioteBuild?.(symbioteBuild.mask);
+        if (!cancelled) await window.desktopAPI?.syncSymbioteShortcut?.(symbioteBuild.mask, symbioteName);
       }
       catch (error) {
         console.warn('Blincho: Build icon update failed:', error);
@@ -203,9 +203,9 @@ export const App: React.FC = () => {
     }
   };
   const releaseDesktopBreak = () => {
-    sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(false));
-    sendDesktopCommand('setAlwaysOnTop', () => window.electronAPI?.setAlwaysOnTop?.(false));
-    sendDesktopCommand('setBreakFullscreen', () => window.electronAPI?.setBreakFullscreen?.(false));
+    sendDesktopCommand('setStrictLock', () => window.desktopAPI?.setStrictLock?.(false));
+    sendDesktopCommand('setAlwaysOnTop', () => window.desktopAPI?.setAlwaysOnTop?.(false));
+    sendDesktopCommand('setBreakFullscreen', () => window.desktopAPI?.setBreakFullscreen?.(false));
   };
   const restartWork = (seconds = settingsRef.current.workMinutes * 60) => {
     cameraAbortRef.current?.abort();
@@ -301,11 +301,11 @@ export const App: React.FC = () => {
         const sampledAt = Date.now();
         const sampledMonotonicAt = performance.now();
         const sampledBreakEventId = breakIdRef.current ?? pendingBreakRef.current?.eventId ?? null;
-        const systemPresenceRequired = hasSystemIdleDetection() || !!window.electronAPI?.isElectron;
+        const systemPresenceRequired = hasSystemIdleDetection() || !!window.desktopAPI?.isDesktop;
         const readPowerState = async () => {
           if (!systemPresenceRequired) return null;
           try {
-            const power = await Promise.resolve().then(() => window.electronAPI?.getPowerState?.());
+            const power = await Promise.resolve().then(() => window.desktopAPI?.getPowerState?.());
             if (power && typeof power.suspended === 'boolean' && typeof power.locked === 'boolean') return power;
             console.warn('Blincho: Invalid or unavailable power state; presence is unconfirmed.');
           } catch (error) {
@@ -372,7 +372,7 @@ export const App: React.FC = () => {
           setPresenceReason('idle', isIdle, Date.now() - Math.max(0, idle - threshold) * 1000);
         }
         if (session.reasons.has('unconfirmed') && idle < Math.min(threshold, 5)) setPresenceReason('unconfirmed', false);
-        // Electron visibility describes this app, not activity in other desktop apps.
+        // Desktop visibility describes this app, not activity in other desktop apps.
         if (!systemPresenceRequired) {
           const hidden = document.visibilityState === 'hidden';
           if (hidden !== session.reasons.has('hidden')) setPresenceReason('hidden', hidden);
@@ -403,9 +403,9 @@ export const App: React.FC = () => {
     setActiveBreakSeconds(settingsRef.current.breakSeconds);
     soundSynth.playZenBowl();
     setIsBreakActive(true);
-    sendDesktopCommand('setBreakFullscreen', () => window.electronAPI?.setBreakFullscreen?.(true));
-    sendDesktopCommand('bringToFront', () => window.electronAPI?.bringToFront?.({ alwaysOnTop: settingsRef.current.strictMode }));
-    sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(settingsRef.current.strictMode));
+    sendDesktopCommand('setBreakFullscreen', () => window.desktopAPI?.setBreakFullscreen?.(true));
+    sendDesktopCommand('bringToFront', () => window.desktopAPI?.bringToFront?.({ alwaysOnTop: settingsRef.current.strictMode }));
+    sendDesktopCommand('setStrictLock', () => window.desktopAPI?.setStrictLock?.(settingsRef.current.strictMode));
     sync();
   };
   const checkCameraAndLock = async (version: number, requireExpiry = false): Promise<boolean> => {
@@ -414,7 +414,7 @@ export const App: React.FC = () => {
     const isCurrent = () => mountedRef.current && version === session.version && session.counting &&
       (!requireExpiry || session.expiryPending) && !controller.signal.aborted &&
       !cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled;
-    if (!isCurrent() || !window.electronAPI?.lockComputer) return false;
+    if (!isCurrent() || !window.desktopAPI?.lockComputer) return false;
     cameraAbortRef.current?.abort();
     cameraAbortRef.current = controller;
     try {
@@ -453,7 +453,7 @@ export const App: React.FC = () => {
       // Defer locking whenever that bound could fall after capture started.
       if (idle === null || !Number.isFinite(idle) || idle < 0 || sampledAt - idle * 1000 > captureStartedAt) return false;
       if (!isCurrent()) return false;
-      if (await window.electronAPI.lockComputer()) {
+      if (await window.desktopAPI.lockComputer()) {
         if (mountedRef.current) {
           setPresenceReason('locked', true);
           setNoticeMessage("Камера не обнаружила человека. Компьютер заблокирован.");
@@ -596,7 +596,7 @@ export const App: React.FC = () => {
     }
     if (!updated.idleDetectionEnabled) setPresenceReason('idle', false);
     void samplePresence();
-    if (session.breakActive) sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(updated.strictMode));
+    if (session.breakActive) sendDesktopCommand('setStrictLock', () => window.desktopAPI?.setStrictLock?.(updated.strictMode));
     sync();
   };
   const handleClearMeetingHistory = async () => {
@@ -934,8 +934,8 @@ export const App: React.FC = () => {
     };
     void tick();
     const timer = setInterval(() => { void tick(); }, 1000);
-    const unsubscribeBreak = window.electronAPI?.onTriggerBreak?.(() => { void handlersRef.current.handleTriggerInstantBreak(); });
-    const unsubscribePower = window.electronAPI?.onPowerStateChange?.(state => {
+    const unsubscribeBreak = window.desktopAPI?.onTriggerBreak?.(() => { void handlersRef.current.handleTriggerInstantBreak(); });
+    const unsubscribePower = window.desktopAPI?.onPowerStateChange?.(state => {
       if (state === 'suspend') handlersRef.current.setPresenceReason('suspended', true);
       if (state === 'lock-screen') handlersRef.current.setPresenceReason('locked', true);
       if (state === 'resume') {
@@ -954,14 +954,14 @@ export const App: React.FC = () => {
       if (event.type === 'mousemove' && (event as MouseEvent).movementX === 0 && (event as MouseEvent).movementY === 0) return;
       cameraAbortRef.current?.abort();
       markPageActivity();
-      if (!hasSystemIdleDetection() && !window.electronAPI?.isElectron) {
+      if (!hasSystemIdleDetection() && !window.desktopAPI?.isDesktop) {
         handlersRef.current.setPresenceReason('idle', false);
         handlersRef.current.setPresenceReason('unconfirmed', false);
       }
       void handlersRef.current.samplePresence(true);
     };
     const visibility = () => {
-      if (!hasSystemIdleDetection() && !window.electronAPI?.isElectron) handlersRef.current.setPresenceReason('hidden', document.visibilityState === 'hidden');
+      if (!hasSystemIdleDetection() && !window.desktopAPI?.isDesktop) handlersRef.current.setPresenceReason('hidden', document.visibilityState === 'hidden');
       if (document.visibilityState === 'visible') { refreshStats(); void handlersRef.current.samplePresence(true); }
     };
     const focus = () => { refreshStats(); void handlersRef.current.samplePresence(true); };
@@ -1006,7 +1006,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* macOS Draggable Titlebar (for Electron desktop) */}
+      {/* macOS Draggable Titlebar (for native desktop) */}
       <div className="mac-titlebar-drag">
         <div style={{ marginLeft: 68, fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>{t("Blincho: Перерывы и комфорт при работе за экраном")}</div>
       </div>
