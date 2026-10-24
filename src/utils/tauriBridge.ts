@@ -44,10 +44,14 @@ let bridgeInitialization: Promise<void> | undefined;
 let historyRecovery: ReturnType<typeof createHistoryRecovery> | undefined;
 
 export class NativeTimerSession extends TimerSession {
+  /** Advance only the renderer timestamp; the native timer owns countdown progress. */
   advance(now: number): boolean { this.lastUpdated = now; return false; }
+  /** Discard renderer activity so native observations cannot be recorded twice. */
   drainActivity(): ActivitySpan[] { super.drainActivity(); return []; }
 }
+/** Report whether the Tauri runtime owns this page's timer. */
 export function hasNativeTimer(): boolean { return !!window.__TAURI__; }
+/** Subscribe to native snapshots and return the subscription cleanup. */
 export function subscribeNativeTimer(callback: (snapshot: NativeTimerSnapshot) => void): () => void {
   frames.add(callback); return () => frames.delete(callback);
 }
@@ -73,6 +77,7 @@ export function synchronizeNativeTimer(session: TimerSession, settings: AppSetti
     onConfigured?.(latest);
   }).catch(error => console.warn('Blincho: Native timer update failed:', error));
 }
+/** Read a fresh native snapshot after every previously queued timer command has settled. */
 export async function readNativeTimer(): Promise<NativeTimerSnapshot | null> {
   if (!window.__TAURI__) return null;
   await commandQueue;
@@ -101,6 +106,7 @@ export async function setNativeMeetingRemindersPaused(token: number, paused: boo
   commandQueue = action.then(snapshot => { latest = snapshot; }).catch(() => {});
   return action;
 }
+/** Queue native history deletion after settings changes, preserving its consent boundary. */
 export async function clearNativeMeetingHistory(): Promise<NativeTimerSnapshot | null> {
   if (!window.__TAURI__) return null;
   // Serialize with settings changes so a queued configuration cannot undo the boundary.
@@ -108,12 +114,14 @@ export async function clearNativeMeetingHistory(): Promise<NativeTimerSnapshot |
   commandQueue = cleared.then(snapshot => { latest = snapshot; }).catch(() => {});
   return cleared;
 }
+/** Install the desktop bridge once; allow another attempt after initialization fails. */
 export function initializeTauriBridge(): Promise<void> {
   if (!window.__TAURI__) return Promise.resolve();
   if (!bridgeInitialization) bridgeInitialization = installTauriBridge().catch(error => { bridgeInitialization = undefined; throw error; });
   return bridgeInitialization;
 }
 
+/** Recover permitted legacy history once for the current local storage profile. */
 export async function initializeTauriHistory(): Promise<void> {
   if (!window.__TAURI__) return;
   historyRecovery ??= createHistoryRecovery(localStorage, () => window.__TAURI__!.core.invoke('legacy_history'));

@@ -222,6 +222,9 @@ impl Timer {
         {
             return Err("Stale meeting break command".into());
         }
+        let clears_unclaimed_meeting_token = !input.meeting_enabled
+            && self.snapshot.meeting_resume_token.is_some()
+            && !self.snapshot.break_active;
         self.observe_activity(self.last_at, now, self.activity_state());
         if self
             .input
@@ -306,6 +309,9 @@ impl Timer {
             self.snapshot.meeting_warning_required = true;
         }
         if !input.meeting_enabled {
+            if clears_unclaimed_meeting_token {
+                self.snapshot.meeting_break_cancelled_epoch += 1;
+            }
             self.snapshot.meeting_reminders_paused = false;
             self.snapshot.meeting_resume_token = None;
             self.meeting_break_token = None;
@@ -844,6 +850,8 @@ impl Timer {
     /// meeting actions while preserving manual timer pause.
     fn finish_meeting(&mut self) {
         let was_paused = self.snapshot.meeting_reminders_paused;
+        let clears_unclaimed_meeting_token =
+            self.snapshot.meeting_resume_token.is_some() && !self.snapshot.break_active;
         let version = self.snapshot.version;
         // Reclaim only an already due meeting postponement, never a normal
         // work countdown or the independent manual timer pause.
@@ -856,6 +864,9 @@ impl Timer {
             input.remaining_ms = self.snapshot.remaining_ms;
             input.expiry_pending = self.snapshot.expiry_pending;
             input.meeting_break_token = None;
+        }
+        if clears_unclaimed_meeting_token {
+            self.snapshot.meeting_break_cancelled_epoch += 1;
         }
         self.snapshot.meeting_reminders_paused = false;
         self.snapshot.meeting_resume_token = None;
@@ -1022,6 +1033,9 @@ impl Timer {
         }
         if !paused && !self.snapshot.meeting_reminders_paused {
             // Dismissing the resumption control is not a postponement.
+            if !self.snapshot.break_active {
+                self.snapshot.meeting_break_cancelled_epoch += 1;
+            }
             self.snapshot.meeting_resume_token = None;
             self.meeting_break_token = None;
             self.snapshot.meeting_break_cancellable = false;
@@ -1285,6 +1299,59 @@ mod tests {
             manual.meeting_break_token = None;
             timer.configure(manual, 32003).unwrap();
             assert!(timer.strict(), "explicit manual breaks remain available");
+        }
+    }
+    /// Signal cancellation only when meeting-end, dismissal or disable clears an unclaimed token.
+    #[test]
+    fn every_unclaimed_meeting_token_invalidation_cancels_queued_breaks() {
+        for cause in 0..3 {
+            for claimed in [false, true] {
+                let mut timer = strict_warning_timer();
+                timer.rotate_meeting_action();
+                media_until(&mut timer, 2000, 32000, &media_status(Some(false)));
+                assert!(!timer.hold_for_meeting_warning(32000));
+                let token = timer.snapshot.meeting_resume_token.unwrap();
+                let mut queued = timer.input.clone().unwrap();
+                queued.version += 1;
+                queued.break_active = true;
+                queued.expiry_pending = false;
+                queued.meeting_break_token = Some(token);
+                if claimed {
+                    timer.configure(queued.clone(), 32000).unwrap();
+                }
+                match cause {
+                    0 => timer.finish_meeting(),
+                    1 => timer
+                        .set_meeting_reminders_paused(token, false, 32001)
+                        .unwrap(),
+                    _ => {
+                        let mut disabled = timer.input.clone().unwrap();
+                        disabled.meeting_enabled = false;
+                        disabled.version += 1;
+                        timer.configure(disabled, 32001).unwrap();
+                    }
+                }
+                assert!(timer.snapshot.meeting_resume_token.is_none());
+                assert_eq!(
+                    timer.snapshot.meeting_break_cancelled_epoch,
+                    u64::from(!claimed)
+                );
+                if !claimed {
+                    assert!(timer.configure(queued, 32002).is_err());
+                    assert!(!timer.snapshot.break_active);
+                } else {
+                    assert!(
+                        timer.snapshot.break_active,
+                        "an accepted break still completes natively"
+                    );
+                }
+                let cancelled = timer.snapshot.meeting_break_cancelled_epoch;
+                timer.finish_meeting();
+                assert_eq!(
+                    timer.snapshot.meeting_break_cancelled_epoch, cancelled,
+                    "clearing no token cannot repeat cancellation"
+                );
+            }
         }
     }
     /// Verify that media resumption immediately restores an already due break while preserving
