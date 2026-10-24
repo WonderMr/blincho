@@ -83,11 +83,11 @@ async function stop() {
       const canvas=document.createElement('canvas');canvas.width=320;canvas.height=240;
       const ctx=canvas.getContext('2d');const gradient=ctx.createLinearGradient(0,0,320,240);gradient.addColorStop(0,'#263342');gradient.addColorStop(1,'#a8bbc9');ctx.fillStyle=gradient;ctx.fillRect(0,0,320,240);
       const result=await detector.detect(canvas);if(!Array.isArray(result.detections))throw Error('Invalid real model result');
-      let lockRejected=false;try{await window.electronAPI.lockComputer()}catch(error){lockRejected=String(error).includes('test profile')}
+      let lockRejected=false;try{await window.desktopAPI.lockComputer()}catch(error){lockRejected=String(error).includes('test profile')}
       document.querySelector('.nav-settings-button').click();
       await new Promise(resolve=>setTimeout(resolve,100));
       const toggle=document.getElementById('camera-lock-enabled');
-      await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:true,detections:result.detections.length,webglRequests,cameraAPI:typeof navigator.mediaDevices?.getUserMedia==='function',lockAPI:typeof window.electronAPI.lockComputer==='function',lockRejected,defaultDisabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==true,toggleReady:!!toggle&&!toggle.checked&&!toggle.disabled}}});
+      await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:true,detections:result.detections.length,webglRequests,cameraAPI:typeof navigator.mediaDevices?.getUserMedia==='function',lockAPI:typeof window.desktopAPI.lockComputer==='function',lockRejected,defaultDisabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').cameraLockEnabled!==true,toggleReady:!!toggle&&!toggle.checked&&!toggle.disabled}}});
     }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraSmoke:{passed:false,error:String(error),stack:error?.stack,webglRequests,errors}}})}finally{prototypes.forEach((prototype,index)=>{prototype.getContext=originals[index]});console.error=originalError;detector?.close()}})()`);
     const probe = (await until(value => value.renderer?.cameraSmoke)).renderer.cameraSmoke;
     assert.equal(probe.passed, true, JSON.stringify(probe)); assert.equal(probe.webglRequests, 0); assert.equal(probe.cameraAPI, true); assert.equal(probe.lockAPI, true); assert.equal(probe.lockRejected, true); assert.equal(probe.defaultDisabled, true); assert.equal(probe.toggleReady, true);

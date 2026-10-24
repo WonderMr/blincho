@@ -30,7 +30,7 @@ test('theme cycles system, light, dark and system; storage failure does not brea
  r.select.value='ar';r.events.language();assert.deepEqual(r.calls,['/ar/?test=1#download']);
 });
 test('every app locale can be detected, selected and restored on the website',()=>{
- for(const language of Object.keys(require('../electron/locales.cjs').locales)){
+ for(const language of Object.keys(require('../src-tauri/locales.json'))){
   assert.deepEqual(run({language:`${language}-XX`}).calls,[`/${language}/?test=1#download`]);
   const page=run({pathname:'/en/'});
   page.select.value=language;page.events.language();

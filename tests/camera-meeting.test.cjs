@@ -17,13 +17,13 @@ test('camera call: post-break capture skips active or unknown meetings independe
     for (const status of [{ supported: true, inMeeting: true }, { supported: false, inMeeting: false }]) {
       const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true, meetingDetectionEnabled });
       let cameras = 0;
-      h.electronAPI.lockComputer = async () => false;
+      h.desktopAPI.lockComputer = async () => false;
       h.setCameraCheck(async () => { cameras++; return 'present'; });
       try {
         await h.advance(1000);
         assert(h.active.has('BreakOverlay'));
         const elapsed = h.captured.BreakOverlay.onElapsed;
-        h.electronAPI.checkMeetingActive = async () => status;
+        h.desktopAPI.checkMeetingActive = async () => status;
         await h.advance(20_000);
         await elapsed(h.monotonicNow);
         await h.settle();
@@ -36,10 +36,10 @@ test('camera call: post-break capture skips active or unknown meetings independe
 test('camera call: input during the pre-capture meeting probe prevents late acquisition', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true });
   let release, cameras = 0;
-  h.electronAPI.lockComputer = async () => false;
+  h.desktopAPI.lockComputer = async () => false;
   h.setCameraCheck(async () => { cameras++; return 'present'; });
   try {
-    h.electronAPI.checkMeetingActive = () => new Promise(resolve => { release = resolve; });
+    h.desktopAPI.checkMeetingActive = () => new Promise(resolve => { release = resolve; });
     await finishBreak(h);
     assert(release, 'camera waits for a fresh meeting probe');
     assert.equal(cameras, 0);
@@ -53,13 +53,13 @@ test('camera call: input during the pre-capture meeting probe prevents late acqu
 test('camera call: legacy call observation aborts post-break capture and prevents locking', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 60, cameraLockEnabled: true, meetingDetectionEnabled: false });
   let signal, release, locks = 0;
-  h.electronAPI.lockComputer = async () => { locks++; return true; };
+  h.desktopAPI.lockComputer = async () => { locks++; return true; };
   h.setCameraCheck(value => { signal = value; return new Promise(resolve => { release = resolve; }); });
   try {
     await h.call('TimerWidget', 'onTriggerInstantBreak');
     await finishBreak(h);
     assert(signal);
-    h.electronAPI.checkMeetingActive = async () => ({ supported: true, inMeeting: true });
+    h.desktopAPI.checkMeetingActive = async () => ({ supported: true, inMeeting: true });
     await h.advance(1000);
     assert.equal(signal.aborted, true);
     release('absent');
@@ -71,9 +71,9 @@ test('camera call: legacy call observation aborts post-break capture and prevent
 test('camera call: final meeting check prevents locking after a completed observation', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true });
   let locks = 0;
-  h.electronAPI.lockComputer = async () => { locks++; return true; };
+  h.desktopAPI.lockComputer = async () => { locks++; return true; };
   h.setCameraCheck(async () => {
-    h.electronAPI.checkMeetingActive = async () => ({ supported: true, inMeeting: true });
+    h.desktopAPI.checkMeetingActive = async () => ({ supported: true, inMeeting: true });
     return 'absent';
   });
   try {
@@ -158,8 +158,8 @@ test('camera call: same-tick native evidence gates post-break acquisition', asyn
     } } };
     const h = createHarness({ cameraLockEnabled: true });
     h.setCameraCheck(async () => { checks++; return 'present'; });
-    h.electronAPI.lockComputer = async () => false;
-    h.electronAPI.checkMeetingActive = async () => { armed = true; return { supported: true, inMeeting: false }; };
+    h.desktopAPI.lockComputer = async () => false;
+    h.desktopAPI.checkMeetingActive = async () => { armed = true; return { supported: true, inMeeting: false }; };
     try {
       await h.settle();
       await h.call('TimerWidget', 'onTriggerInstantBreak');
@@ -177,11 +177,11 @@ test('camera call: same-tick native evidence gates post-break acquisition', asyn
 test('camera call: system input during the final meeting probe prevents locking', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 60, cameraLockEnabled: true });
   let probes = 0, release, locks = 0;
-  h.electronAPI.checkMeetingActive = async () => {
+  h.desktopAPI.checkMeetingActive = async () => {
     if (++probes === 2) return new Promise(resolve => { release = resolve; });
     return { supported: true, inMeeting: false };
   };
-  h.electronAPI.lockComputer = async () => { locks++; return true; };
+  h.desktopAPI.lockComputer = async () => { locks++; return true; };
   h.setCameraCheck(async () => 'absent');
   try {
     h.setIdle(30);

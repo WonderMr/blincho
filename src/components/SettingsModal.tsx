@@ -76,8 +76,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdate
   updateSettingsRef.current = onUpdateSettings;
   const cameraPendingChangeRef = useRef(onCameraAccessPendingChange);
   cameraPendingChangeRef.current = onCameraAccessPendingChange;
-  const nativeApi = window.electronAPI as (NonNullable<Window['electronAPI']> & { meetingDetectionSupported?: boolean; lockComputer?: () => Promise<boolean> }) | undefined;
-  const isNative = nativeApi?.isElectron === true;
+  const nativeApi = window.desktopAPI as (NonNullable<Window['desktopAPI']> & { meetingDetectionSupported?: boolean; lockComputer?: () => Promise<boolean> }) | undefined;
+  const isNative = nativeApi?.isDesktop === true;
   const meetingSupported = isNative && nativeApi?.meetingDetectionSupported === true;
   const cameraAccessSupported = typeof nativeApi?.lockComputer === 'function' && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
   const cameraLockSupported = cameraAccessSupported && meetingSupported;

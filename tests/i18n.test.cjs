@@ -3,7 +3,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { EventEmitter } = require('node:events');
 const { transformSync } = require('rolldown/utils');
 const repo = path.resolve(__dirname, '..');
 const STORAGE_KEY = 'blincho-language-v1';
@@ -16,7 +15,7 @@ function runtimeHarness({ languages = [], language = '', storage = new Map(), st
       setItem(key, value) { if (storageError) throw Error('Storage denied'); storage.set(key, value); },
     },
     addEventListener(name, listener) { events.set(name, listener); },
-    ...(bridge ? { electronAPI: { getPreferredLanguages: bridge, setLocale: value => { nativeUpdates.push(value); return Promise.resolve(); } } } : {}),
+    ...(bridge ? { desktopAPI: { getPreferredLanguages: bridge, setLocale: value => { nativeUpdates.push(value); return Promise.resolve(); } } } : {}),
   };
   const navigator = { languages, language };
   const document = { documentElement: {} };
@@ -103,7 +102,7 @@ test('suggestion acknowledgement publishes even if effective locale stays unchan
 });
 
 test('all thirty locales persist, restore direction and synchronize with native menus', async () => {
-  const { locales, resolveLocale } = require('../electron/locales.cjs');
+  const locales = require('../src-tauri/locales.json');
   const initial = runtimeHarness();
   assert.deepEqual(Array.from(initial.runtime.SUPPORTED_LANGUAGES, item => item.code).sort(), Object.keys(locales).sort());
   for (const language of initial.runtime.SUPPORTED_LANGUAGES) {
@@ -116,7 +115,6 @@ test('all thirty locales persist, restore direction and synchronize with native 
     assert.equal(h.nativeUpdates.at(-1), language.code);
     assert.equal(runtimeHarness({ languages: ['en'], storage }).runtime.getLocale(), language.code);
     assert.equal(h.runtime.resolveLocale([language.locale]), language.code);
-    assert.equal(resolveLocale([language.locale]), language.code);
   }
 });
 
@@ -178,73 +176,6 @@ test('browser language and cross-window storage changes notify live subscribers'
   assert.equal(h.runtime.formatNumber(1234.5), new Intl.NumberFormat('zh-CN').format(1234.5));
   assert.equal(h.runtime.formatDate(0, { timeZone: 'UTC', year: 'numeric' }), new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', year: 'numeric' }).format(0));
 });
-
-async function nativeHarness(languages = ['unsupported', 'es-MX']) {
-  const handlers = {}, calls = [], paths = { appData: '/virtual', userData: '/virtual/myeyes' };
-  const app = new EventEmitter();
-  Object.assign(app, { getPath: key => paths[key], setPath: (key, value) => { paths[key] = value; }, setName() {},
-    requestSingleInstanceLock: () => true, getAppPath: () => repo, getPreferredSystemLanguages: () => languages,
-    whenReady: () => Promise.resolve(), quit() {}, isPackaged: true });
-  let window, trayMenu, applicationMenu;
-  function BrowserWindow(options) {
-    window = new EventEmitter(); window.options = options; window.webContents = new EventEmitter();
-    window.webContents.mainFrame = {}; window.webContents.isLoadingMainFrame = () => false; window.webContents.send = (...args) => calls.push(args);
-    Object.assign(window, { isDestroyed: () => false, isVisible: () => true, isFullScreen: () => false, isAlwaysOnTop: () => false,
-      isMinimized: () => false, loadFile() {}, setTitle: value => calls.push(['title', value]), show() {}, focus() {} });
-    return window;
-  }
-  function Tray() { this.setToolTip = value => calls.push(['tooltip', value]); this.setContextMenu = value => { trayMenu = value; }; }
-  const electron = { app, BrowserWindow, Tray, ipcMain: { on: (key, fn) => { handlers[key] = fn; }, handle: (key, fn) => { handlers[key] = fn; } },
-    Menu: { buildFromTemplate: value => value, setApplicationMenu: value => { applicationMenu = value; } },
-    nativeImage: { createFromPath: () => ({ isEmpty: () => false, resize() { return this; }, setTemplateImage() {} }) }, powerMonitor: new EventEmitter(), Notification: { isSupported: () => false } };
-  vm.runInNewContext(fs.readFileSync(path.join(repo, 'electron/main.cjs'), 'utf8'), {
-    require: name => name === 'electron' ? electron : name === 'fs' ? { mkdirSync() {}, writeFileSync() {}, renameSync() {} } :
-      name.startsWith('./') ? require(path.join(repo, 'electron', name)) : require(name),
-    process: { platform: 'darwin', argv: [], env: {} }, __dirname: path.join(repo, 'electron'), console,
-  });
-  await Promise.resolve();
-  return { handlers, calls, window, paths, get trayMenu() { return trayMenu; }, get applicationMenu() { return applicationMenu; },
-    event: { sender: window.webContents, senderFrame: window.webContents.mainFrame } };
-}
-
-test('native locales are complete and IPC only accepts main-frame canonical locale updates', async () => {
-  const { locales, isLocale } = require('../electron/locales.cjs');
-  assert.equal(Object.keys(locales).length, 30);
-  for (const dictionary of Object.values(locales)) {
-    assert.deepEqual(Object.keys(dictionary), Object.keys(locales.en));
-    assert(Object.values(dictionary).every(value => typeof value === 'string' && value.length > 0));
-    assert(Object.values(dictionary).every(value => !/[\u2014\u2015]|\s\u2013\s/.test(value)));
-  }
-  assert.equal(isLocale('__proto__'), false);
-  const h = await nativeHarness();
-  assert.equal(h.window.options.title, locales.es.title);
-  assert.equal(h.trayMenu[0].label, locales.es.show);
-  assert.equal(h.applicationMenu[1].label, locales.es.edit);
-  assert.deepEqual(Array.from(h.handlers['get-preferred-languages'](h.event)), ['unsupported', 'es-MX']);
-  for (const event of [{}, { sender: h.window.webContents, senderFrame: {} }, { sender: {}, senderFrame: h.window.webContents.mainFrame }]) {
-    assert.throws(() => h.handlers['set-locale'](event, 'ar'), /main renderer/);
-    assert.throws(() => h.handlers['get-preferred-languages'](event), /main renderer/);
-  }
-  for (const code of ['__proto__', 'es-MX', 'xx', null, { locale: 'ar' }]) assert.throws(() => h.handlers['set-locale'](h.event, code), /Unsupported/);
-  h.handlers['set-locale'](h.event, 'ar');
-  assert.equal(h.trayMenu[0].label, locales.ar.show);
-  assert.equal(h.applicationMenu[1].label, locales.ar.edit);
-  assert(h.calls.some(([key, value]) => key === 'title' && value === locales.ar.title));
-  assert.equal(h.paths.userData.replaceAll('\\','/'), '/virtual/myeyes');
-  assert.equal(h.paths.sessionData.replaceAll('\\','/'), '/virtual/myeyes');
-});
-
-test('preload exposes only the narrow preferred-language and locale commands', async () => {
-  const invocations = []; let bridge;
-  vm.runInNewContext(fs.readFileSync(path.join(repo, 'electron/preload.cjs'), 'utf8'), {
-    require: () => ({ contextBridge: { exposeInMainWorld: (_name, value) => { bridge = value; } },
-      ipcRenderer: { invoke: (...args) => { invocations.push(args); return Promise.resolve(); } } }),
-    process: { platform: 'darwin' }, window: { addEventListener() {} },
-  });
-  await bridge.getPreferredLanguages(); await bridge.setLocale('fr');
-  assert.deepEqual(invocations, [['get-preferred-languages'], ['set-locale', 'fr']]);
-});
-
 
 test('translated numeric values use the chosen locale and date-only history keeps its local day', () => {
   const { runtime } = runtimeHarness({ languages: ['ar'] });

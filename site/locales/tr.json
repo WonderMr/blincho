@@ -148,5 +148,6 @@
   "release.1.8.15": "Yerel MCP artık gün, takvim haftası veya tarih aralığına göre istatistik sunar; verilerin bulunduğu tarihler ve boşluklar gösterilir. Kilit, uyku ve molalardan sonra pencerenin konumu ve boyutu korunur.",
   "release.1.10.0": "Görünüm ve ad, etkin özelliklere göre değişir. Masaüstü kısayolu yapılandırmanıza göre değişir.",
   "release.1.10.1": "Görünüm ve ad, etkin özelliklere göre değişir. Masaüstü kısayolu yapılandırmanıza göre değişir. Blincho kamerayı kullanırken tepsi simgesinde kamera işareti görünür ve yakalama bitince kaybolur.",
-  "release.1.10.2": "Otomatik kamera kontrolleri algılanan aramalar sırasında atlanır ve kontrol sırasında bir arama algılanırsa durdurulur."
+  "release.1.10.2": "Otomatik kamera kontrolleri algılanan aramalar sırasında atlanır ve kontrol sırasında bir arama algılanırsa durdurulur.",
+  "release.1.10.4": "Masaüstü derlemeleri artık yalnızca Rust ve Tauri kullanıyor. Eski Electron derleme araçları kaldırıldı. Mevcut geçmişi taşıma özelliği kullanılabilir olmaya devam ediyor."
 }

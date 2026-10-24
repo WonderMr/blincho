@@ -101,7 +101,7 @@ test('unsigned macOS settings describe notifications and never promise installat
 test('unsigned macOS opt-out persists through the bridge and remount while manual actions remain available', async () => {
   let storedState={...unsignedMac},checked=0,downloaded=0,opened=0;
   const policies=[];
-  window.electronAPI={
+  window.desktopAPI={
     getUpdateState:async()=>({...storedState}),
     setUpdatePolicy:async policy=>{policies.push(policy);storedState={...storedState,policy};return {...storedState};},
     checkForUpdates:async()=>{checked++;storedState={...storedState,manualCheck:true};return {...storedState};},
@@ -122,18 +122,18 @@ test('unsigned macOS opt-out persists through the bridge and remount while manua
     h.click('Проверить обновления');await settle();h.click('Скачать с сайта');await settle();
     assert.equal(checked,1);assert.equal(opened,1);assert.equal(downloaded,0);assert.equal(storedState.policy,'off');
     h.render({settings:false});assert.equal(h.host.textContent,'');
-  } finally {h?.close();window.electronAPI=undefined;}
+  } finally {h?.close();window.desktopAPI=undefined;}
 });
 
 test('update hook ignores stale initial and command responses after newer push events and cleans subscription', async () => {
   let resolveInitial, resolveCheck, listener, removed=0,latest;
-  window.electronAPI={getUpdateState:()=>new Promise(resolve=>resolveInitial=resolve),onUpdateState:callback=>{listener=callback;return()=>removed++;},checkForUpdates:()=>new Promise(resolve=>resolveCheck=resolve)};
+  window.desktopAPI={getUpdateState:()=>new Promise(resolve=>resolveInitial=resolve),onUpdateState:callback=>{listener=callback;return()=>removed++;},checkForUpdates:()=>new Promise(resolve=>resolveCheck=resolve)};
   function Capture(){latest=useUpdates();return null;}
   const h=harness(Capture,{});
   try {
     await settle();ReactDOM.flushSync(()=>listener({...base,policy:'off'}));resolveInitial({...base,policy:'auto'});await settle();assert.equal(latest.state.policy,'off');
     let command;ReactDOM.flushSync(()=>command=latest.check());await settle();
     ReactDOM.flushSync(()=>listener({...base,status:'ready',installOnQuit:true}));resolveCheck({...base,status:'checking'});await command;await settle();assert.equal(latest.state.status,'ready');assert.equal(latest.pending,false);
-  } finally {h.close();window.electronAPI=undefined;}
+  } finally {h.close();window.desktopAPI=undefined;}
   assert.equal(removed,1);
 });

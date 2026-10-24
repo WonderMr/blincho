@@ -245,11 +245,11 @@ test('future time is clipped and the week excludes older records without inflati
 test('detector preserves boolean-only responses and sanitizes optional applications for active and stopped calls', async () => {
   const previous = global.window;
   try {
-    global.window = { electronAPI: { checkMeetingActive: async () => ({ inMeeting: true, supported: true }) } };
+    global.window = { desktopAPI: { checkMeetingActive: async () => ({ inMeeting: true, supported: true }) } };
     assert.deepEqual(await detector.detectActiveMeeting(), { inMeeting: true, supported: true });
-    window.electronAPI.checkMeetingActive = async () => ({ inMeeting: true, applications: ['Zoom', 'private title'] });
+    window.desktopAPI.checkMeetingActive = async () => ({ inMeeting: true, applications: ['Zoom', 'private title'] });
     assert.deepEqual((await detector.detectActiveMeeting()).applications, ['Zoom', 'unknown']);
-    window.electronAPI.checkMeetingActive = async () => ({ inMeeting: false, applications: ['Zoom'] });
+    window.desktopAPI.checkMeetingActive = async () => ({ inMeeting: false, applications: ['Zoom'] });
     assert.deepEqual((await detector.detectActiveMeeting()).applications, []);
   } finally { if (previous === undefined) delete global.window; else global.window = previous; }
 });

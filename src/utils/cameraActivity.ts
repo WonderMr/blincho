@@ -46,7 +46,7 @@ export function createCameraActivityReporter(report: (active: boolean) => Promis
 }
 
 const activity = createCameraActivityReporter(active =>
-  typeof window === 'undefined' ? undefined : window.electronAPI?.setCameraActivity?.(active, t('Камера Blincho активна')));
+  typeof window === 'undefined' ? undefined : window.desktopAPI?.setCameraActivity?.(active, t('Камера Blincho активна')));
 export const trackCameraStream = activity.trackStream;
 subscribeLanguage(activity.refresh);
 if (typeof window !== 'undefined') window.addEventListener('pagehide', activity.stopAll);

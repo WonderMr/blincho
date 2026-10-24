@@ -5,7 +5,7 @@ const { createHarness } = require('./app.test.cjs');
 function recordPresentation(h) {
   const calls = [];
   for (const name of ['setBreakFullscreen', 'bringToFront', 'setStrictLock']) {
-    h.electronAPI[name] = value => calls.push([name, value]);
+    h.desktopAPI[name] = value => calls.push([name, value]);
   }
   return calls;
 }
@@ -15,7 +15,7 @@ test('active calls repeatedly postpone strict expiry, then present a strict brea
   try {
     let inMeeting = true;
     let probes = 0;
-    h.electronAPI.checkMeetingActive = async () => { probes++; return { inMeeting, supported: true }; };
+    h.desktopAPI.checkMeetingActive = async () => { probes++; return { inMeeting, supported: true }; };
     const presentation = recordPresentation(h);
     await h.settle();
     await h.advance(4000);
@@ -46,7 +46,7 @@ test('disabled meeting postponement still presents a strict break during a call'
   const h = createHarness({ timerPreset: 'custom', workMinutes: 0.05, strictMode: true, meetingDetectionEnabled: false });
   try {
     let probes = 0;
-    h.electronAPI.checkMeetingActive = async () => { probes++; return { inMeeting: true, supported: true }; };
+    h.desktopAPI.checkMeetingActive = async () => { probes++; return { inMeeting: true, supported: true }; };
     const presentation = recordPresentation(h);
     await h.settle();
     await h.advance(4000);
@@ -60,7 +60,7 @@ test('disabling postponement while a strict expiry probe is pending ignores the 
   const h = createHarness({ timerPreset: 'custom', workMinutes: 0.05, strictMode: true, meetingDetectionEnabled: true });
   try {
     let resolveMeeting;
-    h.electronAPI.checkMeetingActive = () => new Promise(resolve => { resolveMeeting = resolve; });
+    h.desktopAPI.checkMeetingActive = () => new Promise(resolve => { resolveMeeting = resolve; });
     const presentation = recordPresentation(h);
     await h.settle();
     await h.advance(3000);
@@ -80,7 +80,7 @@ test('stale active meeting results cannot postpone a reset or absent strict sess
     const h = createHarness({ timerPreset: 'custom', workMinutes: 0.05, strictMode: true, meetingDetectionEnabled: true });
     try {
       let resolveMeeting;
-      h.electronAPI.checkMeetingActive = () => new Promise(resolve => { resolveMeeting = resolve; });
+      h.desktopAPI.checkMeetingActive = () => new Promise(resolve => { resolveMeeting = resolve; });
       const presentation = recordPresentation(h);
       await h.settle();
       await h.advance(3000);

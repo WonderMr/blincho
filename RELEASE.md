@@ -1,6 +1,6 @@
 # Desktop releases and update feeds
 
-The release pipeline builds native macOS, Windows and Linux packages for x64 and arm64. All six targets use Rust/Tauri from version 1.6.0. Historical versions 1.5.0 through 1.5.3 used Tauri on macOS and Electron on Windows and Linux. Older releases used Electron. `com.myeyes.app` remains the application ID. The package version, npm lockfile, Cargo package version, Tauri configuration and `vX.Y.Z` tag must match. Curated release notes come from that version's `CHANGELOG.md` section.
+The release pipeline builds native macOS, Windows and Linux packages for x64 and arm64. All six targets use Rust/Tauri from version 1.6.0. Historical versions 1.5.0 through 1.5.3 used Tauri on macOS and Electron on Windows and Linux. Older releases used Electron. The current source tree only builds Tauri packages; historical receipts and feeds remain readable. `com.myeyes.app` remains the application ID. The package version, npm lockfile, Cargo package version, Tauri configuration and `vX.Y.Z` tag must match. Curated release notes come from that version's `CHANGELOG.md` section.
 
 The publication jobs also launch the exact Windows portable executable, Linux AppImage and extracted macOS archive in isolated profiles before uploading them. These checks verify real packaged WebView startup, history import, hidden timer progression, break expiry and persistence after restart. They still model idle and unlocked presence; physical lock/sleep and notification display remain separate checks.
 
@@ -99,7 +99,7 @@ Each feed selects the highest compatible verified Electron release for its own p
 | Linux x64 | `/updates/linux/x64/latest-linux.yml` |
 | Linux arm64 | `/updates/linux/arm64/latest-linux-arm64.yml` |
 
-These filenames match the pinned electron-updater 6.8.9 parser. JSON feed documents are accepted by its YAML parser and carry the exact architecture's URL, size and SHA-512. No blockmap is required or advertised. Keeping these compatible feeds avoids offering a Tauri package to an installed Electron updater. Migration to Tauri is a manual installation.
+These filenames preserve compatibility with the electron-updater 6.8.9 parser shipped in historical releases. JSON feed documents are accepted by its YAML parser and carry the exact architecture's URL, size and SHA-512. No blockmap is required or advertised. Keeping these compatible feeds avoids offering a Tauri package to an installed Electron updater. Migration to Tauri is a manual installation.
 
 ## Local validation
 
@@ -110,6 +110,6 @@ npm run build
 node site/build.mjs
 ```
 
-Release tests use synthetic executable/package bytes, real archive creation, receipt hashing, and the installed Electron feed parser. They cover all architectures, native build command selection, PE/ELF and metadata failures, payload tampering, complete Debian/RPM receipt and checksum coverage, historical feed fallback, fourteen canonical website downloads, signing labels and CI dependencies. Tauri bundling, installer extraction and AppImage extraction are stubbed. Native installer and launch checks on Windows/Linux and real six-runner builds remain required before publishing; local tests cannot establish those outcomes.
+Release tests use synthetic executable/package bytes, real archive creation, receipt hashing, and historical feed schema checks. They cover all architectures, native build command selection, PE/ELF and metadata failures, payload tampering, complete Debian/RPM receipt and checksum coverage, historical feed fallback, fourteen canonical website downloads, signing labels and CI dependencies. Tauri bundling, installer extraction and AppImage extraction are stubbed. Native installer and launch checks on Windows/Linux and real six-runner builds remain required before publishing; local tests cannot establish those outcomes.
 
 The manifest command reads real published releases and can use `GH_TOKEN` for read-only GitHub requests. Never commit credentials. Network, schema and digest failures stop generation.

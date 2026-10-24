@@ -173,10 +173,10 @@ test('synchronous and asynchronous native failures are reported without escaping
   }
 });
 
-test('bridge installs free-area drag only inside Tauri initialization and preserves legacy Electron CSS', () => {
+test('bridge installs free-area drag only inside Tauri initialization', () => {
   const bridge = fs.readFileSync(path.join(repo, 'src/utils/tauriBridge.ts'), 'utf8');
-  assert.match(bridge, /if \(!window\.__TAURI__\) \{ scheduleLegacyHistoryExport\(\); return Promise\.resolve\(\); \}/);
+  assert.match(bridge, /if \(!window\.__TAURI__\) return Promise\.resolve\(\);/);
   assert.match(bridge, /installWindowDrag\(document, \(\) => api\.window\.getCurrentWindow\(\)\.startDragging\(\)\)/);
   const css = fs.readFileSync(path.join(repo, 'src/index.css'), 'utf8');
-  assert.match(css, /\.mac-titlebar-drag\s*\{\s*-webkit-app-region: drag;/);
+  assert.doesNotMatch(css, /-webkit-app-region/);
 });

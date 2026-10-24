@@ -1,12 +1,12 @@
 export interface SymbioteShortcutStatus { supported: boolean; exists: boolean; path?: string | null }
-// Cross-platform Notification Dispatcher (Electron IPC & Web Notifications)
+// Cross-platform Notification Dispatcher (Tauri commands & Web Notifications)
 import type { UpdateBridge } from './updates';
 import type { LocalMcpBridge } from './localMcp';
 import { getCurrentSymbioteIconPath } from './symbioteIcons';
 
 declare global {
   interface Window {
-    electronAPI?: UpdateBridge & LocalMcpBridge & {
+    desktopAPI?: UpdateBridge & LocalMcpBridge & {
       requestNotificationPermission?: () => Promise<boolean>;
       showNotification: (title: string, body: string) => void;
       flashWindow: () => void;
@@ -28,20 +28,19 @@ declare global {
       setStrictLock?: (flag: boolean) => void;
       onPowerStateChange?: (callback: (state: 'suspend' | 'resume' | 'lock-screen' | 'unlock-screen') => void) => (() => void);
       onTriggerBreak?: (callback: () => void) => (() => void);
-      isElectron: boolean;
+      isDesktop: boolean;
       platform?: string;
       getPreferredLanguages?: () => Promise<string[]>;
       setLocale?: (locale: string) => Promise<void>;
-      exportLegacyHistory?: (entries: Record<string, string>) => Promise<{ exportedAt: string; entryCount: number }>;
     };
   }
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (window.electronAPI?.requestNotificationPermission) {
-    try { return await window.electronAPI.requestNotificationPermission(); } catch { return false; }
+  if (window.desktopAPI?.requestNotificationPermission) {
+    try { return await window.desktopAPI.requestNotificationPermission(); } catch { return false; }
   }
-  if (window.electronAPI?.isElectron) {
+  if (window.desktopAPI?.isDesktop) {
     return true;
   }
   if (!('Notification' in window)) {
@@ -58,14 +57,14 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 export function showEyeBreakNotification(title: string, body: string): void {
-  // Try Electron IPC first
-  if (window.electronAPI?.showNotification) {
+  // Use native notifications when running on desktop
+  if (window.desktopAPI?.showNotification) {
     const dispatch = (action: string, operation: () => unknown) => {
       try { Promise.resolve(operation()).catch(error => console.warn(`Blincho: ${action} failed:`, error)); }
       catch (error) { console.warn(`Blincho: ${action} failed:`, error); }
     };
-    dispatch('show notification', () => window.electronAPI?.showNotification(title, body));
-    dispatch('flash notification window', () => window.electronAPI?.flashWindow());
+    dispatch('show notification', () => window.desktopAPI?.showNotification(title, body));
+    dispatch('flash notification window', () => window.desktopAPI?.flashWindow());
     return;
   }
 

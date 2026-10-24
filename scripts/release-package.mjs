@@ -1,9 +1,8 @@
 import { readFile, writeFile, mkdir, copyFile, stat, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
-import { assertVersionMatch, artifactNames, expectedArtifacts, describeArtifact, hashFile, receiptName, validateReceipt, usesTauriMac, usesTauriDesktop } from './release-lib.mjs';
-import { packageSupport, builderArtifactName, verifyPackagedSupport, verifyTauriMacBundle } from './update-package.mjs';
+import { assertVersionMatch, artifactNames, hashFile, receiptName, validateReceipt, usesTauriMac, usesTauriDesktop } from './release-lib.mjs';
+import { verifyTauriMacBundle } from './update-package.mjs';
 import { packageTauriDesktop } from './bundle-tauri-desktop.mjs';
 
 const [platform, architecture] = process.argv.slice(2);
@@ -12,10 +11,9 @@ if (platform !== nativePlatform || architecture !== process.arch || !['arm64', '
   throw new Error(`Native packaging requires ${platform}/${architecture}, got ${nativePlatform}/${process.arch}`);
 }
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
-if (packageJson.build.appId !== 'com.myeyes.app') throw new Error('Application identity must remain com.myeyes.app');
 const version = assertVersionMatch(process.env.RELEASE_TAG, packageJson, JSON.parse(await readFile('package-lock.json', 'utf8')));
 await mkdir('release-upload', { recursive: true });
-const receipt = { schemaVersion: 1, version, platform: process.platform, arch: architecture, runtime: platform === 'macos' || usesTauriDesktop(version) ? 'tauri' : 'electron', artifacts: [] };
+const receipt = { schemaVersion: 1, version, platform: process.platform, arch: architecture, runtime: 'tauri', artifacts: [] };
 
 if (platform === 'macos') {
   if (!usesTauriMac(version)) throw new Error('This pipeline packages Tauri macOS releases from 1.5.0 onward');
@@ -52,57 +50,5 @@ if (platform === 'macos') {
   validateReceipt(receipt, version);
   await writeFile(path.join('release-upload', receiptName(version, process.platform, architecture)), JSON.stringify(receipt, null, 2) + '\n');
 } else {
-  const signed = false;
-  const require = createRequire(import.meta.url);
-  const { build, Platform, Arch } = require('electron-builder');
-  const buildPlatform = { windows: Platform.WINDOWS, linux: Platform.LINUX }[platform];
-  const targets = { windows: ['nsis', 'portable'], linux: ['AppImage', 'tar.gz'] }[platform];
-  const feed = `https://blincho.app/updates/${process.platform}/${architecture}/`;
-  const supportFile = 'electron/update-support.json';
-  let originalSupport;
-  try { originalSupport = await readFile(supportFile); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
-  try {
-    // Separate builds ensure portable Windows and Linux archives contain manual
-    // support metadata, even though they share the same application source.
-    for (const target of targets) {
-      const support = packageSupport(process.platform, architecture, target, signed);
-      await writeFile(supportFile, JSON.stringify(support) + '\n');
-      let resourcesDir;
-      await build({
-        targets: buildPlatform.createTarget([target], Arch[architecture]),
-        publish: 'never',
-        config: {
-          forceCodeSigning: signed,
-          publish: [{ provider: 'generic', url: feed }],
-          win: { signExecutable: false },
-          nsis: { artifactName: 'Blincho-${version}-windows-${arch}-setup.${ext}' },
-          portable: { artifactName: 'Blincho-${version}-windows-${arch}-portable.${ext}' },
-          linux: { artifactName: 'Blincho-${version}-linux-${arch}.${ext}' },
-          afterPack: async context => {
-            resourcesDir = context.packager.getResourcesDir(context.appOutDir);
-            // Also provide config in manual-only packages. JSON is valid YAML.
-            await writeFile(path.join(resourcesDir, 'app-update.yml'), JSON.stringify({ provider: 'generic', url: feed, updaterCacheDirName: 'blincho-updater' }) + '\n');
-          },
-        },
-      });
-      if (!resourcesDir) throw new Error('Missing packaged application resources');
-      await verifyPackagedSupport(resourcesDir, support, feed);
-      const extension = { nsis: '-setup.exe', portable: '-portable.exe', AppImage: '.AppImage', 'tar.gz': '.tar.gz' }[target];
-      const name = expectedArtifacts(version).find(name => {
-        const artifact = describeArtifact(name, version);
-        return artifact.platform === platform && artifact.architecture === architecture && name.endsWith(extension);
-      });
-      const source = path.join(packageJson.build.directories.output, builderArtifactName(name, platform, architecture));
-      if (!(await stat(source)).size) throw new Error(`Empty release artifact: ${name}`);
-      const destination = path.join('release-upload', name);
-      await copyFile(source, destination);
-      receipt.artifacts.push({ name, size: (await stat(destination)).size, sha256: await hashFile(destination), sha512: await hashFile(destination, 'sha512', 'base64'), packageType: support.packageType, signed, notarized: false, updaterConfig: true });
-    }
-    validateReceipt(receipt, version);
-    await writeFile(path.join('release-upload', receiptName(version, process.platform, architecture)), JSON.stringify(receipt, null, 2) + '\n');
-  } finally {
-    if (originalSupport) await writeFile(supportFile, originalSupport);
-    else await rm(supportFile, { force: true });
-  }
+  throw new Error('This pipeline only packages Tauri desktop releases from 1.6.0 onward');
 }

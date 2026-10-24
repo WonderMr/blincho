@@ -9,7 +9,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 function createSettingsHarness({ media, native = false, nativeReady = Promise.resolve({}), onPending, meetingSupported = true, platform = 'darwin' } = {}) {
   const cache = new Map(), store = new Map(); const navigator = { mediaDevices: media };
   const localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) };
-  window.localStorage = localStorage; window.electronAPI = { isElectron: true, platform, meetingDetectionSupported: meetingSupported, lockComputer() { throw Error('Permission must not lock'); } };
+  window.localStorage = localStorage; window.desktopAPI = { isDesktop: true, platform, meetingDetectionSupported: meetingSupported, lockComputer() { throw Error('Permission must not lock'); } };
   localStorage.setItem('blincho-language-v1', JSON.stringify({ preference: 'ru', acknowledged: true }));
   let settings, updates = 0, closed = 0, nativeReads = 0, alive = true; const pending = [];
   function load(relative) {

@@ -134,11 +134,11 @@ function installProbe(returnOutsideRenderer, holdFrames) {
         const track={readyState:'live',muted:false,stop(){if(this.readyState==='live')probe.stops++;this.readyState='ended';probe.trackState=this.readyState;probe.stoppedAt=performance.now()}};
         return{blinchoSynthetic:true,getTracks:()=>[track],getVideoTracks:()=>[track]}
       }}});
-      window.electronAPI.getSystemIdleTime=async()=>{
+      window.desktopAPI.getSystemIdleTime=async()=>{
         const idle=probe.returnedAt===undefined?20+(performance.now()-idleStartedAt)/1000:(performance.now()-probe.returnedAt)/1000;
         if(probe.idleReads.length<100)probe.idleReads.push({at:performance.now(),idle});return idle;
       };
-      window.electronAPI.lockComputer=async()=>{probe.locks++;probe.lockedAt=performance.now();return false};
+      window.desktopAPI.lockComputer=async()=>{probe.locks++;probe.lockedAt=performance.now();return false};
       probe.installed=true;
     }catch(error){probe.error=String(error)}
   })()`;

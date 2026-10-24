@@ -17,7 +17,7 @@ function harness({ permission = 'default', enabled = false, request = async () =
     static requestPermission() { assert(gesture, 'browser permission is requested synchronously from the user gesture'); requests++; return request(); }
     constructor() { delivered++; }
   };
-  window.localStorage = localStorage; window.electronAPI = undefined; window.Notification = BrowserNotification;
+  window.localStorage = localStorage; window.desktopAPI = undefined; window.Notification = BrowserNotification;
   function load(relative) {
     const file = path.resolve(repo, relative); if (file.endsWith('.json')) return JSON.parse(fs.readFileSync(file, 'utf8')); if (cache.has(file)) return cache.get(file);
     const module = { exports: {} }; cache.set(file, module.exports);

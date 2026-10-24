@@ -63,7 +63,7 @@ export function getSymbioteBuild(settings: AppSettings, capabilities: SymbioteCa
 // Read capabilities only. Rendering a character must never open a device,
 // request consent, start recording or configure the local MCP server.
 export function readSymbioteCapabilities(inputActive = false): SymbioteCapabilities {
-  const api = typeof window === 'undefined' ? undefined : window.electronAPI;
+  const api = typeof window === 'undefined' ? undefined : window.desktopAPI;
   const nativeTimer = typeof window !== 'undefined' && !!window.__TAURI__;
   const camera = typeof api?.lockComputer === 'function' &&
     typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function';

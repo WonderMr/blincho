@@ -32,7 +32,7 @@ export function useLocalMcp(enabled: boolean, snapshot: () => LocalMcpSnapshot,
   const current = useRef({ snapshot, execute });
   current.current = { snapshot, execute };
   useEffect(() => {
-    const api = window.electronAPI;
+    const api = window.desktopAPI;
     if (!api?.configureLocalMcp) return;
     let cancelled = false, busy = false;
     const tick = async () => {

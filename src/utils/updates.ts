@@ -35,7 +35,7 @@ export function useUpdates() {
   const mounted = useRef(false);
   const revision = useRef(0);
   const request = useRef(0);
-  const api = window.electronAPI;
+  const api = window.desktopAPI;
 
   useEffect(() => {
     mounted.current = true;

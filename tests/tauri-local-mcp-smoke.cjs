@@ -64,10 +64,10 @@ function rpc(state, method, params) {
 async function main() {
   try {
     await until(diagnostics, value => value.renderer?.ready && value.timer.totalMs > 0);
-    assert.equal((await evaluate(`window.electronAPI.getLocalMcpState()`)).running, false);
+    assert.equal((await evaluate(`window.desktopAPI.getLocalMcpState()`)).running, false);
     await evaluate(`(()=>{document.querySelector('.nav-settings-button').click();return true;})()`);
     await evaluate(`new Promise(resolve=>{const check=()=>{const input=document.querySelector('#local-mcp-enabled');if(input){if(input.checked)throw Error('MCP defaults on');input.click();resolve(true);}else setTimeout(check,50);};check();})`);
-    const state = await evaluate(`new Promise(resolve=>{const check=async()=>{const state=await window.electronAPI.getLocalMcpState();if(state.running)resolve(state);else setTimeout(check,50);};check();})`);
+    const state = await evaluate(`new Promise(resolve=>{const check=async()=>{const state=await window.desktopAPI.getLocalMcpState();if(state.running)resolve(state);else setTimeout(check,50);};check();})`);
     assert.match(state.url, /^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
     assert.equal((await rpc(state, 'initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'native-smoke', version: '1' } })).result.protocolVersion, '2025-11-25');
     const ready = await until(async () => rpc(state, 'tools/call', { name: 'get_status', arguments: {} }), value => !value.result?.isError);
@@ -110,7 +110,7 @@ async function main() {
     const ui = await evaluate(`(()=>{const section=document.querySelector('#local-mcp-title').closest('section');return {checked:document.querySelector('#local-mcp-enabled').checked, text:section.textContent, clipped:section.scrollWidth>section.clientWidth};})()`);
     assert.equal(ui.checked, true); assert.equal(ui.clipped, false); assert.match(ui.text, /MCP/);
     await evaluate(`(()=>{document.querySelector('#local-mcp-enabled').click();return true;})()`);
-    await evaluate(`new Promise(resolve=>{const check=async()=>{const state=await window.electronAPI.getLocalMcpState();if(!state.running)resolve(true);else setTimeout(check,50);};check();})`);
+    await evaluate(`new Promise(resolve=>{const check=async()=>{const state=await window.desktopAPI.getLocalMcpState();if(!state.running)resolve(true);else setTimeout(check,50);};check();})`);
     await assert.rejects(rpc(state, 'ping', {}), /ECONNREFUSED|socket hang up/);
     assert.equal(await evaluate(`JSON.parse(localStorage.getItem('myeyes_settings_v1')).localMcpEnabled`), false);
     console.log('PASS: native settings toggle, MCP date boundaries/day/week/range/pagination/privacy, timer actions, credential bridge, unclipped section, persisted disable and closed listener.');

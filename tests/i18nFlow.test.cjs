@@ -9,7 +9,7 @@ test('switching locale preserves the running deadline, statistics and stored tim
     const before = h.captured.TimerWidget.secondsRemaining;
     const settings = h.store.get('myeyes_settings_v1');
     const history = h.store.get('myeyes_stats_v1');
-    for (const language of Object.keys(require('../electron/locales.cjs').locales)) {
+    for (const language of Object.keys(require('../src-tauri/locales.json'))) {
       await h.setLanguage(language);
       assert.equal(h.captured.TimerWidget.secondsRemaining, before);
       assert.equal(h.captured.TimerWidget.phase, 'work');
