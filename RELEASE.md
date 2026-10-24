@@ -2,7 +2,7 @@
 
 The release pipeline builds native macOS, Windows and Linux packages for x64 and arm64. All six targets use Rust/Tauri from version 1.6.0. Historical versions 1.5.0 through 1.5.3 used Tauri on macOS and Electron on Windows and Linux. Older releases used Electron. `com.myeyes.app` remains the application ID. The package version, npm lockfile, Cargo package version, Tauri configuration and `vX.Y.Z` tag must match. Curated release notes come from that version's `CHANGELOG.md` section.
 
-The publication jobs also launch the exact Windows portable executable, Linux AppImage and extracted macOS archive in isolated profiles before uploading them. These checks verify real packaged WebView startup, history import, hidden timer progression, break expiry and persistence after restart. They still model idle and unlocked presence; physical lock/sleep and notification display remain separate checks.
+The publication jobs also launch the exact Windows portable executable, Linux AppImage and extracted macOS archive in isolated profiles before uploading them. These checks verify real packaged WebView startup, history import, hidden timer progression, break expiry and persistence after restart. The smoke profiles use controlled idle and unlocked presence inputs.
 
 Native jobs also exercise the local MCP settings switch, authenticated initialization, public aggregate data, timer actions and immediate listener shutdown in an isolated profile. MCP remains off by default in user profiles.
 
@@ -34,7 +34,7 @@ the workflow change and updating its required-check rule together.
 After reviewing and merging the version and changelog, create and push its version tag or dispatch the release workflow on main with that tag. A retry accepts an existing immutable version tag. Never move or recreate an existing tag.
 
 1. Validate versions, the pinned Tauri CLI, changelog, tests and frontend build.
-2. Build on six native OS and architecture runners. Each installs Rust 1.92.0 and CMake 3.31.10, checks formatting, and runs locked Cargo checks and tests for its explicit target. Linux installs WebKitGTK 4.1, GTK/tray dependencies, packaging tools and GStreamer. Windows runners must include the matching Visual Studio C++ tools and 7-Zip. Each native job also launches the real renderer with isolated history, checks the hidden timer and break, and verifies restart persistence. Linux smoke uses Xvfb, DBus and Openbox. Its isolated presence state models idle and unlocked status, so this check does not establish physical idle, lock or suspend behavior. All six jobs must succeed.
+2. Build on six native OS and architecture runners. Each installs Rust 1.92.0 and CMake 3.31.10, checks formatting, and runs locked Cargo checks and tests for its explicit target. Linux installs WebKitGTK 4.1, GTK/tray dependencies, packaging tools and GStreamer. Windows runners must include the matching Visual Studio C++ tools and 7-Zip. Each native job also launches the real renderer with isolated history, checks the hidden timer and break, and verifies restart persistence. Linux smoke uses Xvfb, DBus and Openbox. Its isolated presence state models idle and unlocked status. All six jobs must succeed.
 3. Verify the fourteen distinct packages, six compatibility aliases and six receipts against their actual bytes. Generate `SHA256SUMS.txt` over all twenty-six files, upload a draft with twenty-seven assets including the checksum document, compare GitHub digests and sizes, validate the complete metadata, then publish the beta prerelease. Releases through 1.6.0 retain sixteen files.
 4. Read published release history, verify checksums and receipts, generate the website manifest and compatible historical Electron feeds, build the localized website, validate the Worker bundle and deploy them together.
 
@@ -50,7 +50,7 @@ Preparation passes a SHA-256-bound JSON proof in `RUNNER_TEMP` through `GITHUB_E
 
 Tooltip checks accept only that same native error with the same independently verified SDK proof, and report their native display state as unverified. On working notification areas they require successful tooltip suppression while the hover window exists, text fallback when it is unavailable, and suppression again after recovery.
 
-This exception leaves notification-area display unverified. Live calls with history off, inactive and disabled detection, native hover popups and focus guards, real renderer, history, hidden timer, break expiry, restart persistence, autostart and release-package launch checks must still pass. CI presence is simulated, so physical idle, lock and suspend behavior and visible tray/notification behavior require separate desktop verification.
+This exception leaves notification-area display unverified. Live calls with history off, inactive and disabled detection, native hover popups and focus guards, real renderer, history, hidden timer, break expiry, restart persistence, autostart and release-package launch checks must still pass. These smoke tests use controlled presence inputs.
 
 ## Packages and verification
 

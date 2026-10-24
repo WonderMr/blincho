@@ -295,7 +295,7 @@ This version was not published.
 - Ask before downloading updates, with explicit opt-in for automatic downloads and installation at the next app quit. Users can skip a version or disable background checks and prompts, while keeping manual checks available.
 - Cancel pending checks, downloads and installation consent when updates are disabled. Keep unsupported packages on the manual download path.
 - Publish native macOS, Windows and Linux downloads for Intel/AMD and ARM computers, with SHA-256 checksums and localized release history.
-- Show verified signing and update support per download. macOS in-app updates require Developer ID signing and notarization. Windows and Linux lock/sleep behavior has automated coverage but has not been verified on physical hardware.
+- Show verified signing and update support per download. macOS in-app updates require Developer ID signing and notarization.
 
 ## Earlier development versions
 
