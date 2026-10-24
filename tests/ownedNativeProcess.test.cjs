@@ -100,3 +100,23 @@ test('an already closed launcher cannot signal a potentially reused process grou
     assert(signals.every(({ pid, signal }) => pid === -child.pid && signal === 0), 'only existence probes are permitted after ownership is lost');
   } finally { process.kill = originalKill; }
 });
+
+test('group disappearance retries inaccessible probes but requires eventual absence', { timeout: 3000 }, async () => {
+  const originalKill = process.kill, signals = [];
+  const child = { pid: 2000000000, exitCode: 0, signalCode: null, stdout: { destroyed: true, destroy() {} }, stderr: { destroyed: true, destroy() {} }, unref() {} };
+  let probes = 0;
+  try {
+    process.kill = (pid, signal) => {
+      signals.push({ pid, signal });
+      const error = new Error('probe'); error.code = ++probes < 3 ? 'EPERM' : 'ESRCH'; throw error;
+    };
+    await stopOwnedNativeProcess(child, { processGroup: true, timeoutMs: 1000 });
+    assert.equal(probes, 3, 'only ESRCH confirms group disappearance');
+    process.kill = (pid, signal) => {
+      signals.push({ pid, signal });
+      const error = new Error('probe'); error.code = 'EPERM'; throw error;
+    };
+    await assert.rejects(stopOwnedNativeProcess(child, { processGroup: true, timeoutMs: 30 }), /group ownership lost/);
+    assert(signals.every(({ pid, signal }) => pid === -child.pid && signal === 0), 'inaccessible groups must never receive a signal after leader exit');
+  } finally { process.kill = originalKill; }
+});

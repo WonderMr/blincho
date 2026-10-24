@@ -27,7 +27,12 @@ async function waitForGroupExit(pid, timeoutMs) {
   const deadline = performance.now() + timeoutMs;
   for (;;) {
     try { process.kill(-pid, 0); }
-    catch (error) { if (error.code === 'ESRCH') return true; throw error; }
+    catch (error) {
+      if (error.code === 'ESRCH') return true;
+      // macOS can report EPERM while an exited group leader is a zombie.
+      // Keep polling within the deadline; EPERM never proves disappearance.
+      if (error.code !== 'EPERM') throw error;
+    }
     if (performance.now() >= deadline) return false;
     await new Promise(resolve => setTimeout(resolve, Math.min(20, deadline - performance.now())));
   }
