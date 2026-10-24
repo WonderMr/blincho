@@ -14,7 +14,7 @@ For example, call `get_stats` with `{"startDate":"2026-10-01","endDate":"2026-10
 
 ## Client setup
 
-Run the desktop app and your AI client on the same computer. Set `BLINCHO_MCP_TOKEN` in the client's environment to the token from **Copy connection**, and use the actual URL shown by Blincho if its port differs from the examples. Blincho includes the MCP server, so no separate server package is needed. Keep the token private and out of committed configuration. After Blincho restarts or Local MCP is re-enabled, copy the new token, update the client process's environment and restart the client. Reconnecting alone does not update an already-running process's environment.
+Run the desktop app and your AI client on the same computer. Set `BLINCHO_MCP_TOKEN` in the client's environment to the value after `Bearer ` in the `Authorization` header from **Copy connection**, without the `Bearer ` prefix. Use the actual URL shown by Blincho if its port differs from the examples. Blincho includes the MCP server, so no separate server package is needed. Keep the token private and out of committed configuration. After Blincho restarts or Local MCP is re-enabled, copy the new token, update the client process's environment and restart the client. Reconnecting alone does not update an already-running process's environment.
 
 ### Codex
 

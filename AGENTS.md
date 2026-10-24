@@ -61,9 +61,10 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
 ## Local MCP client tools
 
 Connecting an AI client needs a running Blincho desktop app with Local MCP enabled and a local
-client supporting authenticated Streamable HTTP. Use the URL from Copy connection and supply its
-token through `BLINCHO_MCP_TOKEN` in the client process's environment. No separate MCP server
-package is needed. See the [Claude Code](docs/LOCAL_MCP.md#claude-code), [Cursor](docs/LOCAL_MCP.md#cursor) and
+client supporting authenticated Streamable HTTP. Use the URL from Copy connection. In the client
+process's environment, set `BLINCHO_MCP_TOKEN` to the value after `Bearer ` in the copied
+`Authorization` header, without the `Bearer ` prefix. No separate MCP server package is needed.
+See the [Claude Code](docs/LOCAL_MCP.md#claude-code), [Cursor](docs/LOCAL_MCP.md#cursor) and
 [Codex](docs/LOCAL_MCP.md#codex) connection examples.
 
 Discover the `blincho` server's tools through the client's MCP tool listing. Clients may prefix
