@@ -106,6 +106,7 @@ async function prepareWarning() {
   await until(value => value.timer.breakActive, 45000);
   for (let i = 0; i < 30; i++) { state = await inspect(); if (state.renderer.breakControl) break; await sleep(100); }
   assert(state.renderer.breakControl && state.timer.meetingBreakCancellable, 'meeting undo remains on strict break');
+  assert(!state.renderer.settings && state.renderer.modalCount === 1, 'strict break retains exclusive modal focus');
   await control('eval', { script: `document.querySelector('[data-meeting-break-control] button').click()` });
   state = await until(value => !value.timer.breakActive && value.timer.meetingRemindersPaused && value.strictShieldCount === 0);
   state = await inspect();

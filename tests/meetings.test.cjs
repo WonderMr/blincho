@@ -376,6 +376,7 @@ test('native snapshot expiry gate blocks takeover during warning and permits it 
     at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: nativeFixture });
   try {
     await h.settle();
+    await h.call('Navbar', 'onOpenSettings');
     let tick = 1;
     let current = { totalMs: 1200000, remainingMs: 0, manualPaused: false, breakActive: false, exercising: false,
       expiryPending: true, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
@@ -392,6 +393,7 @@ test('native snapshot expiry gate blocks takeover during warning and permits it 
     await h.settle();
     assert.equal(h.active.has('MeetingBreakWarning'), false);
     assert.equal(h.active.has('BreakOverlay'), true, 'ready native warning allows the strict break');
+    assert.equal(h.active.has('SettingsModal'), false, 'settings stay suspended through strict takeover');
   } finally {
     h.destroy();
     if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;

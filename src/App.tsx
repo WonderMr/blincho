@@ -1361,7 +1361,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Settings Modal */}
-      {isSettingsOpen && !meetingWarning && (
+      {isSettingsOpen && !meetingWarning && !(isBreakActive && settings.meetingDetectionEnabled) && (
         <SettingsModal
           symbioteBuild={symbioteBuild}
           updates={updates}
