@@ -332,6 +332,8 @@ test('strict meeting warning appears before takeover and dispatches versioned du
       at('2026-10-14', 9), { [path.join('src', 'utils', 'tauriBridge.ts')]: nativeFixture });
     try {
       await h.settle();
+      await h.call('Navbar', 'onOpenSettings');
+      assert.equal(h.active.has('SettingsModal'), true);
       const frame = { totalMs: 1200000, remainingMs: 0, manualPaused: false, breakActive: false, exercising: false,
         expiryPending: true, version: 1, reasons: [], absentSince: null, absenceEpoch: 0, idleSeconds: 0, locked: false,
         suspended: false, breakElapsed: false, focusByDate: {}, meetingWarningRequired: true,
@@ -339,6 +341,7 @@ test('strict meeting warning appears before takeover and dispatches versioned du
       window.testNativeFrame({ ...frame, tickCount: 1 });
       await h.settle();
       assert.equal(h.active.has('MeetingBreakWarning'), true);
+      assert.equal(h.active.has('SettingsModal'), false, 'warning exclusively owns modal focus');
       assert.equal(h.active.has('BreakOverlay'), false);
       assert.equal(h.notifications, 1);
       window.testNativeFrame({ ...frame, tickCount: 2 });
@@ -353,6 +356,7 @@ test('strict meeting warning appears before takeover and dispatches versioned du
       await h.call('MeetingBreakWarning', 'onDefer', minutes);
       assert.deepEqual(calls, [[1, 1, minutes]]);
       assert.equal(h.active.has('MeetingBreakWarning'), false);
+      assert.equal(h.active.has('SettingsModal'), true, 'settings return after the warning action');
       assert.equal(h.active.has('BreakOverlay'), false);
       assert.equal(h.captured.TimerWidget.secondsRemaining, (minutes ?? 5) * 60);
       if (minutes === null) assert.match(h.host.textContent, /Напоминания приостановлены до конца встречи/);

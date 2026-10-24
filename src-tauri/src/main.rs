@@ -160,6 +160,7 @@ fn foreground_expiry(
             || !timer.snapshot.expiry_pending
             || timer.snapshot.manual_paused
             || !timer.snapshot.reasons.is_empty()
+            || timer.meeting_blocks_break()
             || !timer.meeting_warning_allows_break()
         {
             return;

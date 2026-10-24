@@ -53,7 +53,7 @@ async function control(operation, args = {}) {
 /** Request a fresh renderer probe and wait for its unique marker in native diagnostics. */
 async function inspect() {
   const marker = ++sequence;
-  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,warningProbe:${marker},control:!!document.querySelector("[data-meeting-control]"),breakControl:!!document.querySelector("[data-meeting-break-control]"),warning:!!document.getElementById('meeting-warning-title'),breakDialog:!!document.querySelector('.fullscreen-break-takeover'),buttons:Array.from(document.querySelectorAll('[aria-labelledby="meeting-warning-title"] button')).map(b=>b.textContent),overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth}})` });
+  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,warningProbe:${marker},control:!!document.querySelector("[data-meeting-control]"),breakControl:!!document.querySelector("[data-meeting-break-control]"),warning:!!document.getElementById('meeting-warning-title'),settings:!!document.getElementById('settings-dialog-title'),modalCount:document.querySelectorAll('[aria-modal="true"]').length,warningKeyboard:window.__meetingWarningKeyboard,breakDialog:!!document.querySelector('.fullscreen-break-takeover'),buttons:Array.from(document.querySelectorAll('[aria-labelledby="meeting-warning-title"] button')).map(b=>b.textContent),overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth}})` });
   return until(state => state.renderer?.warningProbe === marker);
 }
 /** Set a new timer version with strict meeting detection while retaining the requested manual pause. */
@@ -83,7 +83,22 @@ async function prepareWarning() {
   let state = await until(value => value.timer.meetingResumedEpoch >= 1 && value.timer.meetingResumeToken, 325000);
   state = await inspect();
   assert(state.renderer.control && state.timer.remainingMs > 500000, 'persistent undo exists before expiry');
+  await control('eval', { script: `document.querySelector('.nav-settings-button').click()` });
+  state = await inspect();
+  assert(state.renderer.settings, 'settings are open before the warning');
   await prepareWarning();
+  await control('eval', { script: `(() => {
+    const buttons = document.querySelectorAll('[aria-labelledby="meeting-warning-title"] button');
+    buttons[buttons.length - 1].focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    const forward = document.activeElement === buttons[0];
+    buttons[0].focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    window.__meetingWarningKeyboard = { forward, backward: document.activeElement === buttons[buttons.length - 1] };
+  })()` });
+  state = await inspect();
+  assert(!state.renderer.settings && state.renderer.modalCount === 1, 'warning suspends settings focus trap');
+  assert(state.renderer.warningKeyboard.forward && state.renderer.warningKeyboard.backward, 'warning retains both keyboard focus directions');
   await control('eval', { script: `document.querySelectorAll('[aria-labelledby="meeting-warning-title"] button')[1].click()` });
   state = await until(value => !value.timer.expiryPending && value.timer.remainingMs > 590000);
   assert(!state.timer.meetingRemindersPaused && state.strictShieldCount === 0);
@@ -117,7 +132,7 @@ async function prepareWarning() {
   for (let i = 0; i < 50 && child.exitCode === null; i++) await sleep(100);
   assert.equal(child.exitCode, 0);
   const result = { passed: true, profile: directory, checks: ['real five-minute resumption', 'persistent undo before expiry',
-    'warning before strict takeover', 'native 10-minute postpone', 'strict break cancellation', 'native shields released',
+    'warning before strict takeover', 'warning keyboard focus over settings', 'native 10-minute postpone', 'strict break cancellation', 'native shields released',
     'active muted meeting retains override', 'automatic restoration after meeting end', 'manual pause preserved at end', 'no overflow'],
     limitation: 'Call and presence signals are modeled. Actual meeting-app behavior is checked by the user.' };
   fs.writeFileSync(path.join(directory, 'result.json'), JSON.stringify(result, null, 2));

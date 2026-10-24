@@ -542,7 +542,8 @@ export const App: React.FC = () => {
         applyNativeRef.current(snapshot);
         if (snapshot.meetingRemindersPaused || (settingsRef.current.strictMode && snapshot.meetingWarningRequired && !snapshot.meetingWarningReady)) return;
       }
-      if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting) return;
+      if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting
+        || meetingControlBusyRef.current || meetingControlRef.current?.paused) return;
       setInMeetingActive(false);
       if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"), t("Отведите взгляд от экрана и дайте глазам отдохнуть."));
       if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak(true);
@@ -550,19 +551,48 @@ export const App: React.FC = () => {
     } finally { expiryInFlightRef.current = false; }
   };
   /**
-   * Submit the visible warning's version and epoch once, then apply its native reply.
-   * A null duration pauses reminders until meeting end; a late reply must not
+   * Serialize meeting actions with timer/settings edits. Reconcile explicit local
+   * changes after the native reply, then resend settings with the accepted version.
+   */
+  const runMeetingAction = async (action: () => Promise<NativeTimerSnapshot>) => {
+    meetingControlBusyRef.current = true;
+    setMeetingControlBusy(true);
+    const startedVersion = session.version;
+    meetingPendingTimerRef.current = null;
+    try {
+      const snapshot = await action();
+      if (mountedRef.current) {
+        applyNativeRef.current(snapshot);
+        const pending = meetingPendingTimerRef.current as PendingMeetingTimer | null;
+        if (pending && pending.version > startedVersion && !pending.breakActive && !pending.exercising) {
+          session.totalMs = pending.totalMs;
+          session.remainingMs = pending.remainingMs;
+          session.manualPaused = pending.manualPaused;
+          session.expiryPending = pending.expiryPending && !snapshot.meetingRemindersPaused;
+          session.version = Math.max(session.version, snapshot.version, pending.version) + 1;
+        }
+      }
+      return snapshot;
+    } finally {
+      meetingControlBusyRef.current = false;
+      if (mountedRef.current) { setMeetingControlBusy(false); sync(); }
+      meetingPendingTimerRef.current = null;
+    }
+  };
+  /**
+   * Submit the visible warning once, preserving concurrent timer/settings edits.
+   * A null duration pauses reminders until meeting end; stale replies cannot
    * overwrite the notice from a newer automatic restoration.
    */
   const handleDeferMeetingWarning = async (minutes: number | null) => {
-    if (!meetingWarning || meetingWarningBusyRef.current) return;
+    if (!meetingWarning || meetingWarningBusyRef.current || meetingControlBusyRef.current) return;
     meetingWarningBusyRef.current = true;
     setMeetingWarningBusy(true);
     setMeetingWarningError(false);
     try {
-      const snapshot = await deferNativeMeetingBreak(meetingWarning.version, meetingWarning.epoch, minutes);
+      const snapshot = await runMeetingAction(() =>
+        deferNativeMeetingBreak(meetingWarning.version, meetingWarning.epoch, minutes));
       if (!mountedRef.current) return;
-      applyNativeRef.current(snapshot);
       if (minutes === null && meetingControlRef.current?.paused
         && meetingControlRef.current.token === snapshot.meetingResumeToken) {
         setNoticeMessage("Напоминания приостановлены до конца встречи.");
@@ -575,41 +605,17 @@ export const App: React.FC = () => {
       if (mountedRef.current) setMeetingWarningBusy(false);
     }
   };
-  /**
-   * Toggle the token-bound meeting pause, or request its removal when finish is true.
-   * Serialize clicks and reconcile newer local reset or manual-pause edits with
-   * the native result before synchronizing settings again. Surface IPC failures.
-   */
+  /** Toggle the current token-bound meeting pause, preserving concurrent local edits. */
   const handleMeetingReminders = async (finish = false) => {
     const control = meetingControlRef.current;
     if (!control || meetingControlBusyRef.current) return;
-    meetingControlBusyRef.current = true;
-    setMeetingControlBusy(true);
     setMeetingControlError(false);
-    const startedVersion = session.version;
-    meetingPendingTimerRef.current = null;
     try {
-      const snapshot = await setNativeMeetingRemindersPaused(control.token, finish ? false : !control.paused);
-      if (mountedRef.current) {
-        applyNativeRef.current(snapshot);
-        const pending = meetingPendingTimerRef.current as PendingMeetingTimer | null;
-        if (pending && pending.version > startedVersion && !pending.breakActive && !pending.exercising) {
-          // Preserve an explicit reset or manual pause made while IPC was in
-          // flight. Settings-only synchronization keeps the native clock.
-          session.totalMs = pending.totalMs;
-          session.remainingMs = pending.remainingMs;
-          session.manualPaused = pending.manualPaused;
-          session.expiryPending = pending.expiryPending && !snapshot.meetingRemindersPaused;
-          session.version = Math.max(session.version, snapshot.version, pending.version) + 1;
-        }
-      }
+      await runMeetingAction(() =>
+        setNativeMeetingRemindersPaused(control.token, finish ? false : !control.paused));
     } catch (error) {
       console.warn('Blincho: Meeting reminder action failed:', error);
       if (mountedRef.current) setMeetingControlError(true);
-    } finally {
-      meetingControlBusyRef.current = false;
-      if (mountedRef.current) { setMeetingControlBusy(false); sync(); }
-      meetingPendingTimerRef.current = null;
     }
   };
   const handleTriggerInstantBreak = async () => {
@@ -1355,7 +1361,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Settings Modal */}
-      {isSettingsOpen && (
+      {isSettingsOpen && !meetingWarning && (
         <SettingsModal
           symbioteBuild={symbioteBuild}
           updates={updates}

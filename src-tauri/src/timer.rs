@@ -216,6 +216,8 @@ impl Timer {
             && input.meeting_break_token.is_some()
             && (input.meeting_break_token != self.snapshot.meeting_resume_token
                 || self.snapshot.meeting_reminders_paused
+                || self.meeting_blocks_break()
+                || !self.meeting_warning_allows_break()
                 || !input.meeting_enabled)
         {
             return Err("Stale meeting break command".into());
@@ -734,6 +736,26 @@ impl Timer {
         self.meeting_end_since = None;
     }
 
+    /// Revoke a media-based release before a queued automatic break can claim it.
+    /// Preserve an already started break and its explicit meeting undo control.
+    fn revoke_meeting_resumption(&mut self) {
+        if self.meeting_resumed
+            && !self.snapshot.break_active
+            && self.snapshot.meeting_resume_token.is_some()
+        {
+            self.snapshot.meeting_resume_token = None;
+            self.snapshot.meeting_break_cancellable = false;
+            self.snapshot.meeting_break_cancelled_epoch += 1;
+            self.snapshot.version += 1;
+            self.snapshot.tick_count += 1;
+            self.clear_meeting_warning();
+            if let Some(input) = &mut self.input {
+                input.version = self.snapshot.version;
+            }
+        }
+        self.meeting_resumed = false;
+    }
+
     /// Update meeting break policy from consecutive samples, releasing capture postponement
     /// after five inactive minutes and confirming meeting end after five seconds.
     ///
@@ -754,7 +776,7 @@ impl Timer {
             .is_some_and(|at| !(0..=5000).contains(&(now - at)))
         {
             self.media_inactive_since = None;
-            self.meeting_resumed = false;
+            self.revoke_meeting_resumption();
             self.meeting_end_since = None;
         }
         self.last_media_at = Some(now);
@@ -792,7 +814,7 @@ impl Timer {
             // Runtimes without a device-use probe retain their existing call
             // policy. An unknown sample from a capable probe is different.
             self.media_inactive_since = None;
-            self.meeting_resumed = false;
+            self.revoke_meeting_resumption();
             self.meeting_seen = status.supported && status.in_meeting;
             self.meeting_breaks_blocked = self.meeting_seen;
             return;
@@ -800,7 +822,7 @@ impl Timer {
         let both_off = status.supported && status.capture_active == Some(false);
         if !both_off {
             self.media_inactive_since = None;
-            self.meeting_resumed = false;
+            self.revoke_meeting_resumption();
         } else if self.meeting_seen {
             let since = *self.media_inactive_since.get_or_insert(now);
             if now - since >= MEETING_MEDIA_INACTIVE_MS && !self.meeting_resumed {
@@ -1237,6 +1259,34 @@ mod tests {
         media_until(&mut timer, 300_000, 610_000, &off);
         assert_eq!(timer.snapshot.meeting_resumed_epoch, 1);
     }
+    /// Reject queued automatic breaks when active or unknown capture revokes resumption.
+    #[test]
+    fn resumed_capture_revokes_queued_meeting_breaks() {
+        for active in [Some(true), None] {
+            let mut timer = strict_warning_timer();
+            timer.rotate_meeting_action();
+            media_until(&mut timer, 2000, 32000, &media_status(Some(false)));
+            assert!(!timer.hold_for_meeting_warning(32000));
+            let mut queued = timer.input.clone().unwrap();
+            queued.version += 1;
+            queued.break_active = true;
+            queued.expiry_pending = false;
+            queued.meeting_break_token = timer.snapshot.meeting_resume_token;
+            media_sample(&mut timer, 32001, &media_status(active));
+            assert!(timer.meeting_blocks_break());
+            assert!(timer.snapshot.meeting_resume_token.is_none());
+            assert!(!timer.snapshot.meeting_warning_ready);
+            assert_eq!(timer.snapshot.meeting_break_cancelled_epoch, 1);
+            assert!(timer.configure(queued, 32002).is_err());
+            assert!(!timer.strict());
+            let mut manual = timer.input.clone().unwrap();
+            manual.version += 1;
+            manual.break_active = true;
+            manual.meeting_break_token = None;
+            timer.configure(manual, 32003).unwrap();
+            assert!(timer.strict(), "explicit manual breaks remain available");
+        }
+    }
     /// Verify that media resumption immediately restores an already due break while preserving
     /// meeting history.
     #[test]
@@ -1598,13 +1648,23 @@ mod tests {
             let token = timer.snapshot.meeting_resume_token.unwrap();
             let mut config = timer.input.clone().unwrap();
             config.manual_paused = false;
+            config.remaining_ms = 0.;
+            config.expiry_pending = true;
+            config.version += 1;
+            timer.configure(config, 300000).unwrap();
+            assert!(timer.hold_for_meeting_warning(300000));
+            media_until(&mut timer, 300000, 330000, &off);
+            assert!(!timer.hold_for_meeting_warning(330000));
+            let mut config = timer.input.clone().unwrap();
             config.break_active = true;
             config.break_seconds = 120.;
             config.version += 1;
             config.meeting_break_token = associated.then_some(token);
-            timer.configure(config, 301000).unwrap();
+            timer.configure(config, 331000).unwrap();
+            media_sample(&mut timer, 331500, &media_status(Some(true)));
+            assert_eq!(timer.snapshot.meeting_resume_token, Some(token));
             assert_eq!(timer.snapshot.meeting_break_cancellable, associated);
-            let result = timer.set_meeting_reminders_paused(token, true, 302000);
+            let result = timer.set_meeting_reminders_paused(token, true, 332000);
             assert_eq!(result.is_ok(), associated);
             if associated {
                 assert!(!timer.snapshot.break_active);
