@@ -67,3 +67,13 @@ test('detector dependencies stay pinned without MediaPipe or any WebGL runtime',
   assert.equal(packageJson.dependencies['@mediapipe/tasks-vision'], undefined);
   assert(!Object.keys(lock.packages).some(name => /mediapipe|tfjs-backend-webgl/.test(name)));
 });
+
+
+test('Windows-style Git checkout preserves exact downloaded model bytes and checksums', () => {
+  const { execFileSync } = require('node:child_process');
+  for (const file of downloadManifest.files) {
+    const checkedOut = execFileSync('git', ['-c', 'core.autocrlf=true', 'cat-file', '--filters', `HEAD:camera-model/${file.name}`], { cwd: repo, maxBuffer: 8 * 1024 * 1024 });
+    assert.equal(checkedOut.byteLength, file.bytes, `${file.name} checkout size`);
+    assert.equal(createHash('sha256').update(checkedOut).digest('hex'), file.sha256, `${file.name} checkout SHA-256`);
+  }
+});
