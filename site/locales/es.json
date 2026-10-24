@@ -148,5 +148,6 @@
   "release.1.8.15": "MCP local ahora ofrece estadísticas por día, semana natural o intervalo de fechas, con las fechas de los datos disponibles y los huecos visibles. La posición y el tamaño de la ventana se conservan después de bloqueos, suspensiones y pausas.",
   "release.1.10.0": "El aspecto y el nombre dependen de las funciones que actives. El acceso directo del escritorio se adapta a tu configuración.",
   "release.1.10.1": "El aspecto y el nombre dependen de las funciones que actives. El acceso directo del escritorio se adapta a tu configuración. Un indicador de cámara en el icono de Blincho muestra cuándo usa la cámara y desaparece al terminar la captura.",
-  "release.1.10.2": "Las comprobaciones automáticas con la cámara se omiten durante llamadas detectadas y se detienen si se detecta una llamada durante la comprobación."
+  "release.1.10.2": "Las comprobaciones automáticas con la cámara se omiten durante llamadas detectadas y se detienen si se detecta una llamada durante la comprobación.",
+  "release.1.10.4": "Las compilaciones de escritorio ahora usan solo Rust y Tauri. Se han eliminado las herramientas de compilación antiguas de Electron. La migración del historial existente sigue disponible."
 }

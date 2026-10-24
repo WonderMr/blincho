@@ -244,3 +244,42 @@ test('an undecryptable event does not block later commands or preference writes'
     assert(requests.some(url => url.endsWith('/v1/events?after=2')));
   } finally { client.close(); }
 });
+
+test('a reset during publish invalidates both the local delivery and a concurrent self-event poll', async () => {
+  const accountId = 'c'.repeat(32), secret = generateRecoveryKey();
+  const key = await deriveSyncKey(secret, accountId);
+  const keyCheck = await encryptSync(key, accountId, 'key-check', { check: 'blincho-sync-v1' });
+  let generation = 1, callbacks = 0, envelope, finishPost;
+  const client = new AccountSyncSession({
+    snapshot: () => ({ settings: DEFAULT_SETTINGS, stats: [] }), settings() {}, stats() {},
+    breakGeneration: () => generation, break() { callbacks++; }, status() {},
+  }, storage(), 'http://127.0.0.1:47832', async (url, init) => {
+    let payload = {};
+    if (url.endsWith('/v1/login')) payload = { accountId, token: 'a'.repeat(43), keyCheck };
+    else if (url.endsWith('/v1/state')) payload = { documents: [] };
+    else if (init.method === 'PUT') payload = { revision: 1 };
+    else if (url.includes('/v1/events?')) payload = { instance: 'test', cursor: envelope ? 1 : 0, events: envelope ? [{ seq: 1, envelope }] : [] };
+    else if (url.endsWith('/v1/events')) {
+      envelope = JSON.parse(init.body).envelope;
+      await new Promise(resolve => { finishPost = resolve; });
+      payload = { seq: 1 };
+    }
+    return new Response(JSON.stringify(payload), { status: 200 });
+  });
+  let publishing;
+  try {
+    await client.connect('login', 'owner@example.test', password, secret, '');
+    publishing = client.publishBreak(20);
+    await until(() => !!finishPost);
+    // Reset then resume still advances the generation, even when not paused now.
+    generation += 2;
+    await client.tick();
+    finishPost(); await publishing;
+    await sleep(2700);
+    assert.equal(callbacks, 0);
+  } finally {
+    finishPost?.();
+    await publishing?.catch(() => {});
+    client.close();
+  }
+});

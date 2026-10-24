@@ -134,11 +134,11 @@ function installProbe(returnOutsideRenderer, holdFrames) {
         const track={readyState:'live',muted:false,stop(){if(this.readyState==='live')probe.stops++;this.readyState='ended';probe.trackState=this.readyState;probe.stoppedAt=performance.now()}};
         return{blinchoSynthetic:true,getTracks:()=>[track],getVideoTracks:()=>[track]}
       }}});
-      window.electronAPI.getSystemIdleTime=async()=>{
+      window.desktopAPI.getSystemIdleTime=async()=>{
         const idle=probe.returnedAt===undefined?20+(performance.now()-idleStartedAt)/1000:(performance.now()-probe.returnedAt)/1000;
         if(probe.idleReads.length<100)probe.idleReads.push({at:performance.now(),idle});return idle;
       };
-      window.electronAPI.lockComputer=async()=>{probe.locks++;probe.lockedAt=performance.now();return false};
+      window.desktopAPI.lockComputer=async()=>{probe.locks++;probe.lockedAt=performance.now();return false};
       probe.installed=true;
     }catch(error){probe.error=String(error)}
   })()`;
@@ -171,6 +171,15 @@ async function scenario(base, { name, strictMode, returnOutsideRenderer = false,
       'native renderer readiness');
     assert.equal(initial.pid, child.pid);
     assert.equal(initial.updates.currentVersion, expectedVersion, 'Executable version must match package.json');
+    // An existing camera opt-in downloads once on upgrade. Wait for its atomic cache commit
+    // before starting the short synthetic break; this does not acquire camera hardware.
+    await control(app, 'eval', { script: `(async()=>{let db;try{
+      db=await new Promise((resolve,reject)=>{const r=indexedDB.open('blincho-camera-models',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('models'))r.result.createObjectStore('models',{keyPath:'version'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+      const deadline=Date.now()+150000;let cached=false;while(!cached){cached=!!await new Promise((resolve,reject)=>{const r=db.transaction('models').objectStore('models').get('coco-ssd-lite-mobilenet-v2-1');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});if(!cached){if(Date.now()>deadline)throw Error('Camera model cache not ready');await new Promise(resolve=>setTimeout(resolve,200))}}
+      await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraModelCacheReady:true}});
+    }catch(error){await window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,cameraModelCacheReady:false,error:String(error)}})}finally{db?.close()}})()` });
+    const model = await until(app, app.read, value => value.renderer?.cameraModelCacheReady !== undefined, 'camera model cache', 180000);
+    assert.equal(model.renderer.cameraModelCacheReady, true, JSON.stringify(model.renderer));
     await control(app, 'eval', { script: installProbe(returnOutsideRenderer, meetingDuring) });
     const setup = await inspect(app);
     assert.equal(setup.probe.installed, true, JSON.stringify(setup));

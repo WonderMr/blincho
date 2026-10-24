@@ -64,7 +64,7 @@ test('cancel before configuration never opens camera; cancel during the prompt r
 test('default-off expiry skips camera detection and locking', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60 }); let checks = 0, locks = 0;
   try {
-    h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(async () => { checks++; return 'absent'; });
+    h.desktopAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(async () => { checks++; return 'absent'; });
     await h.settle(); await h.advance(1000);
     assert.equal(checks, 0); assert.equal(locks, 0); assert.equal(h.active.has('BreakOverlay'), true);
   } finally { h.destroy(); }
@@ -73,7 +73,7 @@ test('default-off expiry skips camera detection and locking', async () => {
 test('pending permission blocks the timed-end camera check and persists off through concurrent changes until successful completion', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60 }); let checks = 0, locks = 0;
   try {
-    h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(async () => { checks++; return 'absent'; });
+    h.desktopAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(async () => { checks++; return 'absent'; });
     await h.settle(); await h.call('Navbar', 'onOpenSettings');
     await h.call('SettingsModal', 'onCameraAccessPendingChange', true);
     await h.call('SettingsModal', 'onUpdateSettings', { ...h.captured.SettingsModal.settings, cameraLockEnabled: true });
@@ -93,7 +93,7 @@ test('pending permission blocks the timed-end camera check and persists off thro
 test('starting a permission prompt cancels an old absence decision even when it returns after permission clears', async () => {
   const h = createHarness({ timerPreset: 'custom', workMinutes: 1 / 60, cameraLockEnabled: true }); const camera = deferred(); let signal, locks = 0;
   try {
-    h.electronAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(value => { signal = value; return camera.promise; });
+    h.desktopAPI.lockComputer = async () => { locks++; return true; }; h.setCameraCheck(value => { signal = value; return camera.promise; });
     await h.settle(); await h.advance(1000);
     const elapsed = h.captured.BreakOverlay.onElapsed;
     await h.advance(20_000); await elapsed(h.monotonicNow); await h.settle(); assert(signal);

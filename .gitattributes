@@ -1,3 +1,5 @@
 public/camera/* -text
 public/camera/*.wasm binary
 public/camera/group* binary
+camera-model/* -text
+camera-model/group* binary

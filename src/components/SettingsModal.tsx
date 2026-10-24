@@ -1,3 +1,4 @@
+import { prepareCameraModel } from '../utils/cameraAssets';
 import { useI18n } from '../i18n/useI18n';
 import { LanguagePicker } from './LanguagePicker';
 import { UpdateSettings } from './UpdateSettings';
@@ -69,6 +70,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, accountS
   const [notificationPending, setNotificationPending] = useState<'enable' | 'test' | null>(null);
   const notificationRequestRef = useRef<{ enable: boolean; test: boolean } | null>(null);
   const [cameraPending, setCameraPending] = useState(false);
+  const [cameraDownloadPercent, setCameraDownloadPercent] = useState<number | null>(null);
   const [cameraFeedback, setCameraFeedback] = useState('');
   const cameraRequestRef = useRef<AbortController | null>(null);
   const cameraSettingRef = useRef<'cameraLockEnabled' | 'enhancedPresenceEnabled'>('cameraLockEnabled');
@@ -79,8 +81,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, accountS
   updateSettingsRef.current = onUpdateSettings;
   const cameraPendingChangeRef = useRef(onCameraAccessPendingChange);
   cameraPendingChangeRef.current = onCameraAccessPendingChange;
-  const nativeApi = window.electronAPI as (NonNullable<Window['electronAPI']> & { meetingDetectionSupported?: boolean; lockComputer?: () => Promise<boolean> }) | undefined;
-  const isNative = nativeApi?.isElectron === true;
+  const nativeApi = window.desktopAPI as (NonNullable<Window['desktopAPI']> & { meetingDetectionSupported?: boolean; lockComputer?: () => Promise<boolean> }) | undefined;
+  const isNative = nativeApi?.isDesktop === true;
   const meetingSupported = isNative && nativeApi?.meetingDetectionSupported === true;
   const cameraAccessSupported = typeof nativeApi?.lockComputer === 'function' && typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
   const cameraLockSupported = cameraAccessSupported && meetingSupported;
@@ -102,6 +104,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, accountS
     cameraPendingChangeRef.current?.(false);
     if (mountedRef.current) {
       setCameraPending(false);
+      setCameraDownloadPercent(null);
       if (showFeedback) setCameraFeedback("Доступ к камере не разрешён. Разрешите его в настройках системы, затем включите эту опцию снова.");
     }
   };
@@ -130,6 +133,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, accountS
     setCameraFeedback('');
     // Gate expiry and cancel an old detection before enabling the native video grant.
     cameraPendingChangeRef.current?.(true);
+    setCameraDownloadPercent(0);
+    try {
+      await prepareCameraModel(request.signal, percent => {
+        if (mountedRef.current && cameraRequestRef.current === request && !request.signal.aborted) setCameraDownloadPercent(percent);
+      });
+    } catch {
+      if (!mountedRef.current || cameraRequestRef.current !== request || request.signal.aborted) return;
+      cameraRequestRef.current = null;
+      updateCameraSetting(false);
+      cameraPendingChangeRef.current?.(false);
+      setCameraPending(false);
+      setCameraDownloadPercent(null);
+      setCameraFeedback("Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.");
+      return;
+    }
+    if (!mountedRef.current || cameraRequestRef.current !== request || request.signal.aborted) return;
+    setCameraDownloadPercent(null);
     updateCameraSetting(true);
     const result = await requestCameraAccess(request.signal, async () => {
       // Linux permits video only after configure_timer has applied the latest settings.
@@ -358,17 +378,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ settings, accountS
             {meetingHistoryControls && <MeetingHistoryControls id="settings-meeting-history" {...meetingHistoryControls} />}
             <ToggleRow id="enhanced-presence" title={t("Уточнять присутствие камерой")}
               description={t("После минуты без ввода и при отсутствии звонка камера уточняет присутствие. Чтение учитывается как работа. Кадры обрабатываются только на устройстве.")}
-              checked={hasNativeTimer() && meetingSupported && settings.enhancedPresenceEnabled}
-              disabled={!hasNativeTimer() || !meetingSupported || !cameraLockSupported || cameraPending}
+              checked={hasNativeTimer() && meetingSupported && (settings.enhancedPresenceEnabled || (cameraPending && cameraSettingRef.current === 'enhancedPresenceEnabled'))}
+              disabled={!hasNativeTimer() || !meetingSupported || !cameraLockSupported || (cameraPending && cameraSettingRef.current !== 'enhancedPresenceEnabled')}
               onChange={value => { void handleCameraChange(value, 'enhancedPresenceEnabled'); }} />
             {settings.enhancedPresenceEnabled && <ToggleRow id="absence-lock" title={t("Блокировать при подтверждённом отсутствии")}
               description={t("Блокировка только после проверки камерой, повторной проверки ввода и звонка. При ошибке камеры блокировка пропускается.")}
               checked={settings.absenceLockEnabled} onChange={value => handleChange('absenceLockEnabled', value)} />}
             <ToggleRow id="camera-lock-enabled" title={t("Блокировать компьютер, если никого нет")}
               description={`${t("В конце перерыва камера проверяет, есть ли человек. Если никого нет, компьютер блокируется. Проверка выполняется на устройстве, кадры не сохраняются и не отправляются. Нужно разрешение камеры. Если камера или проверка недоступны, блокировка пропускается.")}${!cameraAccessSupported ? ` ${t("Доступно в настольном приложении с поддержкой камеры. В браузере компьютер не блокируется.")}` : !meetingSupported ? ` ${t("Детекция встреч недоступна")}.` : ''}`}
-              checked={cameraLockSupported && settings.cameraLockEnabled} disabled={!cameraLockSupported} onChange={value => { void handleCameraChange(value); }} />
+              checked={cameraLockSupported && (settings.cameraLockEnabled || (cameraPending && cameraSettingRef.current === 'cameraLockEnabled'))} disabled={!cameraLockSupported || (cameraPending && cameraSettingRef.current !== 'cameraLockEnabled')} onChange={value => { void handleCameraChange(value); }} />
             {cameraLockSupported && <p className="settings-description">{t("При включении проверяется доступ к камере. Если нужно, система запросит разрешение.")}</p>}
-            {(cameraPending || cameraFeedback) && <p className="settings-feedback" role="status">{cameraPending ? t("Запрашиваем доступ к камере…") : t(cameraFeedback)}</p>}
+            {cameraLockSupported && <p className="settings-description">{t("При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.")}</p>}
+            {(cameraPending || cameraFeedback) && <p className="settings-feedback" role="status">{cameraPending ? cameraDownloadPercent !== null ? t("Загрузка модели камеры… {percent}%", { percent: formatNumber(cameraDownloadPercent) }) : t("Запрашиваем доступ к камере…") : t(cameraFeedback)}</p>}
             {cameraLockSupported && nativeApi?.platform === 'darwin' && <p className="settings-description">{t("На macOS: Системные настройки → Конфиденциальность и безопасность → Камера.")}</p>}
             <ToggleRow id="idle-detection" title={t("Автопауза без активности")}
               description={isNative ? t("Отсутствие мыши и клавиатуры не означает, что вы отошли: чтение тоже считается неактивностью.") : t("Учитывает ввод только на этой странице и скрытие вкладки. Активность в других приложениях недоступна.")}

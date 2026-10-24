@@ -1,10 +1,33 @@
 # Desktop releases and update feeds
 
-The release pipeline builds native macOS, Windows and Linux packages for x64 and arm64. All six targets use Rust/Tauri from version 1.6.0. Historical versions 1.5.0 through 1.5.3 used Tauri on macOS and Electron on Windows and Linux. Older releases used Electron. `com.myeyes.app` remains the application ID. The package version, npm lockfile, Cargo package version, Tauri configuration and `vX.Y.Z` tag must match. Curated release notes come from that version's `CHANGELOG.md` section.
+The release pipeline builds native macOS, Windows and Linux packages for x64 and arm64. All six targets use Rust/Tauri from version 1.6.0. Historical versions 1.5.0 through 1.5.3 used Tauri on macOS and Electron on Windows and Linux. Older releases used Electron. The current source tree only builds Tauri packages; historical receipts and feeds remain readable. `com.myeyes.app` remains the application ID. The package version, npm lockfile, Cargo package version, Tauri configuration and `vX.Y.Z` tag must match. Curated release notes come from that version's `CHANGELOG.md` section.
 
 The publication jobs also launch the exact Windows portable executable, Linux AppImage and extracted macOS archive in isolated profiles before uploading them. These checks verify real packaged WebView startup, history import, hidden timer progression, break expiry and persistence after restart. They still model idle and unlocked presence; physical lock/sleep and notification display remain separate checks.
 
 Native jobs also exercise the local MCP settings switch, authenticated initialization, public aggregate data, timer actions and immediate listener shutdown in an isolated profile. MCP remains off by default in user profiles.
+
+## Vulnerability gate
+
+`Vulnerability scan` checks the complete npm and Cargo lockfiles on pull requests,
+merge queues, pushes to `main`, manual runs and a daily schedule. A separate npm
+registry audit covers advisories beyond Trivy's database. It sends the public
+npm package inventory to the public npm advisory API without installing packages
+or running scripts. Trivy 0.76.1
+includes development and platform-specific locked packages, all severities, and
+issues without a known fix. Scanner/database errors and missing or unparsed
+lockfiles fail the check. Repository ignore policies are disabled.
+
+The inventory follows the exact commit: historical Electron-only releases require
+the npm lock; commits declaring the Rust app also require its Cargo lock.
+The release workflow scans the exact commit resolved by `prepare` before validation,
+packaging, publication or website deployment. A scan failure stops that chain.
+Require `Vulnerability scan` in the `main` branch rules after this workflow lands;
+workflow failure alone does not prevent a merge into an unprotected branch.
+When dependency remediation changes source or locks, create a new release version
+and tag. The original immutable tag still points to its original dependencies;
+retrying that tag does not pick up later fixes. An advisory database correction
+can be rechecked against the same unchanged tag. Rolling back this policy requires reverting
+the workflow change and updating its required-check rule together.
 
 ## Publication
 
@@ -76,7 +99,7 @@ Each feed selects the highest compatible verified Electron release for its own p
 | Linux x64 | `/updates/linux/x64/latest-linux.yml` |
 | Linux arm64 | `/updates/linux/arm64/latest-linux-arm64.yml` |
 
-These filenames match the pinned electron-updater 6.8.9 parser. JSON feed documents are accepted by its YAML parser and carry the exact architecture's URL, size and SHA-512. No blockmap is required or advertised. Keeping these compatible feeds avoids offering a Tauri package to an installed Electron updater. Migration to Tauri is a manual installation.
+These filenames preserve compatibility with the electron-updater 6.8.9 parser shipped in historical releases. JSON feed documents are accepted by its YAML parser and carry the exact architecture's URL, size and SHA-512. No blockmap is required or advertised. Keeping these compatible feeds avoids offering a Tauri package to an installed Electron updater. Migration to Tauri is a manual installation.
 
 ## Local validation
 
@@ -87,6 +110,19 @@ npm run build
 node site/build.mjs
 ```
 
-Release tests use synthetic executable/package bytes, real archive creation, receipt hashing, and the installed Electron feed parser. They cover all architectures, native build command selection, PE/ELF and metadata failures, payload tampering, complete Debian/RPM receipt and checksum coverage, historical feed fallback, fourteen canonical website downloads, signing labels and CI dependencies. Tauri bundling, installer extraction and AppImage extraction are stubbed. Native installer and launch checks on Windows/Linux and real six-runner builds remain required before publishing; local tests cannot establish those outcomes.
+Release tests use synthetic executable/package bytes, real archive creation, receipt hashing, and historical feed schema checks. They cover all architectures, native build command selection, PE/ELF and metadata failures, payload tampering, complete Debian/RPM receipt and checksum coverage, historical feed fallback, fourteen canonical website downloads, signing labels and CI dependencies. Tauri bundling, installer extraction and AppImage extraction are stubbed. Native installer and launch checks on Windows/Linux and real six-runner builds remain required before publishing; local tests cannot establish those outcomes.
 
 The manifest command reads real published releases and can use `GH_TOKEN` for read-only GitHub requests. Never commit credentials. Network, schema and digest failures stop generation.
+
+## Optional camera model
+
+Only the small TensorFlow.js WASM runtime is included in public/camera and release packages.
+Model sources remain in camera-model, outside public and dist. The immutable download URL,
+byte sizes and SHA-256 hashes live in src/data/cameraModelManifest.json. Preserve the referenced
+Git commit and upstream Apache-2.0 license. Changing model bytes requires updating that pinned
+manifest and the independent camera asset tests together.
+
+The native camera smoke test explicitly downloads the model through camera opt-in, reloads
+the WebView and verifies real inference with external fetching blocked. Completion smoke tests
+prepare the model cache for their isolated saved opt-in profiles. No physical camera or system
+lock is used by those fixtures. These integration checks require access to raw.githubusercontent.com.

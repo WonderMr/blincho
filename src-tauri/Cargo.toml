@@ -1,17 +1,17 @@
 [package]
 name = "blincho"
-version = "1.10.2"
+version = "1.10.5"
 edition = "2021"
 
 [build-dependencies]
-tauri-build = { version = "=2.6.3", features = [] }
+tauri-build = "=2.7.0"
 cc = "=1.4.4"
-# Newer Windows code generation references APIs absent in the pinned runtime.
-tauri-codegen = "=2.6.3"
-tauri-macros = "=2.6.3"
+# Keep code generation paired with the pinned runtime revision.
+tauri-codegen = "=2.7.0"
+tauri-macros = "=2.7.0"
 
 [dependencies]
-tauri = { version = "=2.11.5", features = ["tray-icon", "image-png"] }
+tauri = { version = "=2.12.0", features = ["tray-icon", "image-png"] }
 tauri-plugin-autostart = "=2.5.1"
 tauri-plugin-single-instance = "=2.4.2"
 serde = { version = "=1.0.229", features = ["derive"] }
@@ -38,3 +38,22 @@ windows = { version = "=0.61.3", features = ["Data_Xml_Dom", "Foundation", "UI_N
 zbus = "=5.19.0"
 x11-dl = "=2.21.0"
 webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
+
+# Official GTK 0.19 migration, pinned to the compatible upstream lockfile.
+# See README Development for provenance and the update/removal procedure.
+[patch.crates-io]
+tauri = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-build = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-codegen = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-macros = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-runtime = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-runtime-wry = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tauri-utils = { git = "https://github.com/tauri-apps/tauri.git", rev = "899ca2105ffd06293013b6d2bff4416987d99010" }
+tao = { git = "https://github.com/tauri-apps/tao.git", rev = "08660027c723e09a45b10badf60a73a661c94a95" }
+wry = { git = "https://github.com/tauri-apps/wry.git", rev = "327242ae73301c5e34dcc158e31ae453e8afe837" }
+webkit2gtk = { git = "https://github.com/tauri-apps/webkit2gtk-rs.git", rev = "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72" }
+webkit2gtk-sys = { git = "https://github.com/tauri-apps/webkit2gtk-rs.git", rev = "f5c3825c3f21c44ce346a5aa42e8c33a762f9f72" }
+muda = { git = "https://github.com/tauri-apps/muda.git", rev = "e4b5c4cf58935cd7a387a6843f099e535bdf3c4a" }
+tray-icon = { git = "https://github.com/tauri-apps/tray-icon.git", rev = "79b656b7a61b6b551f90ed1b137bf17a920f6d0b" }
+libappindicator = { git = "https://github.com/tauri-apps/libappindicator-rs.git", rev = "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93" }
+libappindicator-sys = { git = "https://github.com/tauri-apps/libappindicator-rs.git", rev = "f2617d92288e2f0a2f998d3cd46c003e3a5c6d93" }

@@ -14,12 +14,12 @@ import './styles/symbiote.css';
 import { initializeLanguage } from './i18n/runtime';
 import { loadSettings } from './utils/storage';
 import { applyAppearance } from './utils/appearance';
-import { initializeTauriBridge, initializeTauriHistory, continueWithoutTauriHistory, scheduleLegacyHistoryExport } from './utils/tauriBridge';
+import { initializeTauriBridge, initializeTauriHistory, continueWithoutTauriHistory } from './utils/tauriBridge';
 
 const initialAppearance = loadSettings();
 applyAppearance(initialAppearance.theme, initialAppearance.colorPalette);
 
-if (import.meta.env.PROD && !window.electronAPI && !window.__TAURI__ && 'serviceWorker' in navigator && ['http:', 'https:'].includes(location.protocol)) {
+if (import.meta.env.PROD && !window.__TAURI__ && 'serviceWorker' in navigator && ['http:', 'https:'].includes(location.protocol)) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => {
       console.warn('Blincho: offline shell registration failed', error);
@@ -37,7 +37,6 @@ if (rootElement) {
     await initializeLanguage();
     // i18n's module may have loaded before the first-start import.
     if (window.__TAURI__) window.dispatchEvent(new StorageEvent('storage', { key: null }));
-    scheduleLegacyHistoryExport();
     root.render(
     <React.StrictMode>
       <ErrorBoundary>
@@ -78,7 +77,7 @@ if (rootElement) {
   }
   if (window.__TAURI__ && new URLSearchParams(location.search).get('tray-preview') === '1') {
     // This route must never import App, import legacy history or install the
-    // main compatibility bridge, which publishes locale and timer settings.
+    // main desktop bridge, which publishes locale and timer settings.
     void import('./components/TrayPreview').then(({ default: TrayPreview }) => {
       root.render(<TrayPreview />);
     });

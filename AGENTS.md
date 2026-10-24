@@ -4,7 +4,7 @@ Blincho is a free, open-source screen-break reminder for macOS, Windows and Linu
 presence and lock/sleep detection, call postponement, exercises, a comfort journal and local
 statistics in 30 languages. Desktop apps use Tauri 2 with Rust and the system WebView; the same
 React + TypeScript UI also builds as a browser app, and `site/` generates the website
-https://blincho.app. Version 1.8.15, under active development.
+https://blincho.app.
 User-facing overview: `README.md`; release pipeline: `RELEASE.md`.
 
 ## User-facing text style
@@ -27,8 +27,6 @@ rule. Tests enforce this for the UI and website catalogues.
   the legacy Electron profile), `src/local_mcp.rs`, `src/tray_preview/`, `src/updates.rs`,
   `src/window_session.rs`; `native/*.m` (macOS Objective-C); `locales.json` (tray and menu
   strings); `tauri.conf.json`.
-- `electron/`: legacy Electron runtime (`main.cjs` is the npm `main`), kept for `electron:*` scripts
-  and historical update feeds.
 - `public/`: PWA manifest and the offline camera model (`public/camera/`, TensorFlow.js weights
   and WASM backends with `SHA256SUMS.txt`).
 - `site/`: website generator (`build.mjs`, `locales/<lang>.json`, `index.html`, `site.js`,
@@ -43,7 +41,7 @@ rule. Tests enforce this for the UI and website catalogues.
 ## Setup / Build / Run / Test
 
 Node.js 22.12+ (`engines`). Desktop builds need Rust and CMake; CI pins Rust 1.92.0 and CMake
-3.31.10 (CMake 4 breaks the bundled LevelDB dependency). Per-OS prerequisites: README "Development".
+3.31.10 (CMake 4 breaks the bundled LevelDB dependency). Per-OS prerequisites: `docs/DEVELOPMENT.md`.
 
 ```sh
 npm ci
@@ -58,8 +56,42 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
 
 - macOS: `npm run tauri:build:mac`, `tauri:test:mac`, `tauri:test:layout`, `tauri:test:strict`,
   `tauri:test:mcp`. Windows and Linux packages: `tauri:build:win`, `tauri:build:linux`.
-- Electron (legacy): `npm run electron:dev`, `electron:build`, `electron:build:<mac|win|linux>`.
 - Release checks without publishing: the "Local validation" block in `RELEASE.md`.
+
+## Local MCP client tools
+
+Connecting an AI client needs a running Blincho desktop app with Local MCP enabled and a local
+client supporting authenticated Streamable HTTP. Use the URL from Copy connection. In the client
+process's environment, set `BLINCHO_MCP_TOKEN` to the value after `Bearer ` in the copied
+`Authorization` header, without the `Bearer ` prefix. No separate MCP server package is needed.
+See the [Claude Code](docs/LOCAL_MCP.md#claude-code), [Cursor](docs/LOCAL_MCP.md#cursor) and
+[Codex](docs/LOCAL_MCP.md#codex) connection examples.
+
+Discover the `blincho` server's tools through the client's MCP tool listing. Clients may prefix
+these server tool names. The public contract is:
+
+| Tool | Access | Purpose |
+| --- | --- | --- |
+| `get_status` | Read | Current timer and break state; check the result of a queued action. |
+| `get_settings` | Read | Public app settings. |
+| `get_today_stats` | Read | Today's aggregate timer statistics. |
+| `get_data_range` | Read | Saved date boundaries and recorded-day count. |
+| `get_stats` | Read | Daily or weekly aggregate statistics over an inclusive local-date range. |
+| `start_break` | Action | Request a break using the app's configured settings. |
+| `pause_timer` | Action | Request pausing the work timer. |
+| `resume_timer` | Action | Request resuming the work timer. |
+| `skip_break` | Action | Request skipping an eligible, non-strict break. |
+
+No tool requires arguments. Pass `{}` for every tool except `get_stats`, which also accepts
+optional `startDate`, `endDate` (`YYYY-MM-DD`), `groupBy` (`day` or `week`), `offset` (default 0)
+and `limit` (default 100, range 1 to 366). Unknown properties are rejected. Use `get_data_range`
+before a historical query and follow `hasMore` when paginating `get_stats` results.
+
+Use read tools for status or statistics requests. Call action tools only when the user requests
+that timer action. An accepted action is queued, not proof of completion: poll `get_status` and
+respect the app's presence, exercise, camera and strict-break checks. These tools do not expose
+file access, arbitrary commands, settings writes, detailed activity spans, call names, journal
+answers or camera frames. Never put connection tokens in documentation, logs or commits.
 
 ## Conventions
 
@@ -68,8 +100,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
   the same `{placeholders}` and URLs, and no Cyrillic outside `ru` and `uk`
   (`tests/i18nCatalogs.test.cjs`). Add a new string to every catalogue in the same change.
 - Website catalogues `site/locales/<lang>.json` must match the key set of `site/locales/en.json`
-  (checked by `site/build.mjs`). Native tray and menu strings live in `src-tauri/locales.json`,
-  Electron strings in `electron/locales.cjs`.
+  (checked by `site/build.mjs`). Native tray and menu strings live in `src-tauri/locales.json`.
 - Versions in `package.json`, `package-lock.json`, `src-tauri/Cargo.toml`,
   `src-tauri/tauri.conf.json`, the `CHANGELOG.md` section and the `vX.Y.Z` tag must match. README
   also asks to update the localized release summary with them (`release.<version>` keys in
@@ -84,9 +115,9 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
   migration and published update feeds depend on it.
 - Never move or recreate an existing release tag, and never replace published assets.
 - Git-ignored outputs, never commit: `dist/`, `site-dist/`, `release/`, `release-upload/`,
-  `src-tauri/target`, `src-tauri/gen`, `electron/update-support.json`, `site/releases.json`,
+  `src-tauri/target`, `src-tauri/gen`, `site/releases.json`,
   `site/copy-source.json`, `site/DESIGN.txt`, `history.md`, `.env*`, `.dev.vars*`.
-- `public/camera/*` is binary and hash-pinned: a model change must update both
+- `public/camera/*` and `camera-model/*` are binary and hash-pinned: a model change must update both
   `public/camera/SHA256SUMS.txt` and the hashes in `tests/camera-assets.test.cjs`.
 - Privacy guarantees are product requirements: settings, journal and statistics stay on the
   device; camera frames are processed locally and never stored or uploaded; call history keeps

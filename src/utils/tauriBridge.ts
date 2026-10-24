@@ -11,7 +11,16 @@ export interface NativeTimerSnapshot {
   totalMs: number; remainingMs: number; manualPaused: boolean; breakActive: boolean;
   exercising: boolean; expiryPending: boolean; version: number; reasons: PresenceReason[];
   absentSince: number | null; absenceEpoch: number; idleSeconds: number; locked: boolean; suspended: boolean;
-  meetingPostponedEpoch?: number; breakElapsed: boolean; breakEndAt?: number | null; focusByDate: Record<string, number>; tickCount: number;
+  meetingPostponedEpoch?: number; meetingResumedEpoch?: number; breakElapsed: boolean; breakEndAt?: number | null; focusByDate: Record<string, number>; tickCount: number;
+  meetingWarningEpoch?: number;
+  meetingWarningEndAt?: number | null;
+  meetingWarningRequired?: boolean;
+  meetingWarningReady?: boolean;
+  meetingRemindersPaused?: boolean;
+  meetingResumeToken?: number | null;
+  meetingBreakCancellable?: boolean;
+  meetingBreakCancelledEpoch?: number;
+  meetingPauseEndedEpoch?: number;
   activitySpans?: ActivitySpan[];
   meetingSpans?: MeetingSpan[];
   meetingApplications?: string[];
@@ -31,23 +40,31 @@ const breaks = new Set<() => void>();
 const updateListeners = new Set<(state: UpdateState) => void>();
 let latest: NativeTimerSnapshot | null = null;
 let commandQueue = Promise.resolve();
-let exportTimer: ReturnType<typeof setTimeout> | undefined;
 let bridgeInitialization: Promise<void> | undefined;
 let historyRecovery: ReturnType<typeof createHistoryRecovery> | undefined;
 
 export class NativeTimerSession extends TimerSession {
+  /** Advance only the renderer timestamp; the native timer owns countdown progress. */
   advance(now: number): boolean { this.lastUpdated = now; return false; }
+  /** Discard renderer activity so native observations cannot be recorded twice. */
   drainActivity(): ActivitySpan[] { super.drainActivity(); return []; }
 }
+/** Report whether the Tauri runtime owns this page's timer. */
 export function hasNativeTimer(): boolean { return !!window.__TAURI__; }
+/** Subscribe to native snapshots and return the subscription cleanup. */
 export function subscribeNativeTimer(callback: (snapshot: NativeTimerSnapshot) => void): () => void {
   frames.add(callback); return () => frames.delete(callback);
 }
+/**
+ * Serialize a captured timer/settings update with other native timer commands.
+ * meetingBreakToken associates an automatic break with its cancellable meeting
+ * resumption. Report a successful configuration to onConfigured; log failures.
+ */
 export function synchronizeNativeTimer(session: TimerSession, settings: AppSettings,
-  onConfigured?: (snapshot: NativeTimerSnapshot) => void): void {
+  onConfigured?: (snapshot: NativeTimerSnapshot) => void, meetingBreakToken: number | null = null): void {
   if (!window.__TAURI__) return;
   const input = { totalMs: session.totalMs, remainingMs: session.remainingMs, manualPaused: session.manualPaused,
-    breakActive: session.breakActive, exercising: session.exercising, expiryPending: session.expiryPending,
+    breakActive: session.breakActive, meetingBreakToken, exercising: session.exercising, expiryPending: session.expiryPending,
     version: session.version, breakSeconds: settings.breakSeconds, breakDeadlineAt: session.breakDeadlineAt, strictMode: settings.strictMode,
     idleEnabled: settings.idleDetectionEnabled, idleThresholdSeconds: settings.idleThresholdMinutes * 60,
     meetingEnabled: settings.meetingDetectionEnabled, meetingHistoryEnabled: settings.meetingHistoryEnabled,
@@ -60,12 +77,36 @@ export function synchronizeNativeTimer(session: TimerSession, settings: AppSetti
     onConfigured?.(latest);
   }).catch(error => console.warn('Blincho: Native timer update failed:', error));
 }
+/** Read a fresh native snapshot after every previously queued timer command has settled. */
 export async function readNativeTimer(): Promise<NativeTimerSnapshot | null> {
   if (!window.__TAURI__) return null;
   await commandQueue;
   latest = await window.__TAURI__.core.invoke<NativeTimerSnapshot>('timer_snapshot');
   return latest;
 }
+/**
+ * Defer the strict warning identified by timer version and warning epoch.
+ * Accept 5, 10 or 15 minutes, or null to pause reminders until meeting end.
+ * Return the native snapshot; reject unavailable-runtime, stale-action or IPC errors.
+ */
+export async function deferNativeMeetingBreak(version: number, warningEpoch: number, minutes: number | null): Promise<NativeTimerSnapshot> {
+  if (!window.__TAURI__) throw new Error('Native meeting warning unavailable');
+  const action = commandQueue.then(() => window.__TAURI__!.core.invoke<NativeTimerSnapshot>('defer_meeting_break', { version, warningEpoch, minutes }));
+  commandQueue = action.then(snapshot => { latest = snapshot; }).catch(() => {});
+  return action;
+}
+/**
+ * Queue a reminder pause or resumption for the current meeting action token.
+ * Return the native snapshot, including any associated break cancellation.
+ * Reject unavailable-runtime, stale-token or IPC errors without blocking later commands.
+ */
+export async function setNativeMeetingRemindersPaused(token: number, paused: boolean): Promise<NativeTimerSnapshot> {
+  if (!window.__TAURI__) throw new Error('Native meeting reminders unavailable');
+  const action = commandQueue.then(() => window.__TAURI__!.core.invoke<NativeTimerSnapshot>('set_meeting_reminders_paused', { token, paused }));
+  commandQueue = action.then(snapshot => { latest = snapshot; }).catch(() => {});
+  return action;
+}
+/** Queue native history deletion after settings changes, preserving its consent boundary. */
 export async function clearNativeMeetingHistory(): Promise<NativeTimerSnapshot | null> {
   if (!window.__TAURI__) return null;
   // Serialize with settings changes so a queued configuration cannot undo the boundary.
@@ -73,21 +114,14 @@ export async function clearNativeMeetingHistory(): Promise<NativeTimerSnapshot |
   commandQueue = cleared.then(snapshot => { latest = snapshot; }).catch(() => {});
   return cleared;
 }
-export function scheduleLegacyHistoryExport(): void {
-  if (!window.electronAPI?.isElectron || window.electronAPI.platform !== 'darwin' || !window.electronAPI.exportLegacyHistory || window.__TAURI__) return;
-  clearTimeout(exportTimer);
-  exportTimer = setTimeout(() => {
-    try { void window.electronAPI!.exportLegacyHistory!(gatherLegacyHistory(localStorage))
-      .catch(error => console.warn('Blincho: History export failed:', error)); }
-    catch (error) { console.warn('Blincho: History collection failed:', error); }
-  }, 300);
-}
+/** Install the desktop bridge once; allow another attempt after initialization fails. */
 export function initializeTauriBridge(): Promise<void> {
-  if (!window.__TAURI__) { scheduleLegacyHistoryExport(); return Promise.resolve(); }
+  if (!window.__TAURI__) return Promise.resolve();
   if (!bridgeInitialization) bridgeInitialization = installTauriBridge().catch(error => { bridgeInitialization = undefined; throw error; });
   return bridgeInitialization;
 }
 
+/** Recover permitted legacy history once for the current local storage profile. */
 export async function initializeTauriHistory(): Promise<void> {
   if (!window.__TAURI__) return;
   historyRecovery ??= createHistoryRecovery(localStorage, () => window.__TAURI__!.core.invoke('legacy_history'));
@@ -119,8 +153,8 @@ async function installTauriBridge(): Promise<void> {
   document.documentElement.dataset.platform = info.platform;
   document.documentElement.dataset.runtime = 'tauri';
   const command = (operation: string, flag?: boolean) => api.core.invoke<void>('desktop_command', { operation, flag: flag ?? null });
-  window.electronAPI = {
-    isElectron: true, // Compatibility adapter for the existing shared UI and desktop detection.
+  window.desktopAPI = {
+    isDesktop: true,
     platform: info.platform,
     meetingDetectionSupported: info.meetingDetectionSupported,
     configureLocalMcp: enabled => api.core.invoke('local_mcp_configure', { enabled }),

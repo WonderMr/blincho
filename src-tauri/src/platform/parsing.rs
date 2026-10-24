@@ -55,6 +55,7 @@ pub(super) fn meeting_application(value: &str) -> Option<&'static str> {
         "firefox" => Some("Firefox"),
         "msedge" | "microsoft edge" => Some("Microsoft Edge"),
         "brave" | "brave-browser" => Some("Brave"),
+        "vivaldi" => Some("Vivaldi"),
         _ => None,
     }
 }
@@ -206,6 +207,18 @@ mod tests {
         assert!(meeting_capture_app("/usr/bin/chromium"));
         assert!(!meeting_capture_app("zoom-helper-unknown"));
         assert!(!meeting_capture_app("ffmpeg"));
+    }
+    #[test]
+    fn vivaldi_capture_names_are_canonical_and_exact() {
+        for value in [
+            "Vivaldi",
+            "/usr/bin/vivaldi",
+            r"C:\Program Files\Vivaldi\vivaldi.exe",
+        ] {
+            assert_eq!(meeting_application(value), Some("Vivaldi"));
+        }
+        assert_eq!(meeting_application("Vivaldi Helper"), None);
+        assert_eq!(meeting_application("Vivaldi private lesson"), None);
     }
     #[test]
     fn application_attribution_is_canonical_deduplicated_and_private() {

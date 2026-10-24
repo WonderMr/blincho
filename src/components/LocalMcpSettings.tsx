@@ -6,11 +6,11 @@ import type { LocalMcpState } from '../utils/localMcp';
 export const LocalMcpSettings: React.FC<{ enabled: boolean; onChange: (enabled: boolean) => void }> = ({ enabled, onChange }) => {
   const [state, setState] = useState<LocalMcpState | null>(null);
   const [feedback, setFeedback] = useState('');
-  const supported = typeof window.electronAPI?.configureLocalMcp === 'function';
+  const supported = typeof window.desktopAPI?.configureLocalMcp === 'function';
   useEffect(() => {
     if (!supported) return;
     let active = true;
-    const read = () => { void window.electronAPI?.getLocalMcpState?.().then(value => { if (active) setState(value); })
+    const read = () => { void window.desktopAPI?.getLocalMcpState?.().then(value => { if (active) setState(value); })
       .catch(() => { if (active) setFeedback('Не удалось получить состояние MCP.'); }); };
     read(); const timer = setInterval(read, 1000);
     return () => { active = false; clearInterval(timer); };

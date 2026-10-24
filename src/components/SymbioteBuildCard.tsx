@@ -16,14 +16,14 @@ export const SymbioteBuildCard: React.FC<{ build: SymbioteBuild }> = ({ build })
   const [error, setError] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    void window.electronAPI?.getSymbioteShortcutStatus?.().then(value => { if (!cancelled) setShortcut(value); })
+    void window.desktopAPI?.getSymbioteShortcutStatus?.().then(value => { if (!cancelled) setShortcut(value); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, [build.mask, name]);
   const createShortcut = async () => {
     setSaving(true); setError(false);
     try {
-      const value = await window.electronAPI?.createSymbioteShortcut?.(build.mask, name);
+      const value = await window.desktopAPI?.createSymbioteShortcut?.(build.mask, name);
       if (!value?.supported || !value.exists) throw new Error('Shortcut unavailable');
       setShortcut(value);
     } catch { setError(true); }
@@ -31,7 +31,7 @@ export const SymbioteBuildCard: React.FC<{ build: SymbioteBuild }> = ({ build })
   };
   const showShortcut = async () => {
     setError(false);
-    try { if (!await window.electronAPI?.showSymbioteShortcut?.()) throw new Error('Shortcut unavailable'); }
+    try { if (!await window.desktopAPI?.showSymbioteShortcut?.()) throw new Error('Shortcut unavailable'); }
     catch { setError(true); }
   };
   return <section className="settings-section-card symbiote-build-card" aria-labelledby={headingId} data-symbiote-build={build.mask}>

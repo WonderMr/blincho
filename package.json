@@ -1,19 +1,13 @@
 {
   "name": "blincho",
-  "version": "1.10.2",
+  "version": "1.10.5",
   "description": "Screen break reminders and habits for comfortable computer use",
-  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "test": "node --test tests/*.test.cjs",
     "preview": "vite preview",
     "start": "node scripts/start-desktop.cjs",
-    "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:5173 && electron . --dev\"",
-    "electron:build": "npm run build && electron-builder",
-    "electron:build:mac": "npm run build && electron-builder --mac",
-    "electron:build:win": "npm run build && electron-builder --win",
-    "electron:build:linux": "npm run build && electron-builder --linux",
     "site:build": "node site/build.mjs",
     "site:deploy": "npx wrangler@4.149.0 deploy",
     "tauri:dev": "npm run build && cargo run --locked --manifest-path src-tauri/Cargo.toml",
@@ -21,61 +15,11 @@
     "tauri:build:test": "node scripts/build-test-channel.cjs",
     "tauri:test:mac": "cargo build --locked --manifest-path src-tauri/Cargo.toml && node scripts/bundle-tauri-macos.cjs --debug && node tests/tauri-smoke.cjs --bundle-debug --long",
     "tauri:test": "cargo test --locked --manifest-path src-tauri/Cargo.toml && node --test tests/historyTransfer.test.cjs",
-    "electron:start": "npm run build && electron .",
     "tauri:test:layout": "npm run build && cargo build --locked --manifest-path src-tauri/Cargo.toml && node tests/tauri-layout-smoke.cjs",
     "tauri:build:win": "npm run build && tauri build --bundles nsis --ci --no-sign -- --locked",
     "tauri:build:linux": "npm run build && tauri build --bundles appimage,deb,rpm --ci --no-sign --no-binary-patching -- --locked",
     "tauri:test:strict": "node --test tests/macos-strict-smoke.cjs",
     "tauri:test:mcp": "npm run build && cargo build --locked --manifest-path src-tauri/Cargo.toml && node tests/tauri-local-mcp-smoke.cjs"
-  },
-  "build": {
-    "appId": "com.myeyes.app",
-    "productName": "Blincho",
-    "directories": {
-      "output": "release"
-    },
-    "mac": {
-      "category": "public.app-category.healthcare-fitness",
-      "icon": "assets/icon.icns",
-      "target": [
-        "dir",
-        "dmg"
-      ],
-      "identity": null,
-      "fileAssociations": [
-        {
-          "ext": "blincho",
-          "name": "Blincho Shortcut",
-          "role": "Viewer",
-          "rank": "Owner"
-        }
-      ]
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "assets/icon.png",
-      "assets/icon.ico",
-      "assets/trayTemplate.png",
-      "assets/trayTemplate@2x.png"
-    ],
-    "win": {
-      "icon": "assets/icon.ico",
-      "target": [
-        "nsis",
-        "portable"
-      ]
-    },
-    "linux": {
-      "icon": "assets/512x512.png",
-      "category": "Utility",
-      "target": [
-        "AppImage",
-        "tar.gz"
-      ],
-      "syncDesktopName": true,
-      "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
-    }
   },
   "keywords": [
     "eye-care",
@@ -95,7 +39,6 @@
     "@tensorflow/tfjs-converter": "4.22.0",
     "@tensorflow/tfjs-core": "4.22.0",
     "canvas-confetti": "^1.9.4",
-    "electron-updater": "6.8.9",
     "lucide-react": "^1.55.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
@@ -107,17 +50,13 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "concurrently": "^10.0.6",
-    "electron": "^44.7.0",
-    "electron-builder": "^26.15.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
-    "wait-on": "^9.5.1"
+    "js-yaml": "4.3.2"
   },
   "engines": {
     "node": ">=22.12.0"
   },
-  "desktopName": "com.myeyes.app.desktop",
   "repository": {
     "type": "git",
     "url": "https://github.com/WonderMr/blincho.git"

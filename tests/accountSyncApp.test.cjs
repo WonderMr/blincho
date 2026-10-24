@@ -11,7 +11,7 @@ fs.writeFileSync(stub, `export function useAccountSync(enabled, callbacks) {
   window.syncTest = { enabled, callbacks, stats: json => callbacks.stats(JSON.parse(json)), emit: event => callbacks.break(event, () => window.syncCurrent !== false) };
   return { status: enabled ? 'connected' : 'disconnected', account: enabled ? 'test' : null, error: null,
     connect: async () => {}, disconnect: () => {}, deleteAccount: async () => {}, settingsChanged: () => {},
-    startBreak: async () => { window.syncPublished = (window.syncPublished || 0) + 1; if (window.syncPublishFails) throw Error('offline'); if (window.syncSchedule && enabled) { const at = Date.now(); setTimeout(() => { void callbacks.break({ v: 1, id: 'c'.repeat(32), deviceId: 'd'.repeat(32), createdAt: at, startAt: at + 2500, endAt: at + 22500 }, () => window.syncCurrent !== false); }, 2500); } return enabled; } };
+    startBreak: async () => { window.syncPublished = (window.syncPublished || 0) + 1; if (window.syncPublishFails) throw Error('offline'); if (window.syncSchedule && enabled) { const at = Date.now(); const generation = callbacks.breakGeneration?.(); setTimeout(() => { void callbacks.break({ v: 1, id: 'c'.repeat(32), deviceId: 'd'.repeat(32), createdAt: at, startAt: at + 2500, endAt: at + 22500 }, () => window.syncCurrent !== false && generation === callbacks.breakGeneration?.()); }, 2500); } return enabled; } };
 }`);
 process.on('exit', () => fs.rmSync(directory, { recursive: true, force: true }));
 function harness(settings = {}) {
@@ -38,7 +38,7 @@ test('unavailable browser sync capabilities leave connection controls retryable'
 test('a shared break enforces strict UI and native lock locally without rebroadcast or remote opt-in changes', async () => {
   const h = harness({ strictMode: false });
   try {
-    await h.settle(); const locks = []; h.electronAPI.setStrictLock = flag => locks.push(flag);
+    await h.settle(); const locks = []; h.desktopAPI.setStrictLock = flag => locks.push(flag);
     await window.syncTest.emit(event(h)); await h.settle();
     assert(h.active.has('BreakOverlay'));
     assert.equal(h.captured.BreakOverlay.strictMode, true);
@@ -61,9 +61,9 @@ test('shared commands skip calls, absence, expired deadlines, disabled sync and 
     const h = harness({ meetingDetectionEnabled: true, syncEnabled: reason !== 'disabled' });
     try {
       await h.settle();
-      if (reason === 'call') h.electronAPI.checkMeetingActive = async () => ({ inMeeting: true, supported: true });
-      if (reason === 'unknown-call') h.electronAPI.checkMeetingActive = async () => ({ inMeeting: false, supported: false });
-      if (reason === 'failed-call') h.electronAPI.checkMeetingActive = async () => { throw Error('unavailable'); };
+      if (reason === 'call') h.desktopAPI.checkMeetingActive = async () => ({ inMeeting: true, supported: true });
+      if (reason === 'unknown-call') h.desktopAPI.checkMeetingActive = async () => ({ inMeeting: false, supported: false });
+      if (reason === 'failed-call') h.desktopAPI.checkMeetingActive = async () => { throw Error('unavailable'); };
       if (reason === 'absence') h.setIdle(90);
       if (reason === 'revoked') window.syncCurrent = false;
       await window.syncTest.emit(event(h, reason === 'expired' ? -1 : 20)); await h.settle();
@@ -104,7 +104,7 @@ test('reset cancels a shared callback already waiting for its meeting check', as
   const h = harness({ meetingDetectionEnabled: true });
   try {
     await h.settle(); let resolveMeeting;
-    h.electronAPI.checkMeetingActive = () => new Promise(resolve => { resolveMeeting = resolve; });
+    h.desktopAPI.checkMeetingActive = () => new Promise(resolve => { resolveMeeting = resolve; });
     const pending = window.syncTest.emit(event(h)); await h.settle();
     assert.equal(typeof resolveMeeting, 'function');
     await h.call('TimerWidget', 'onReset');
@@ -119,7 +119,7 @@ test('a late call postpones an expired local cycle while peers keep their runnin
     const h = harness({ meetingDetectionEnabled: true, timerPreset: 'custom', workMinutes: expired ? 1 / 60 : 20 });
     try {
       await h.settle(); let inMeeting = false;
-      h.electronAPI.checkMeetingActive = async () => ({ inMeeting, supported: true });
+      h.desktopAPI.checkMeetingActive = async () => ({ inMeeting, supported: true });
       window.syncSchedule = true;
       if (expired) { await h.advance(1000); assert.equal(window.syncPublished, 1); }
       inMeeting = true;
@@ -155,7 +155,7 @@ test('unknown late call status keeps the local expiry policy while peers skip th
   const h = harness({ meetingDetectionEnabled: true, timerPreset: 'custom', workMinutes: 1 / 60, strictMode: false });
   try {
     await h.settle(); window.syncSchedule = true;
-    h.electronAPI.checkMeetingActive = async () => ({ inMeeting: false, supported: false });
+    h.desktopAPI.checkMeetingActive = async () => ({ inMeeting: false, supported: false });
     await h.advance(3500);
     assert(h.active.has('BreakOverlay'));
     assert.equal(h.captured.BreakOverlay.strictMode, false);
@@ -168,10 +168,34 @@ test('a known call arriving before local delivery fallback postpones the expired
   const h = harness({ meetingDetectionEnabled: true, timerPreset: 'custom', workMinutes: 1 / 60 });
   try {
     await h.settle(); let inMeeting = false;
-    h.electronAPI.checkMeetingActive = async () => ({ inMeeting, supported: true });
+    h.desktopAPI.checkMeetingActive = async () => ({ inMeeting, supported: true });
     await h.advance(1000); assert.equal(window.syncPublished, 1);
     inMeeting = true; await h.advance(6500);
     assert(!h.active.has('BreakOverlay'));
     assert(h.captured.TimerWidget.secondsRemaining >= 298);
+  } finally { h.destroy(); }
+});
+
+test('reset and manual pause reject a shared break before scheduled delivery starts', async () => {
+  for (const action of ['onReset', 'onTogglePlay']) {
+    const h = harness({ timerPreset: 'custom', workMinutes: 1 / 60 });
+    try {
+      await h.settle(); window.syncSchedule = true;
+      await h.advance(1000); assert.equal(window.syncPublished, 1);
+      await h.call('TimerWidget', action);
+      await h.advance(2500);
+      assert(!h.active.has('BreakOverlay'), action);
+      assert.equal(h.captured.TimerWidget.isRunning, false);
+    } finally { h.destroy(); }
+  }
+});
+
+test('a newly received remote command preserves an existing manual pause', async () => {
+  const h = harness();
+  try {
+    await h.settle(); await h.call('TimerWidget', 'onTogglePlay');
+    await window.syncTest.emit(event(h)); await h.settle();
+    assert(!h.active.has('BreakOverlay'));
+    assert.equal(h.captured.TimerWidget.isRunning, false);
   } finally { h.destroy(); }
 });

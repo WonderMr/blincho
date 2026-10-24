@@ -3,7 +3,7 @@ import { dayBounds, localDayKey } from './activity';
 
 export const MEETING_APPLICATIONS = [
   'Zoom', 'Microsoft Teams', 'Webex', 'Skype', 'Discord', 'FaceTime',
-  'Google Chrome', 'Chromium', 'Safari', 'Firefox', 'Microsoft Edge', 'Brave', 'unknown',
+  'Google Chrome', 'Chromium', 'Safari', 'Firefox', 'Microsoft Edge', 'Brave', 'Vivaldi', 'unknown',
 ] as const;
 
 const applicationNames = new Map<string, string>(MEETING_APPLICATIONS.map(app => [app.toLowerCase(), app]));

@@ -122,7 +122,7 @@ function publish() {
     document.querySelector?.('meta[name="description"]')?.setAttribute('content', t("Чередуйте работу с коротким отдыхом. Таймер учитывает активность и ваши паузы."));
   }
   if (typeof window !== 'undefined') {
-    try { void window.electronAPI?.setLocale?.(locale)?.catch(() => {}); }
+    try { void window.desktopAPI?.setLocale?.(locale)?.catch(() => {}); }
     catch { /* Native menu availability cannot block the renderer. */ }
   }
   revision += 1;
@@ -159,11 +159,11 @@ export function acceptLanguageSuggestion(): void {
 }
 
 function loadSystemLanguages(): Promise<void> {
-  if (typeof window === 'undefined' || !window.electronAPI?.getPreferredLanguages) return Promise.resolve();
+  if (typeof window === 'undefined' || !window.desktopAPI?.getPreferredLanguages) return Promise.resolve();
   // A failing/unresponsive native bridge must not prevent the app from opening.
   return new Promise(resolve => {
     const timeout = setTimeout(resolve, 1500);
-    Promise.resolve().then(() => window.electronAPI!.getPreferredLanguages!()).then(languages => {
+    Promise.resolve().then(() => window.desktopAPI!.getPreferredLanguages!()).then(languages => {
       if (Array.isArray(languages)) systemLanguages = languages.filter(value => typeof value === 'string').slice(0, 50);
       updateDetectedLanguages();
     }).catch(() => {}).finally(() => { clearTimeout(timeout); resolve(); });

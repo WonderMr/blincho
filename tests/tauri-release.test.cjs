@@ -148,7 +148,7 @@ async function runMacPackager(arch, scenario = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-tauri-package-'));
   try {
     await mkdir(path.join(directory, 'src-tauri'));
-    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version, build: { appId: 'com.myeyes.app' } }));
+    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version }));
     await writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ version, packages: { '': { version } } }));
     await writeFile(path.join(directory, 'src-tauri/tauri.conf.json'), JSON.stringify({ identifier: 'com.myeyes.app', productName: 'Blincho', version, ...scenario.config }));
     const oldBundleFile = path.join(directory, 'release/tauri-macos/Blincho.app/Contents/Resources/old-bundle.txt');
@@ -208,59 +208,6 @@ async function runMacPackager(arch, scenario = {}) {
     const packages = receipt && await Promise.all(receipt.artifacts.map(async artifact => ({ artifact, bytes: await readFile(path.join(directory, 'release-upload', artifact.name)) })));
     const previousBundle = await readFile(oldBundleFile, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     return { ...result, calls, receipt, bytes, packages, previousBundle };
-  } finally { await rm(directory, { recursive: true, force: true }); }
-}
-
-async function runElectronPackager(platform, arch) {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-electron-package-'));
-  try {
-    await mkdir(path.join(directory, 'electron'));
-    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name: 'blincho', version: '1.5.0', build: { appId: 'com.myeyes.app', directories: { output: 'release' } } }));
-    await writeFile(path.join(directory, 'package-lock.json'), JSON.stringify({ version: '1.5.0', packages: { '': { version: '1.5.0' } } }));
-    const mock = path.join(directory, 'mock-electron.mjs');
-    await writeFile(mock, `
-      import fs from 'node:fs/promises';
-      import path from 'node:path';
-      import Module, { createRequire, syncBuiltinESMExports } from 'node:module';
-      import childProcess from 'node:child_process';
-      const require = createRequire(import.meta.url);
-      const { createPackage } = require(${JSON.stringify(require.resolve('@electron/asar'))});
-      const platform = ${JSON.stringify(platform)};
-      const arch = ${JSON.stringify(arch)};
-      Object.defineProperty(process, 'platform', { value: platform === 'windows' ? 'win32' : 'linux' });
-      Object.defineProperty(process, 'arch', { value: arch });
-      childProcess.spawnSync = () => { throw new Error('Electron packaging must not run Rust or native Tauri commands'); };
-      syncBuiltinESMExports();
-      const load = Module._load;
-      Module._load = function(request, ...rest) {
-        if (request !== 'electron-builder') return load.call(this, request, ...rest);
-        const native = { createTarget: targets => targets[0] };
-        return { Platform: { WINDOWS: native, LINUX: native }, Arch: { x64: 'x64', arm64: 'arm64' }, build: async options => {
-          const target = options.targets;
-          await fs.appendFile('calls.jsonl', JSON.stringify(target) + '\\n');
-          const resources = path.resolve('release/mock-' + target + '/resources');
-          await fs.mkdir(resources, { recursive: true });
-          // The packager reads electron/update-support.json inside app.asar.
-          // Preserve its expected path in a real archive, independent of builder.
-          const source = path.resolve('release/mock-' + target + '/source');
-          await fs.mkdir(path.join(source, 'electron'), { recursive: true });
-          await fs.copyFile('electron/update-support.json', path.join(source, 'electron/update-support.json'));
-          await createPackage(source, path.join(resources, 'app.asar'));
-          await options.config.afterPack({ appOutDir: resources, packager: { getResourcesDir: () => resources } });
-          const suffix = { nsis: '-setup.exe', portable: '-portable.exe', AppImage: '.AppImage', 'tar.gz': '.tar.gz' }[target];
-          const publicArch = target === 'AppImage' && arch === 'x64' ? 'x86_64' : arch;
-          await fs.writeFile(path.join('release', 'Blincho-1.5.0-' + platform + '-' + publicArch + suffix), 'synthetic Electron ' + target + ' package');
-        } };
-      };
-    `);
-    const result = spawnSync(process.execPath, ['--import', pathToFileURL(mock).href, path.resolve(__dirname, '../scripts/release-package.mjs'), platform, arch], {
-      cwd: directory, encoding: 'utf8', timeout: 30_000, env: { ...process.env, RELEASE_TAG: 'v1.5.0' },
-    });
-    if (result.error) throw result.error;
-    const calls = (await readFile(path.join(directory, 'calls.jsonl'), 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; })).trim().split('\n').filter(Boolean).map(JSON.parse);
-    const receipt = await readFile(path.join(directory, `release-upload/Blincho-1.5.0-updates-${platform === 'windows' ? 'win32' : 'linux'}-${arch}.json`), 'utf8').then(JSON.parse).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-    const support = await readFile(path.join(directory, 'electron/update-support.json')).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-    return { ...result, calls, receipt, support };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 
@@ -348,20 +295,6 @@ test('missing or tampered Tauri bundle metadata, identity, architecture and sign
     assert.equal(result.receipt, null);
     assert.equal(result.bytes, null);
     assert.ok(result.calls.every(([command]) => command !== '/usr/bin/ditto'));
-  });
-});
-
-test('historical 1.5.0 Windows and Linux retain separate Electron packages without invoking Rust or Tauri', async t => {
-  const { validateReceipt } = await import('../scripts/release-lib.mjs');
-  for (const platform of ['windows', 'linux']) for (const arch of ['arm64', 'x64']) await t.test(`${platform}/${arch}`, async () => {
-    const result = await runElectronPackager(platform, arch);
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.calls, platform === 'windows' ? ['nsis', 'portable'] : ['AppImage', 'tar.gz']);
-    assert.equal(result.receipt.runtime, 'electron');
-    validateReceipt(result.receipt, '1.5.0');
-    assert.deepEqual(result.receipt.artifacts.map(item => item.packageType), platform === 'windows' ? ['nsis', 'manual'] : ['appimage', 'manual']);
-    assert.ok(result.receipt.artifacts.every(item => item.updaterConfig && !item.signed && !item.notarized && item.name.includes(`-${arch}`)));
-    assert.equal(result.support, null);
   });
 });
 

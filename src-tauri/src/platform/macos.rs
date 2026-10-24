@@ -9,6 +9,8 @@ use std::{
 };
 
 extern "C" {
+    /// Return passive capture state: 1 for active, 0 for confirmed inactive, or -1 for unknown.
+    fn blincho_capture_active() -> i32;
     fn blincho_observe_power(callback: extern "C" fn(i32));
     fn blincho_idle_seconds() -> f64;
     fn blincho_session_locked() -> i32;
@@ -224,12 +226,17 @@ pub fn meeting_supported() -> bool {
 pub fn meeting_status() -> MeetingStatus {
     meeting_status_with_probes(bounded_probe_with_exit)
 }
+/// Combine bounded meeting-process probes with passive capture metadata, preserving unknown
+/// status when required meeting probes fail.
 fn meeting_status_with_probes(
     mut probe: impl FnMut(&str, &[&str], Option<i32>) -> Option<String>,
 ) -> MeetingStatus {
     let assertion = probe("/usr/bin/pmset", &["-g", "assertions"], None);
     let Some(output) = assertion else {
-        return MeetingStatus::inactive(false);
+        return MeetingStatus {
+            capture_supported: true,
+            ..MeetingStatus::inactive(false)
+        };
     };
     let mut applications = active_meeting_applications(&output);
     if needs_zoom_capture_probe(&applications) {
@@ -238,12 +245,24 @@ fn meeting_status_with_probes(
             Some(text) if text.lines().all(|line| line.parse::<u32>().is_ok()) => {
                 applications.push("Zoom".into());
             }
-            _ if applications.is_empty() => return MeetingStatus::inactive(false),
+            _ if applications.is_empty() => {
+                return MeetingStatus {
+                    capture_supported: true,
+                    ..MeetingStatus::inactive(false)
+                }
+            }
             // An already identified call remains positive if the Zoom fallback fails.
             _ => {}
         }
     }
-    MeetingStatus::detected(applications, true)
+    let mut status = MeetingStatus::detected(applications, true);
+    status.capture_supported = true;
+    status.capture_active = match unsafe { blincho_capture_active() } {
+        0 => Some(false),
+        1 => Some(true),
+        _ => None,
+    };
+    status
 }
 
 #[cfg(test)]

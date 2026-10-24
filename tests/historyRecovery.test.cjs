@@ -66,7 +66,7 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
     } },
     window: { getCurrentWindow: () => ({ startDragging: async () => {} }) },
   } : undefined;
-  window.electronAPI = runtime === 'electron' ? { isElectron: true, exportLegacyHistory: async () => {} } : undefined;
+  window.desktopAPI = undefined;
   function SyntheticApp() {
     React.useEffect(() => {
       appMounts++;
@@ -128,7 +128,7 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
       ReactDOM.flushSync(() => { props.onClick(); if (twice) props.onClick(); });
       await settle();
     },
-    destroy() { if (root) ReactDOM.flushSync(() => root.unmount()); doc.body.removeChild(host); window.__TAURI__ = undefined; window.electronAPI = undefined; },
+    destroy() { if (root) ReactDOM.flushSync(() => root.unmount()); doc.body.removeChild(host); window.__TAURI__ = undefined; window.desktopAPI = undefined; },
   };
 }
 
@@ -308,32 +308,12 @@ test('recovery controls and bounded escaped details render in all 30 languages',
   } finally { h.destroy(); }
 });
 
-test('web and Electron startup still mounts App without invoking Tauri history or installing native listeners', async () => {
-  for (const runtime of ['web', 'electron']) {
-    const h = harness({ runtime });
-    try {
-      await h.start(); assert(h.appMounts > 0); assert.equal(h.rootCount, 1);
-      assert.equal(h.calls.length, 0); assert.equal(h.listenCounts.size, 0);
-      assert.equal(h.store.getItem('blincho-tauri-history-choice-v1'), null);
-    } finally { h.destroy(); }
-  }
-});
-
-test('legacy export scheduling is restricted to macOS Electron and coalesces startup requests', async () => {
-  const scheduled = new Map(); let next = 0, exports = 0;
-  const h = harness({ runtime: 'electron', timers: {
-    setTimeout(callback, delay) { const id = ++next; scheduled.set(id, { callback, delay }); return id; },
-    clearTimeout: id => scheduled.delete(id),
-  } });
+test('web startup still mounts App without invoking Tauri history or installing native listeners', async () => {
+  const h = harness({ runtime: 'web' });
   try {
-    const bridge = h.load(path.join(repo, 'src/utils/tauriBridge.ts'));
-    for (const platform of [undefined, 'linux', 'win32']) {
-      window.electronAPI.platform = platform; bridge.scheduleLegacyHistoryExport(); assert.equal(scheduled.size, 0);
-    }
-    window.electronAPI.platform = 'darwin'; window.electronAPI.exportLegacyHistory = async () => { exports++; };
-    await h.start(); assert.equal(scheduled.size, 1); assert.equal([...scheduled.values()][0].delay, 300);
-    [...scheduled.values()][0].callback(); await h.settle(); assert.equal(exports, 1);
-    scheduled.clear(); window.__TAURI__ = {}; bridge.scheduleLegacyHistoryExport(); assert.equal(scheduled.size, 0);
+    await h.start(); assert(h.appMounts > 0); assert.equal(h.rootCount, 1);
+    assert.equal(h.calls.length, 0); assert.equal(h.listenCounts.size, 0);
+    assert.equal(h.store.getItem('blincho-tauri-history-choice-v1'), null);
   } finally { h.destroy(); }
 });
 
@@ -345,8 +325,8 @@ for (const platform of ['darwin', 'win32', 'linux']) {
       await bridge.initializeTauriBridge();
       assert.equal(doc.documentElement.dataset.platform, platform);
       assert.equal(doc.documentElement.dataset.runtime, 'tauri');
-      assert.equal(window.electronAPI.platform, platform);
-      assert.equal(window.electronAPI.meetingDetectionSupported, platform !== 'linux');
+      assert.equal(window.desktopAPI.platform, platform);
+      assert.equal(window.desktopAPI.meetingDetectionSupported, platform !== 'linux');
     } finally { h.destroy(); }
   });
 }

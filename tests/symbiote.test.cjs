@@ -72,18 +72,18 @@ test('defaults, unsupported capabilities, stale child flags and pending camera c
 });
 
 test('capability reads never request permissions, configure integrations or invoke the camera', () => {
-  const oldApi = window.electronAPI, oldTauri = window.__TAURI__, oldMedia = navigatorStub.mediaDevices;
+  const oldApi = window.desktopAPI, oldTauri = window.__TAURI__, oldMedia = navigatorStub.mediaDevices;
   const forbidden = () => { throw Error('Branding must be read-only'); };
   try {
     window.__TAURI__ = {};
-    window.electronAPI = { meetingDetectionSupported: true, lockComputer: forbidden, configureLocalMcp: forbidden };
+    window.desktopAPI = { meetingDetectionSupported: true, lockComputer: forbidden, configureLocalMcp: forbidden };
     navigatorStub.mediaDevices = { getUserMedia: forbidden };
     const supported = readSymbioteCapabilities(true);
     for (const key of Object.keys(all)) assert.equal(supported[key], true, key);
     assert.equal(readSymbioteCapabilities(false).input, false);
-    window.__TAURI__ = undefined; window.electronAPI = undefined;
+    window.__TAURI__ = undefined; window.desktopAPI = undefined;
     for (const key of Object.keys(none)) assert.equal(readSymbioteCapabilities(true)[key], false, key);
-  } finally { window.electronAPI = oldApi; window.__TAURI__ = oldTauri; navigatorStub.mediaDevices = oldMedia; }
+  } finally { window.desktopAPI = oldApi; window.__TAURI__ = oldTauri; navigatorStub.mediaDevices = oldMedia; }
 });
 
 test('all shipped portraits are distinct 256px PNGs with verified source and asset hashes', () => {

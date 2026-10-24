@@ -104,7 +104,7 @@ assert.equal(storage.loadCVSResult().title, 'Самопроверка симпт
 saved.set('myeyes_cvs_result_v1', JSON.stringify({ score: 9, date: '2026-10-11', maxScore: 18, level: 'self-check', title: 'Самопроверка симптомов', recommendations: ['Current neutral guidance'] }));
 assert.deepEqual(storage.loadCVSResult().recommendations, ['Current neutral guidance']);
 const notifications = require(path.join(buildDirectory, 'utils/notifications.js'));
-global.window = { electronAPI: { showNotification() { throw new Error('notification IPC failed'); }, flashWindow() { throw new Error('flash IPC failed'); } } };
+global.window = { desktopAPI: { showNotification() { throw new Error('notification IPC failed'); }, flashWindow() { throw new Error('flash IPC failed'); } } };
 const originalWarn = console.warn;
 let notificationWarnings = 0;
 console.warn = () => { notificationWarnings += 1; };

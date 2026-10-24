@@ -6,10 +6,10 @@ const path = require('node:path');
 const { React, ReactDOMClient, ReactDOM, doc, DOMNode, transformer } = require('./support/syntheticDom.cjs');
 const repo = path.resolve(__dirname, '..');
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
-function createSettingsHarness({ media, native = false, nativeReady = Promise.resolve({}), onPending, meetingSupported = true, platform = 'darwin' } = {}) {
+function createSettingsHarness({ media, native = false, nativeReady = Promise.resolve({}), onPending, meetingSupported = true, platform = 'darwin', prepareModel = async () => {} } = {}) {
   const cache = new Map(), store = new Map(); const navigator = { mediaDevices: media };
   const localStorage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value), removeItem: key => store.delete(key) };
-  window.localStorage = localStorage; window.electronAPI = { isElectron: true, platform, meetingDetectionSupported: meetingSupported, lockComputer() { throw Error('Permission must not lock'); } };
+  window.localStorage = localStorage; window.desktopAPI = { isDesktop: true, platform, meetingDetectionSupported: meetingSupported, lockComputer() { throw Error('Permission must not lock'); } };
   localStorage.setItem('blincho-language-v1', JSON.stringify({ preference: 'ru', acknowledged: true }));
   let settings, updates = 0, closed = 0, nativeReads = 0, alive = true; const pending = [];
   function load(relative) {
@@ -22,6 +22,7 @@ function createSettingsHarness({ media, native = false, nativeReady = Promise.re
       .replace(/export (async )?(const|function|class) /g, '$1$2 ') + `\nObject.assign(module.exports,{${names.join(',')}});`;
     const requireLocal = name => name === 'react' ? React : name === 'lucide-react' ? new Proxy({}, { get: () => () => null }) :
       name.endsWith('/soundSynth') ? { soundSynth: { enabled: false, playZenBowl() {} } } : name.endsWith('/notifications') ? { requestNotificationPermission: async () => false, showEyeBreakNotification() {} } :
+      name.endsWith('/cameraAssets') ? { prepareCameraModel: prepareModel } :
       name.endsWith('/tauriBridge') ? { hasNativeTimer: () => native, readNativeTimer: () => { nativeReads++; assert.equal(settings.cameraLockEnabled, true, 'native input enabled before queue is awaited'); return nativeReady; } } :
       name.startsWith('.') ? load(path.relative(repo, path.resolve(path.dirname(file), name) + (path.extname(name) ? '' : fs.existsSync(path.resolve(path.dirname(file), name) + '.ts') ? '.ts' : '.tsx'))) : require(name);
     vm.runInNewContext(source, { module, require: requireLocal, console, window, navigator, document: doc, HTMLElement: DOMNode, localStorage, AbortController }, { filename: file }); return module.exports;
@@ -52,7 +53,7 @@ test('manual enable requests permission immediately, shows feedback and stops tr
     assert.equal(h.settings.cameraLockEnabled, false); assert.equal(calls, 0);
     assert(h.host.textContent.includes('При включении проверяется доступ к камере'));
     assert(h.host.textContent.includes('На macOS: Системные настройки'));
-    h.change('camera-lock-enabled', true); assert(h.host.textContent.includes('Запрашиваем доступ к камере…'));
+    h.change('camera-lock-enabled', true); assert(h.host.textContent.includes('Загрузка модели камеры…'));
     await h.settle(); assert.equal(calls, 1); assert.equal(stopped, 1); assert.equal(h.settings.cameraLockEnabled, true);
     assert(h.host.textContent.includes('Доступ к камере разрешён.')); assert.deepEqual(h.pending, [true, false]);
     h.change('sound-volume', 35); await h.settle(); assert.equal(calls, 1, 'render with saved enable does not repeat the probe');
@@ -129,6 +130,39 @@ test('camera locking is explicitly unavailable without call detection, including
       await h.settle();
       assert.equal(calls, 0, 'unsupported configuration cannot request camera permission');
       assert.equal(h.settings.cameraLockEnabled, false);
+    } finally { h.destroy(); }
+  }
+});
+
+
+test('model download gates opt-in and camera access, reports progress and retries after failure', async () => {
+  const download = deferred(); let attempts = 0, probes = 0, report;
+  const h = createSettingsHarness({ prepareModel: async (signal, progress) => {
+    attempts++; report = progress;
+    if (attempts === 1) return download.promise;
+  }, media: { getUserMedia: async () => { probes++; return { getTracks: () => [] }; } } });
+  try {
+    h.change('camera-lock-enabled', true); await h.settle();
+    assert.equal(h.settings.cameraLockEnabled, false); assert.equal(probes, 0); assert.deepEqual(h.pending, [true]);
+    ReactDOM.flushSync(() => report(42)); assert(h.host.textContent.includes('42%'));
+    h.change('sound-volume', 45); download.reject(Error('offline')); await h.settle();
+    assert.equal(h.settings.cameraLockEnabled, false); assert.equal(h.settings.soundVolume, 45); assert.equal(probes, 0);
+    assert(h.host.textContent.includes('Не удалось загрузить модель камеры'));
+    h.change('camera-lock-enabled', true); await h.settle();
+    assert.equal(attempts, 2); assert.equal(probes, 1); assert.equal(h.settings.cameraLockEnabled, true);
+  } finally { h.destroy(); }
+});
+
+test('closing or cancelling during download leaves the feature off and ignores late progress/completion', async () => {
+  for (const close of [false, true]) {
+    const download = deferred(); let probes = 0, signal, progress;
+    const h = createSettingsHarness({ prepareModel: async (s, p) => { signal = s; progress = p; return download.promise; }, media: { getUserMedia: async () => { probes++; return { getTracks: () => [] }; } } });
+    try {
+      h.change('camera-lock-enabled', true); await h.settle();
+      if (close) h.close('button'); else h.change('camera-lock-enabled', false);
+      assert.equal(signal.aborted, true); const updates = h.updates;
+      progress(100); download.resolve(); await h.settle();
+      assert.equal(h.settings.cameraLockEnabled, false); assert.equal(probes, 0); assert.equal(h.updates, updates);
     } finally { h.destroy(); }
   }
 });

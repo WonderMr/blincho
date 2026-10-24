@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { mkdtemp, writeFile, readFile, rm } = require('node:fs/promises');
+const { mkdtemp, mkdir, writeFile, readFile, rm } = require('node:fs/promises');
 const { spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const os = require('node:os');
@@ -14,6 +14,33 @@ const tag = 'v1.5.0';
 const repository = 'WonderMr/blincho';
 const reference = (ref, commit = sha, type = 'commit') => ({ ref, object: { type, sha: commit } });
 const versions = () => ({ packageJson: { name: 'blincho', version: '1.5.0' }, lockJson: { version: '1.5.0', packages: { '': { version: '1.5.0' } } } });
+
+test('security inventory supports Electron history and requires complete Rust locks', { skip: process.platform === 'win32' }, async (t) => {
+  const workflow = load(await readFile(path.join(__dirname, '../.github/workflows/vulnerability-scan.yml'), 'utf8'));
+  const stage = workflow.jobs['vulnerability-scan'].steps.find(step => step.id === 'inventory');
+  for (const [manifest, lock, succeeds] of [[false, false, true], [true, false, false], [true, true, true], [false, true, false]]) {
+    await t.test(`Cargo manifest=${manifest}, lock=${lock}`, async () => {
+      const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-security-inventory-'));
+      try {
+        const project = path.join(directory, 'project');
+        const temporary = path.join(directory, 'runner');
+        const output = path.join(directory, 'outputs');
+        await mkdir(project); await mkdir(temporary);
+        await writeFile(output, '');
+        await writeFile(path.join(project, 'package.json'), '{}');
+        await writeFile(path.join(project, 'package-lock.json'), '{}');
+        if (manifest || lock) await mkdir(path.join(project, 'src-tauri'));
+        if (manifest) await writeFile(path.join(project, 'src-tauri/Cargo.toml'), '[package]\nname="fixture"\nversion="1.0.0"\n');
+        if (lock) await writeFile(path.join(project, 'src-tauri/Cargo.lock'), 'version = 3\n');
+        const result = spawnSync('bash', ['-e', '-c', stage.run], {
+          cwd: project, encoding: 'utf8', env: { ...process.env, RUNNER_TEMP: temporary, GITHUB_OUTPUT: output },
+        });
+        assert.equal(result.status === 0, succeeds, result.stderr);
+        if (succeeds) assert.equal(await readFile(output, 'utf8'), `targets=package-lock.json${manifest ? ',src-tauri/Cargo.lock' : ''}\n`);
+      } finally { await rm(directory, { recursive: true, force: true }); }
+    });
+  }
+});
 
 function scenario({ responses = [
   [404, {}], [200, reference('refs/heads/main')], [201, reference(`refs/tags/${tag}`)],
@@ -292,7 +319,10 @@ test('workflow gates every job on preparation and pins each checkout to the reso
   assert.deepEqual(jobs.prepare.permissions, { contents: 'write' });
   assert.deepEqual(jobs.publish.permissions, { contents: 'write' });
   for (const job of ['validate', 'package', 'deploy']) assert.equal(jobs[job].permissions, undefined);
-  assert.equal(jobs.validate.needs, 'prepare');
+  assert.equal(jobs['vulnerability-scan'].needs, 'prepare');
+  assert.equal(jobs['vulnerability-scan'].uses, './.github/workflows/vulnerability-scan.yml');
+  assert.equal(jobs['vulnerability-scan'].with.ref, '${{ needs.prepare.outputs.sha }}');
+  assert.deepEqual(jobs.validate.needs, ['prepare', 'vulnerability-scan']);
   assert.equal(jobs.package.needs, 'validate');
   assert.deepEqual(jobs.publish.needs, ['validate', 'package']);
   assert.equal(jobs.deploy.needs, 'publish');

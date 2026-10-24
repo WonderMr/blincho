@@ -2,6 +2,28 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.10.5]
+
+### Changed
+
+- Download the camera person-detection model from a pinned commit in WonderMr/blincho on GitHub when a camera feature is enabled, instead of including its weights in every desktop and browser build.
+- Verify file sizes and SHA-256 before atomically caching the model on the device. Reuse the cache offline, show download progress in all 30 languages and leave camera options off after a failed or cancelled download.
+- Prepare the model for previously enabled camera options after an app upgrade. Keep frame processing local and skip locking when preparation is unavailable.
+
+## [1.10.4]
+
+### Changed
+
+- Remove the legacy Electron desktop runtime, dependencies, development scripts and packaging tools. Desktop builds now use only Rust and Tauri.
+- Keep migration from existing Electron profiles and compatible update feeds for previously published releases.
+
+## [1.10.3]
+
+### Fixed
+
+- Recognize active WebRTC calls in Vivaldi, including Preply lessons while waiting for the teacher, so enabled call postponement defers breaks. Keep ordinary audio and video playback excluded.
+- Preserve the canonical Vivaldi application name in optional local call history and capture detection.
+
 ## [1.10.2]
 
 ### Fixed

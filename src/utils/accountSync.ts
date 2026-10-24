@@ -20,6 +20,7 @@ interface Callbacks {
   snapshot: () => { settings: AppSettings; stats: DayStats[] };
   settings: (settings: unknown) => void;
   stats: (snapshots: DayStats[][]) => void;
+  breakGeneration?: () => number;
   break: (event: SharedBreak, isCurrent: () => boolean) => void | Promise<void>;
   status: (status: SyncStatus) => void;
 }
@@ -82,6 +83,7 @@ export class AccountSyncSession {
   private cursor = 0;
   private instance = '';
   private seen = new Set<string>();
+  private localBreakGenerations = new Map<string, number | undefined>();
   private revisions = new Map<string, number>();
   private pendingSettings: Partial<ReturnType<typeof projectSyncSettings>> | null = null;
   private localSettings: ReturnType<typeof projectSyncSettings>;
@@ -212,10 +214,15 @@ export class AccountSyncSession {
       if (previous.startAt < event.startAt || (previous.startAt === event.startAt && previous.id < event.id)) return;
       clearTimeout(this.scheduled.timer);
     }
+    // Capture the UI generation before delivery. A local publish records it before
+    // its POST so a concurrent poll cannot make a reset or pause look current.
+    const generation = this.localBreakGenerations.has(event.id)
+      ? this.localBreakGenerations.get(event.id) : this.callbacks.breakGeneration?.();
+    const current = () => !this.closed && (generation === undefined || generation === this.callbacks.breakGeneration?.());
     const timer = setTimeout(() => {
       this.scheduled = null;
-      if (!this.closed && event.endAt > Date.now()) {
-        Promise.resolve().then(() => this.callbacks.break(event, () => !this.closed))
+      if (current() && event.endAt > Date.now()) {
+        Promise.resolve().then(() => { if (current()) return this.callbacks.break(event, current); })
           .catch(() => { if (!this.closed) this.callbacks.status('error'); });
       }
     }, Math.max(0, event.startAt - Date.now()));
@@ -226,6 +233,8 @@ export class AccountSyncSession {
     if (!this.key || !Number.isFinite(seconds) || seconds < 1 || seconds > 1800) throw new Error('Invalid duration');
     const createdAt = Date.now();
     const event: SharedBreak = { v: 1, id: hexId(), deviceId: this.deviceId, createdAt, startAt: createdAt + 2500, endAt: createdAt + 2500 + seconds * 1000 };
+    this.localBreakGenerations.set(event.id, this.callbacks.breakGeneration?.());
+    this.localBreakGenerations = new Map([...this.localBreakGenerations].slice(-256));
     const envelope = await encryptSync(this.key, this.accountId, 'break', event);
     await this.request('/v1/events', 'POST', { envelope });
     // A slow POST must not start an already expired break locally.

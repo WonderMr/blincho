@@ -150,21 +150,33 @@ pub struct MeetingStatus {
     pub in_meeting: bool,
     pub supported: bool,
     pub applications: Vec<String>,
+    /// Passive device-use metadata only. None must never be treated as off.
+    pub capture_active: Option<bool>,
+    /// Distinguishes a failed sample from a runtime without this probe.
+    pub capture_supported: bool,
 }
 impl MeetingStatus {
+    /// Normalize meeting application names and derive activity from detector support, leaving
+    /// capture metadata unknown and unsupported.
     pub fn detected(applications: Vec<String>, supported: bool) -> Self {
         let applications = normalize_meeting_applications(&applications);
         Self {
             in_meeting: supported && !applications.is_empty(),
             supported,
             applications,
+            capture_active: None,
+            capture_supported: false,
         }
     }
+    /// Construct an inactive meeting result with explicit detector support and no capture-probe
+    /// metadata.
     pub fn inactive(supported: bool) -> Self {
         Self {
             in_meeting: false,
             supported,
             applications: vec![],
+            capture_active: None,
+            capture_supported: false,
         }
     }
 }
@@ -189,6 +201,8 @@ impl MeetingMonitor {
             test_status: Mutex::new(None),
         }
     }
+    /// Replace simulated meeting state with normalized application names and invalidate cached
+    /// observations.
     pub fn set_test_status(&self, active: bool, applications: Vec<String>) {
         let applications = if active {
             let applications = normalize_meeting_applications(&applications);
@@ -204,7 +218,18 @@ impl MeetingMonitor {
             in_meeting: active,
             supported: true,
             applications,
+            capture_active: None,
+            capture_supported: false,
         });
+        self.invalidate();
+    }
+    /// Update capture metadata on an existing simulated meeting result and invalidate the
+    /// cache.
+    pub fn set_test_capture(&self, active: Option<bool>, supported: bool) {
+        if let Some(status) = self.test_status.lock().unwrap().as_mut() {
+            status.capture_active = active;
+            status.capture_supported = supported;
+        }
         self.invalidate();
     }
     pub fn invalidate(&self) {
@@ -351,6 +376,7 @@ pub fn active_meeting_applications(output: &str) -> Vec<String> {
                 "safari",
                 "firefox",
                 "microsoft edge",
+                "vivaldi",
             ]
             .contains(&owner.as_str());
             let webrtc = name == "webrtc" || name.starts_with("webrtc ");
@@ -544,6 +570,30 @@ mod tests {
             ),
             ["Google Chrome"]
         );
+    }
+    #[test]
+    fn vivaldi_preply_waiting_room_is_detected_without_remote_audio() {
+        let output = "PreventUserIdleDisplaySleep 1\nPreventUserIdleSystemSleep 1\n   pid 13957(Vivaldi): [0x0016b9d90001950b] 00:03:40 NoIdleSleepAssertion named: \"WebRTC has active PeerConnections\"\n   pid 13957(Vivaldi): [0x0016b9da0005950c] 00:03:39 NoDisplaySleepAssertion named: \"Video Wake Lock\"";
+        assert_eq!(active_meeting_applications(output), ["Vivaldi"]);
+        assert_eq!(
+            active_meeting_applications(&output.replace("DisplaySleep 1", "DisplaySleep 0")),
+            ["Vivaldi"]
+        );
+        for kind in ["PreventUserIdleSystemSleep", "PreventUserIdleDisplaySleep"] {
+            assert_eq!(
+                active_meeting_applications(&output.replace("NoIdleSleepAssertion", kind)),
+                ["Vivaldi"]
+            );
+        }
+        for playback in ["Playing audio", "Playing video", "Video Wake Lock"] {
+            assert!(active_meeting_applications(
+                &output.replace("WebRTC has active PeerConnections", playback)
+            )
+            .is_empty());
+        }
+        for owner in ["Vivaldi Helper", "NotVivaldi"] {
+            assert!(active_meeting_applications(&output.replace("Vivaldi", owner)).is_empty());
+        }
     }
     #[test]
     fn meeting_assertions_attribute_multiple_apps_without_retaining_titles() {

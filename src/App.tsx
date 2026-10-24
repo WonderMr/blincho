@@ -1,3 +1,4 @@
+import { prepareCameraModel } from './utils/cameraAssets';
 import { useI18n } from './i18n/useI18n';
 import { watchAppearance } from './utils/appearance';
 import { t, getLocale, formatNumber } from './i18n/runtime';
@@ -24,6 +25,7 @@ import { TimerWidget } from './components/TimerWidget';
 import { ExerciseLibrary } from './components/ExerciseLibrary';
 import { ExercisePlayer } from './components/ExercisePlayer';
 import { BreakOverlay } from './components/BreakOverlay';
+import { MeetingBreakWarning, type MeetingBreakWarningState } from './components/MeetingBreakWarning';
 import { CVSSurvey } from './components/CVSSurvey';
 import { ErgonomicsGuide } from './components/ErgonomicsGuide';
 import { StatisticsView } from './components/StatisticsView';
@@ -40,12 +42,15 @@ import { applySyncSettings, mergeSyncStats } from './utils/syncData';
 import { buildMcpStats } from './utils/mcpStats';
 import { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities } from './utils/symbiote';
 import { updateDocumentSymbioteIcon } from './utils/symbioteIcons';
-import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory } from './utils/tauriBridge';
+import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory, deferNativeMeetingBreak, setNativeMeetingRemindersPaused } from './utils/tauriBridge';
 
 import {
   BookOpen, Play, Lock, Video, UserCheck
 } from 'lucide-react';
 
+type PendingMeetingTimer = Pick<TimerSession, 'version' | 'totalMs' | 'remainingMs' | 'manualPaused' | 'expiryPending' | 'breakActive' | 'exercising'>;
+
+/** Coordinate the shared UI, timer state and native presence, meeting and break events. */
 export const App: React.FC = () => {
   useI18n();
   const updates = useUpdates();
@@ -88,6 +93,21 @@ export const App: React.FC = () => {
   const nativeAbsenceEpochRef = useRef(0);
   const nativeTickRef = useRef(0);
   const nativeMeetingEpochRef = useRef(0);
+  const nativeMeetingResumedEpochRef = useRef(0);
+  const nativeMeetingPauseEndedEpochRef = useRef(0);
+  const nativeMeetingWarningEpochRef = useRef(0);
+  const nativeMeetingBreakCancelledEpochRef = useRef(0);
+  const [meetingControl, setMeetingControl] = useState<{ token: number; paused: boolean; breakCancellable: boolean } | null>(null);
+  const meetingControlRef = useRef(meetingControl);
+  const breakMeetingTokenRef = useRef<number | null>(null);
+  const [meetingControlBusy, setMeetingControlBusy] = useState(false);
+  const meetingControlBusyRef = useRef(false);
+  const meetingPendingTimerRef = useRef<PendingMeetingTimer | null>(null);
+  const [meetingControlError, setMeetingControlError] = useState(false);
+  const [meetingWarning, setMeetingWarning] = useState<MeetingBreakWarningState | null>(null);
+  const [meetingWarningBusy, setMeetingWarningBusy] = useState(false);
+  const [meetingWarningError, setMeetingWarningError] = useState(false);
+  const meetingWarningBusyRef = useRef(false);
   const nativeHistoryEpochRef = useRef(0);
   const nativeHistoryMinimumEpochRef = useRef(0);
   const nativeHistoryConsentGenerationRef = useRef(0);
@@ -121,6 +141,7 @@ export const App: React.FC = () => {
   const cameraEpochRef = useRef<{ controller: AbortController; epoch: number } | null>(null);
   const nativePresenceEpochRef = useRef<number | null>(null);
   const cameraAccessPendingRef = useRef(false);
+  const cameraModelReadyRef = useRef(false);
   const [cameraAccessPending, setCameraAccessPending] = useState(false);
   const handleCameraAccessPendingChange = (pending: boolean) => {
     cameraAccessPendingRef.current = pending;
@@ -157,8 +178,8 @@ export const App: React.FC = () => {
     let retry: ReturnType<typeof setTimeout> | undefined;
     const apply = async () => {
       try {
-        await window.electronAPI?.setSymbioteBuild?.(symbioteBuild.mask);
-        if (!cancelled) await window.electronAPI?.syncSymbioteShortcut?.(symbioteBuild.mask, symbioteName);
+        await window.desktopAPI?.setSymbioteBuild?.(symbioteBuild.mask);
+        if (!cancelled) await window.desktopAPI?.syncSymbioteShortcut?.(symbioteBuild.mask, symbioteName);
       }
       catch (error) {
         console.warn('Blincho: Build icon update failed:', error);
@@ -187,7 +208,16 @@ export const App: React.FC = () => {
     recordTimerProgress(focus, activity, meetings);
     refreshStats();
   };
+  /**
+   * Queue timer settings with their history-consent generation and meeting break token.
+   * During a meeting action, retain local edits until its native reply can be reconciled.
+   */
   const synchronizeTimer = () => {
+    if (meetingControlBusyRef.current) {
+      meetingPendingTimerRef.current = { version: session.version, totalMs: session.totalMs, remainingMs: session.remainingMs,
+        manualPaused: session.manualPaused, expiryPending: session.expiryPending, breakActive: session.breakActive, exercising: session.exercising };
+      return;
+    }
     const generation = nativeHistoryConsentGenerationRef.current;
     const historyEnabled = settingsRef.current.meetingHistoryEnabled;
     synchronizeNativeTimer(session, sharedBreakRef.current ? { ...settingsRef.current, strictMode: true } : settingsRef.current, snapshot => {
@@ -199,7 +229,7 @@ export const App: React.FC = () => {
       nativeHistoryMinimumEpochRef.current = Math.max(nativeHistoryMinimumEpochRef.current, epoch);
       nativeHistoryEpochRef.current = Math.max(nativeHistoryEpochRef.current, epoch);
       nativeHistoryAcknowledgedGenerationRef.current = generation;
-    });
+    }, breakMeetingTokenRef.current);
   };
   const sync = () => {
     if (mountedRef.current) {
@@ -215,9 +245,9 @@ export const App: React.FC = () => {
     }
   };
   const releaseDesktopBreak = () => {
-    sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(false));
-    sendDesktopCommand('setAlwaysOnTop', () => window.electronAPI?.setAlwaysOnTop?.(false));
-    sendDesktopCommand('setBreakFullscreen', () => window.electronAPI?.setBreakFullscreen?.(false));
+    sendDesktopCommand('setStrictLock', () => window.desktopAPI?.setStrictLock?.(false));
+    sendDesktopCommand('setAlwaysOnTop', () => window.desktopAPI?.setAlwaysOnTop?.(false));
+    sendDesktopCommand('setBreakFullscreen', () => window.desktopAPI?.setBreakFullscreen?.(false));
   };
   const restartWork = (seconds = settingsRef.current.workMinutes * 60) => {
     clearSharedRequest();
@@ -316,11 +346,11 @@ export const App: React.FC = () => {
         const sampledAt = Date.now();
         const sampledMonotonicAt = performance.now();
         const sampledBreakEventId = breakIdRef.current ?? pendingBreakRef.current?.eventId ?? null;
-        const systemPresenceRequired = hasSystemIdleDetection() || !!window.electronAPI?.isElectron;
+        const systemPresenceRequired = hasSystemIdleDetection() || !!window.desktopAPI?.isDesktop;
         const readPowerState = async () => {
           if (!systemPresenceRequired) return null;
           try {
-            const power = await Promise.resolve().then(() => window.electronAPI?.getPowerState?.());
+            const power = await Promise.resolve().then(() => window.desktopAPI?.getPowerState?.());
             if (power && typeof power.suspended === 'boolean' && typeof power.locked === 'boolean') return power;
             console.warn('Blincho: Invalid or unavailable power state; presence is unconfirmed.');
           } catch (error) {
@@ -387,7 +417,7 @@ export const App: React.FC = () => {
           setPresenceReason('idle', isIdle, Date.now() - Math.max(0, idle - threshold) * 1000);
         }
         if (session.reasons.has('unconfirmed') && idle < Math.min(threshold, 5)) setPresenceReason('unconfirmed', false);
-        // Electron visibility describes this app, not activity in other desktop apps.
+        // Desktop visibility describes this app, not activity in other desktop apps.
         if (!systemPresenceRequired) {
           const hidden = document.visibilityState === 'hidden';
           if (hidden !== session.reasons.has('hidden')) setPresenceReason('hidden', hidden);
@@ -404,8 +434,14 @@ export const App: React.FC = () => {
     presenceInFlightRef.current = pending;
     return pending;
   };
-  const beginLocalBreak = (shared: SharedBreak | null = null) => {
+  /**
+   * Start a break only while present and outside another break or exercise.
+   * Automatic starts respect a pending meeting action or pause, and carry the
+   * current meeting token so only their associated break can later be cancelled.
+   */
+  const beginLocalBreak = (shared: SharedBreak | null = null, automatic = false) => {
     if (!session.present || session.breakActive || session.exercising) return;
+    if (automatic && (meetingControlBusyRef.current || meetingControlRef.current?.paused)) return;
     const duration = shared ? (shared.endAt - Date.now()) / 1000 : settingsRef.current.breakSeconds;
     if (duration < 1) return;
     cameraAbortRef.current?.abort();
@@ -414,6 +450,7 @@ export const App: React.FC = () => {
     session.breakActive = true;
     session.breakDeadlineAt = shared?.endAt ?? null;
     sharedBreakRef.current = shared;
+    breakMeetingTokenRef.current = automatic && !meetingControlRef.current?.paused ? meetingControlRef.current?.token ?? null : null;
     session.expiryPending = false;
     session.version += 1;
     breakIdRef.current = shared ? `sync:${shared.id}` : nextEventId('break');
@@ -422,16 +459,17 @@ export const App: React.FC = () => {
     setActiveBreakSeconds(duration);
     soundSynth.playZenBowl();
     setIsBreakActive(true);
-    sendDesktopCommand('setBreakFullscreen', () => window.electronAPI?.setBreakFullscreen?.(true));
-    sendDesktopCommand('bringToFront', () => window.electronAPI?.bringToFront?.({ alwaysOnTop: !!shared || settingsRef.current.strictMode }));
-    sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(!!shared || settingsRef.current.strictMode));
+    sendDesktopCommand('setBreakFullscreen', () => window.desktopAPI?.setBreakFullscreen?.(true));
+    sendDesktopCommand('bringToFront', () => window.desktopAPI?.bringToFront?.({ alwaysOnTop: !!shared || settingsRef.current.strictMode }));
+    sendDesktopCommand('setStrictLock', () => window.desktopAPI?.setStrictLock?.(!!shared || settingsRef.current.strictMode));
     sync();
   };
-  const beginBreak = () => {
+  const beginBreak = (automatic = false) => {
+    if (automatic && (meetingControlBusyRef.current || meetingControlRef.current?.paused)) return;
     if (sharedRequestRef.current && sharedRequestRef.current.version !== session.version) clearSharedRequest();
     if (sharedRequestRef.current || !session.present || session.breakActive || session.exercising) return;
     if (!settingsRef.current.syncEnabled || accountSync.account === null || accountSync.status === 'connecting') {
-      beginLocalBreak();
+      beginLocalBreak(null, automatic);
       return;
     }
     const request = { version: session.version, fallback: null as ReturnType<typeof setTimeout> | null };
@@ -456,7 +494,7 @@ export const App: React.FC = () => {
           }
         }
         // An unavailable relay or canceled delivery must preserve this local break.
-        if (current()) beginLocalBreak();
+        if (current()) beginLocalBreak(null, automatic);
       } finally { clearSharedRequest(request); }
     };
     request.fallback = setTimeout(() => { void fallback(); }, 6000);
@@ -469,8 +507,8 @@ export const App: React.FC = () => {
     const captureStartedAt = performance.now();
     const isCurrent = () => mountedRef.current && version === session.version && session.counting &&
       (!requireExpiry || session.expiryPending) && !controller.signal.aborted &&
-      !cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled;
-    if (!isCurrent() || !window.electronAPI?.lockComputer) return false;
+      !cameraAccessPendingRef.current && cameraModelReadyRef.current && settingsRef.current.cameraLockEnabled;
+    if (!isCurrent() || !window.desktopAPI?.lockComputer) return false;
     cameraAbortRef.current?.abort();
     cameraAbortRef.current = controller;
     try {
@@ -509,7 +547,7 @@ export const App: React.FC = () => {
       // Defer locking whenever that bound could fall after capture started.
       if (idle === null || !Number.isFinite(idle) || idle < 0 || sampledAt - idle * 1000 > captureStartedAt) return false;
       if (!isCurrent()) return false;
-      if (await window.electronAPI.lockComputer()) {
+      if (await window.desktopAPI.lockComputer()) {
         if (mountedRef.current) {
           setPresenceReason('locked', true);
           setNoticeMessage("Камера не обнаружила человека. Компьютер заблокирован.");
@@ -527,6 +565,11 @@ export const App: React.FC = () => {
     }
     return false;
   };
+  /**
+   * Resolve one expiry after fresh presence and meeting checks.
+   * Recheck the timer version across awaits and honor the native strict-warning
+   * deadline before allowing automatic takeover or the reminder-only path.
+   */
   const handleTimerExpired = async () => {
     if (sharedRequestRef.current && sharedRequestRef.current.version !== session.version) clearSharedRequest();
     if (sharedRequestRef.current || expiryInFlightRef.current) return;
@@ -540,6 +583,9 @@ export const App: React.FC = () => {
         const meeting = await detectActiveMeeting();
         if (!mountedRef.current || version !== session.version || !session.counting) return;
         if (meeting.inMeeting && settingsRef.current.meetingDetectionEnabled) {
+          // The native heartbeat owns meeting postponement and its event epoch.
+          // A snapshot poll can see expiry before that heartbeat handles it.
+          if (hasNativeTimer()) return;
           session.postpone(300, Date.now());
           setInMeetingActive(true);
           setNoticeMessage("Обнаружена активная встреча. Перерыв отложен на 5 минут.");
@@ -548,12 +594,87 @@ export const App: React.FC = () => {
           return;
         }
       }
-      if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting) return;
+      if (hasNativeTimer()) {
+        const snapshot = await readNativeTimer();
+        if (!snapshot || !mountedRef.current || snapshot.version !== version) return;
+        applyNativeRef.current(snapshot);
+        if (snapshot.meetingRemindersPaused || (settingsRef.current.strictMode && snapshot.meetingWarningRequired && !snapshot.meetingWarningReady)) return;
+      }
+      if (!(await samplePresence()) || !mountedRef.current || version !== session.version || !session.counting
+        || meetingControlBusyRef.current || meetingControlRef.current?.paused) return;
       setInMeetingActive(false);
       if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"), t("Отведите взгляд от экрана и дайте глазам отдохнуть."));
-      if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak();
+      if (settingsRef.current.autoTakeoverModal || settingsRef.current.strictMode) beginBreak(true);
       else { soundSynth.playZenBowl(); restartWork(); }
     } finally { expiryInFlightRef.current = false; }
+  };
+  /**
+   * Serialize meeting actions with timer/settings edits. Reconcile explicit local
+   * changes after the native reply, then resend settings with the accepted version.
+   */
+  const runMeetingAction = async (action: () => Promise<NativeTimerSnapshot>) => {
+    meetingControlBusyRef.current = true;
+    setMeetingControlBusy(true);
+    const startedVersion = session.version;
+    meetingPendingTimerRef.current = null;
+    try {
+      const snapshot = await action();
+      if (mountedRef.current) {
+        applyNativeRef.current(snapshot);
+        const pending = meetingPendingTimerRef.current as PendingMeetingTimer | null;
+        if (pending && pending.version > startedVersion && !pending.breakActive && !pending.exercising) {
+          session.totalMs = pending.totalMs;
+          session.remainingMs = pending.remainingMs;
+          session.manualPaused = pending.manualPaused;
+          session.expiryPending = pending.expiryPending && !snapshot.meetingRemindersPaused;
+          session.version = Math.max(session.version, snapshot.version, pending.version) + 1;
+        }
+      }
+      return snapshot;
+    } finally {
+      meetingControlBusyRef.current = false;
+      if (mountedRef.current) { setMeetingControlBusy(false); sync(); }
+      meetingPendingTimerRef.current = null;
+    }
+  };
+  /**
+   * Submit the visible warning once, preserving concurrent timer/settings edits.
+   * A null duration pauses reminders until meeting end; stale replies cannot
+   * overwrite the notice from a newer automatic restoration.
+   */
+  const handleDeferMeetingWarning = async (minutes: number | null) => {
+    if (!meetingWarning || meetingWarningBusyRef.current || meetingControlBusyRef.current) return;
+    meetingWarningBusyRef.current = true;
+    setMeetingWarningBusy(true);
+    setMeetingWarningError(false);
+    try {
+      const snapshot = await runMeetingAction(() =>
+        deferNativeMeetingBreak(meetingWarning.version, meetingWarning.epoch, minutes));
+      if (!mountedRef.current) return;
+      if (minutes === null && meetingControlRef.current?.paused
+        && meetingControlRef.current.token === snapshot.meetingResumeToken) {
+        setNoticeMessage("Напоминания приостановлены до конца встречи.");
+      }
+    } catch (error) {
+      console.warn('Blincho: Meeting warning action failed:', error);
+      if (mountedRef.current) setMeetingWarningError(true);
+    } finally {
+      meetingWarningBusyRef.current = false;
+      if (mountedRef.current) setMeetingWarningBusy(false);
+    }
+  };
+  /** Toggle the current token-bound meeting pause, preserving concurrent local edits. */
+  const handleMeetingReminders = async (finish = false) => {
+    const control = meetingControlRef.current;
+    if (!control || meetingControlBusyRef.current) return;
+    setMeetingControlError(false);
+    try {
+      await runMeetingAction(() =>
+        setNativeMeetingRemindersPaused(control.token, finish ? false : !control.paused));
+    } catch (error) {
+      console.warn('Blincho: Meeting reminder action failed:', error);
+      if (mountedRef.current) setMeetingControlError(true);
+    }
   };
   const handleTriggerInstantBreak = async () => {
     if (await samplePresence()) beginBreak();
@@ -655,7 +776,7 @@ export const App: React.FC = () => {
     }
     if (!updated.idleDetectionEnabled) setPresenceReason('idle', false);
     void samplePresence();
-    if (session.breakActive) sendDesktopCommand('setStrictLock', () => window.electronAPI?.setStrictLock?.(!!sharedBreakRef.current || updated.strictMode));
+    if (session.breakActive) sendDesktopCommand('setStrictLock', () => window.desktopAPI?.setStrictLock?.(!!sharedBreakRef.current || updated.strictMode));
     sync();
   };
   const handleClearMeetingHistory = async () => {
@@ -779,10 +900,11 @@ export const App: React.FC = () => {
       remoteStatsRef.current = snapshots;
       if (mountedRef.current) { setTodayStats(loadTodayStats(stats)); setAllStats(stats); }
     },
+    breakGeneration: () => session.version,
     break: async (event, isCurrent) => {
       const version = session.version;
       const current = () => isCurrent() && mountedRef.current && settingsRef.current.syncEnabled && version === session.version;
-      if (!current() || session.breakActive || session.exercising) return;
+      if (!current() || session.manualPaused || session.breakActive || session.exercising || meetingControlBusyRef.current || meetingControlRef.current?.paused) return;
       if (!await samplePresence(true) || !current()) return;
       if (settingsRef.current.meetingDetectionEnabled && hasMeetingDetection()) {
         const meeting = await detectActiveMeeting();
@@ -798,7 +920,7 @@ export const App: React.FC = () => {
               sync();
             } else {
               // Unknown call status retains the existing local-expiry policy.
-              beginLocalBreak();
+              beginLocalBreak(null, true);
             }
           }
           return;
@@ -807,10 +929,10 @@ export const App: React.FC = () => {
       if (current() && !session.exercising) {
         if (event.endAt > Date.now()) {
           clearSharedRequest();
-          beginLocalBreak(event);
+          beginLocalBreak(event, true);
         } else if (session.expiryPending && session.counting) {
           clearSharedRequest();
-          beginLocalBreak();
+          beginLocalBreak(null, true);
         }
       }
     },
@@ -871,11 +993,26 @@ export const App: React.FC = () => {
     return () => { stopped = true; clearInterval(timer); };
   }, [settings.inputActivityEnabled]);
   useEffect(() => {
+    cameraModelReadyRef.current = false;
+    if (!window.desktopAPI?.isDesktop || !(settings.cameraLockEnabled || settings.enhancedPresenceEnabled)) return;
+    const controller = new AbortController();
+    void prepareCameraModel(controller.signal).then(() => {
+      if (!controller.signal.aborted) cameraModelReadyRef.current = true;
+    }).catch(error => {
+      if (controller.signal.aborted) return;
+      console.warn('Blincho: Camera model preparation failed:', error);
+      // Saved opt-in from an older bundle also needs a model. Failure must never lock.
+      handleUpdateSettings({ ...settingsRef.current, cameraLockEnabled: false, enhancedPresenceEnabled: false });
+      setNoticeMessage("Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.");
+    });
+    return () => { cameraModelReadyRef.current = false; controller.abort(); };
+  }, [settings.cameraLockEnabled, settings.enhancedPresenceEnabled]);
+  useEffect(() => {
     if (!hasNativeTimer() || !settings.enhancedPresenceEnabled) return;
     let stopped = false, busy = false, nextCheck = 0;
     let ownedController: AbortController | null = null;
     const check = async () => {
-      if (stopped || busy || Date.now() < nextCheck || cameraAbortRef.current || cameraAccessPendingRef.current) return;
+      if (stopped || busy || Date.now() < nextCheck || cameraAbortRef.current || cameraAccessPendingRef.current || !cameraModelReadyRef.current) return;
       busy = true;
       try {
         const token = await window.__TAURI__!.core.invoke<{ epoch: number; startedAt: number } | null>('presence_check_begin');
@@ -932,6 +1069,11 @@ export const App: React.FC = () => {
     session.lastUpdated = Date.now();
     let polling = false;
     const nativeFocus = nativeFocusRef.current;
+    /**
+     * Apply each native tick once, keeping newer local timer versions intact.
+     * Reconcile token-bound break cancellation, warning and meeting notices by
+     * epoch, then ingest permitted history and dispatch due timer transitions.
+     */
     const applyNative = (snapshot: NativeTimerSnapshot) => {
       if (!mountedRef.current || snapshot.totalMs < 1000 || snapshot.tickCount <= nativeTickRef.current) return;
       nativeTickRef.current = snapshot.tickCount;
@@ -947,11 +1089,54 @@ export const App: React.FC = () => {
         session.expiryPending = snapshot.expiryPending;
         session.version = snapshot.version;
       }
+      if ((snapshot.meetingBreakCancelledEpoch ?? 0) > nativeMeetingBreakCancelledEpochRef.current && breakMeetingTokenRef.current !== null) {
+          session.breakActive = false;
+          session.breakDeadlineAt = null;
+          sharedBreakRef.current = null;
+          clearSharedRequest();
+          breakIdRef.current = null;
+          breakMeetingTokenRef.current = null;
+          pendingBreakRef.current = null;
+          setIsBreakActive(false);
+          releaseDesktopBreak();
+      }
+      nativeMeetingBreakCancelledEpochRef.current = Math.max(nativeMeetingBreakCancelledEpochRef.current, snapshot.meetingBreakCancelledEpoch ?? 0);
+      const control = settingsRef.current.meetingDetectionEnabled && snapshot.meetingResumeToken
+        ? { token: snapshot.meetingResumeToken, paused: !!snapshot.meetingRemindersPaused, breakCancellable: !!snapshot.meetingBreakCancellable }
+        : null;
+      meetingControlRef.current = control;
+      setMeetingControl(control);
       if ((snapshot.meetingPostponedEpoch ?? 0) > nativeMeetingEpochRef.current) {
         nativeMeetingEpochRef.current = snapshot.meetingPostponedEpoch ?? 0;
         setInMeetingActive(true);
         setNoticeMessage("Обнаружена активная встреча. Перерыв отложен на 5 минут.");
         if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Blincho: встреча активна"), t("Перерыв отложен на 5 минут."));
+      }
+      const warningEnd = snapshot.meetingWarningEndAt;
+      if (warningEnd && snapshot.expiryPending && snapshot.version === session.version
+        && snapshot.reasons.length === 0 && !snapshot.manualPaused && settingsRef.current.strictMode) {
+        setMeetingWarning({ version: snapshot.version, epoch: snapshot.meetingWarningEpoch ?? 0, endAt: warningEnd });
+        if ((snapshot.meetingWarningEpoch ?? 0) > nativeMeetingWarningEpochRef.current) {
+          nativeMeetingWarningEpochRef.current = snapshot.meetingWarningEpoch ?? 0;
+          setMeetingWarningError(false);
+          if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Время сделать перерыв"),
+            t("Перерыв начнётся через {seconds} с.", { seconds: Math.max(0, Math.ceil((warningEnd - Date.now()) / 1000)) })
+            + ' ' + t("Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания."));
+        }
+      } else setMeetingWarning(null);
+      if ((snapshot.meetingPauseEndedEpoch ?? 0) > nativeMeetingPauseEndedEpochRef.current) {
+        nativeMeetingPauseEndedEpochRef.current = snapshot.meetingPauseEndedEpoch ?? 0;
+        setInMeetingActive(false);
+        if (!snapshot.manualPaused) {
+          setNoticeMessage("Встреча завершена. Напоминания о перерывах возобновлены.");
+          if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Напоминания о перерывах возобновлены"), t("Встреча завершена. Напоминания о перерывах возобновлены."));
+        }
+      }
+      if ((snapshot.meetingResumedEpoch ?? 0) > nativeMeetingResumedEpochRef.current) {
+        nativeMeetingResumedEpochRef.current = snapshot.meetingResumedEpoch ?? 0;
+        setInMeetingActive(false);
+        setNoticeMessage("Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.");
+        if (settingsRef.current.notificationsEnabled) showEyeBreakNotification(t("Напоминания о перерывах возобновлены"), t("Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены."));
       }
       if (snapshot.absenceEpoch > nativeAbsenceEpochRef.current) {
         nativeAbsenceEpochRef.current = snapshot.absenceEpoch;
@@ -1039,8 +1224,8 @@ export const App: React.FC = () => {
     };
     void tick();
     const timer = setInterval(() => { void tick(); }, 1000);
-    const unsubscribeBreak = window.electronAPI?.onTriggerBreak?.(() => { void handlersRef.current.handleTriggerInstantBreak(); });
-    const unsubscribePower = window.electronAPI?.onPowerStateChange?.(state => {
+    const unsubscribeBreak = window.desktopAPI?.onTriggerBreak?.(() => { void handlersRef.current.handleTriggerInstantBreak(); });
+    const unsubscribePower = window.desktopAPI?.onPowerStateChange?.(state => {
       if (state === 'suspend') handlersRef.current.setPresenceReason('suspended', true);
       if (state === 'lock-screen') handlersRef.current.setPresenceReason('locked', true);
       if (state === 'resume') {
@@ -1059,14 +1244,14 @@ export const App: React.FC = () => {
       if (event.type === 'mousemove' && (event as MouseEvent).movementX === 0 && (event as MouseEvent).movementY === 0) return;
       cameraAbortRef.current?.abort();
       markPageActivity();
-      if (!hasSystemIdleDetection() && !window.electronAPI?.isElectron) {
+      if (!hasSystemIdleDetection() && !window.desktopAPI?.isDesktop) {
         handlersRef.current.setPresenceReason('idle', false);
         handlersRef.current.setPresenceReason('unconfirmed', false);
       }
       void handlersRef.current.samplePresence(true);
     };
     const visibility = () => {
-      if (!hasSystemIdleDetection() && !window.electronAPI?.isElectron) handlersRef.current.setPresenceReason('hidden', document.visibilityState === 'hidden');
+      if (!hasSystemIdleDetection() && !window.desktopAPI?.isDesktop) handlersRef.current.setPresenceReason('hidden', document.visibilityState === 'hidden');
       if (document.visibilityState === 'visible') { refreshStats(); void handlersRef.current.samplePresence(true); }
     };
     const focus = () => { refreshStats(); void handlersRef.current.samplePresence(true); };
@@ -1112,7 +1297,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-container">
-      {/* macOS Draggable Titlebar (for Electron desktop) */}
+      {/* macOS Draggable Titlebar (for native desktop) */}
       <div className="mac-titlebar-drag">
         <div style={{ marginLeft: 68, fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>{t("Blincho: Перерывы и комфорт при работе за экраном")}</div>
       </div>
@@ -1232,7 +1417,7 @@ export const App: React.FC = () => {
 
       {notice && <TransientNotice key={notice.id} message={notice.message}
         durationMs={notice.canUndo ? 15000 : 6000}
-        suspended={isIdlePaused || isSettingsOpen || isBreakActive || !!activeTechnique}
+        suspended={isIdlePaused || isSettingsOpen || isBreakActive || !!activeTechnique || !!meetingControl}
         onUndo={notice.canUndo && savedRemainingBeforeReset !== null ? handleUndoReset : undefined}
         onDismiss={() => {
           if (noticeRef.current?.id !== notice.id) return;
@@ -1241,12 +1426,29 @@ export const App: React.FC = () => {
         }}
       />}
 
+      {meetingWarning && !isBreakActive && <MeetingBreakWarning warning={meetingWarning}
+        busy={meetingWarningBusy} error={meetingWarningError} onDefer={minutes => { void handleDeferMeetingWarning(minutes); }} />}
+
+      {meetingControl && !isBreakActive && !activeTechnique && !meetingWarning && <aside data-meeting-control role="status"
+        style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 1050,
+          width: 'min(480px, calc(100vw - 32px))', padding: 18, borderRadius: 16, background: 'var(--bg-card)', border: '1px solid var(--border-control)', boxShadow: 'var(--shadow-lg)' }}>
+        <p>{t(meetingControl.paused ? 'Напоминания приостановлены до конца встречи.' : 'Перерывы возобновлены во время встречи.')}</p>
+        <button className="btn btn-secondary" disabled={meetingControlBusy} onClick={() => { void handleMeetingReminders(); }}>
+          {t(meetingControl.paused ? 'Вернуть напоминания' : 'Я ещё на встрече: отключить перерывы')}</button>
+        {!meetingControl.paused && <button className="btn btn-secondary" disabled={meetingControlBusy}
+          onClick={() => { void handleMeetingReminders(true); }}>{t('Закрыть')}</button>}
+        {meetingControlError && <p role="alert">{t('Не удалось изменить напоминания. Попробуйте ещё раз.')}</p>}
+      </aside>}
+
       {/* Full-Screen Break Overlay (When timer finishes or triggered) */}
       {isBreakActive && (
         <BreakOverlay
           initialSeconds={activeBreakSeconds}
           strictMode={!!sharedBreakRef.current || settings.strictMode}
           waitForNativeCompletion={hasNativeTimer()}
+          onPauseMeeting={meetingControl?.breakCancellable && breakMeetingTokenRef.current === meetingControl.token ? () => { void handleMeetingReminders(); } : undefined}
+          meetingBusy={meetingControlBusy}
+          meetingError={meetingControlError}
           onElapsed={deadlineMonotonicAt => handleBreakElapsed(breakEventId, deadlineMonotonicAt)}
           onClose={() => handleCloseBreakOverlay(breakEventId)}
           onPostpone={minutes => handlePostponeBreak(minutes, breakEventId)}
@@ -1271,7 +1473,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Settings Modal */}
-      {isSettingsOpen && (
+      {isSettingsOpen && !meetingWarning && !(isBreakActive && settings.meetingDetectionEnabled) && (
         <SettingsModal
           symbioteBuild={symbioteBuild}
           updates={updates}
