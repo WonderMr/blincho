@@ -124,5 +124,10 @@
   "homepage": "https://blincho.app",
   "bugs": {
     "url": "https://github.com/WonderMr/blincho/issues"
+  },
+  "overrides": {
+    "@electron/get": {
+      "global-agent": "4.1.3"
+    }
   }
 }
