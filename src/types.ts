@@ -52,6 +52,7 @@ export interface AppSettings {
   absenceLockEnabled: boolean;
   inputActivityEnabled: boolean;
   localMcpEnabled: boolean;
+  syncEnabled: boolean;
   strictMode: boolean;
 }
 

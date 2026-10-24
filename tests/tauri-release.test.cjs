@@ -5,8 +5,9 @@ const { spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 const path = require('node:path');
 const os = require('node:os');
+const { createHash } = require('node:crypto');
 
-async function runMacBundler({ arch = 'arm64', debug = false, target, args, missingInput } = {}) {
+async function runMacBundler({ arch = 'arm64', debug = false, target, args, missingInput, testChannel = false, badReceipt = false } = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'blincho-tauri-bundle-'));
   try {
     await mkdir(path.join(directory, 'scripts'));
@@ -25,6 +26,14 @@ async function runMacBundler({ arch = 'arm64', debug = false, target, args, miss
       await writeFile(path.join(bundle, 'Contents/Resources/nested/stale.txt'), 'healthy previous bundle');
       await writeFile(path.join(path.dirname(bundle), 'keep.txt'), 'owned output sibling');
     }
+    if (testChannel) {
+      await mkdir(path.join(directory, 'src-tauri'), { recursive: true });
+      await writeFile(path.join(directory, 'src-tauri/tauri.test.conf.json'), JSON.stringify({ productName: 'Blincho Test', identifier: 'com.myeyes.test' }));
+      const output = path.join(directory, 'release/test-target', ...(target ? [target] : []), 'release');
+      await mkdir(output, { recursive: true });
+      await writeFile(path.join(output, 'blincho'), 'test channel executable');
+      await writeFile(path.join(output, 'test-channel-receipt.json'), JSON.stringify({ productName: 'Blincho Test', identifier: 'com.myeyes.test', sha256: badReceipt ? 'invalid' : createHash('sha256').update('test channel executable').digest('hex') }));
+    }
     await mkdir(path.join(directory, 'unowned'));
     await writeFile(path.join(directory, 'unowned/keep.txt'), 'unowned sentinel');
     const mock = path.join(directory, 'mock-native.cjs');
@@ -42,10 +51,10 @@ async function runMacBundler({ arch = 'arm64', debug = false, target, args, miss
         fs.appendFileSync('calls.jsonl', JSON.stringify([command, args]) + '\\n');
       };
     `);
-    const options = args || [...(debug ? ['--debug'] : []), ...(target ? ['--target', target] : [])];
+    const options = args || [...(debug ? ['--debug'] : []), ...(testChannel ? ['--test'] : []), ...(target ? ['--target', target] : [])];
     const result = spawnSync(process.execPath, ['--require', mock, path.join(directory, 'scripts/bundle-tauri-macos.cjs'), ...options], { cwd: directory, encoding: 'utf8', timeout: 30_000 });
     if (result.error) throw result.error;
-    const bundle = path.join(directory, debug ? 'release/tauri-macos-debug' : 'release/tauri-macos', 'Blincho.app');
+    const bundle = testChannel ? path.join(directory, 'release/test-channel/Blincho Test.app') : path.join(directory, debug ? 'release/tauri-macos-debug' : 'release/tauri-macos', 'Blincho.app');
     const readOptional = filename => readFile(filename, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     const calls = (await readOptional(path.join(directory, 'calls.jsonl')) || '').trim().split('\n').filter(Boolean).map(JSON.parse);
     const chmodModes = (await readOptional(path.join(directory, 'chmod.jsonl')) || '').trim().split('\n').filter(Boolean).map(JSON.parse);
@@ -54,6 +63,8 @@ async function runMacBundler({ arch = 'arm64', debug = false, target, args, miss
       ...result, calls, chmodModes, copied: await readOptional(executable),
       executableMode: await stat(executable).then(value => value.mode & 0o777).catch(error => { if (error.code === 'ENOENT') return null; throw error; }),
       metadata: await readOptional(path.join(bundle, 'Contents/Resources/blincho-runtime.json')).then(value => value && JSON.parse(value)),
+      plist: await readOptional(path.join(bundle, 'Contents/Info.plist')),
+      stableBundle: await readOptional(path.join(directory, 'release/tauri-macos/Blincho.app/Contents/Resources/nested/stale.txt')),
       stale: await readOptional(path.join(bundle, 'Contents/Resources/nested/stale.txt')),
       sibling: await readOptional(path.join(path.dirname(bundle), 'keep.txt')),
       otherBundle: await readOptional(path.join(directory, debug ? 'release/tauri-macos' : 'release/tauri-macos-debug', 'Blincho.app/Contents/Resources/nested/stale.txt')),
@@ -61,6 +72,26 @@ async function runMacBundler({ arch = 'arm64', debug = false, target, args, miss
     };
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
+
+test('test bundling preserves the stable app and uses its verified separate identity without document ownership', async () => {
+  const result = await runMacBundler({ testChannel: true });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.copied, 'test channel executable');
+  assert.equal(result.stableBundle, 'healthy previous bundle');
+  assert.equal(result.metadata.identifier, 'com.myeyes.test');
+  assert.equal(result.metadata.channel, 'test');
+  assert.match(result.plist, /<key>CFBundleDisplayName<\/key><string>Blincho Test<\/string>/);
+  assert.match(result.plist, /NSCameraUsageDescription/);
+  assert.doesNotMatch(result.plist, /CFBundleDocumentTypes|UTExportedTypeDeclarations|com\.myeyes\.app/);
+});
+
+test('test bundling refuses an executable that does not match its channel receipt', async () => {
+  const result = await runMacBundler({ testChannel: true, badReceipt: true });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Test channel binary receipt mismatch/);
+  assert.equal(result.stableBundle, 'healthy previous bundle');
+  assert.equal(result.copied, null);
+});
 
 test('local release and debug bundling removes stale app files while keeping sibling outputs and host Cargo paths', async t => {
   for (const debug of [false, true]) await t.test(debug ? 'debug' : 'release', async () => {

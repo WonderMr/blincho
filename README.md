@@ -105,6 +105,24 @@ npm run site:build
 
 [Builds and native tests](docs/DEVELOPMENT.md) · [CI and security checks](docs/DEVELOPMENT.md#checks) · [Release pipeline](RELEASE.md) · [Changelog](CHANGELOG.md)
 
+### Separate test channel
+
+The `test` branch is the integration target for experimental work. Pull requests targeting it and pushes to it run **Build isolated test apps**, which retains portable downloads for 14 days in the Actions run. This workflow does not publish releases, update feeds or the website. It builds macOS ARM64/Intel, Windows x64 and Linux x64 packages.
+
+Run `npm run tauri:build:test` locally, optionally passing the matching native Rust target after `--`. Downloads and SHA-256 checksums go to `release/test-artifacts/`. Open `Blincho Test.app`, `Blincho Test.exe` or the extracted executable AppImage directly. Windows needs WebView2. These portable packages do not require replacing the installed application. macOS test packages have an ad-hoc signature without notarization.
+
+`Blincho Test` uses the separate identity `com.myeyes.test`, its own application data and WebView storage, and its own singleton. It can run alongside Blincho. It does not import stable history or preferences, register login startup, create desktop shortcuts or handle `.blincho` files. Stable update checks are disabled. Update it by downloading another test artifact. Sync remains off by default. Windows notifications may register their own `Blincho Test` Start Menu shortcut. Local MCP uses an OS-assigned port in this channel. Use a separate test account for cloud isolation. Signing into the same account intentionally shares settings, statistics and breaks. The profile is retained across test builds; restart still requires reconnecting the account with its encryption key. Both applications retain their own timers, so pause one before manually testing breaks in the other.
+
+### Experimental account sync
+
+Experimental device synchronization is off by default in Settings. Enabling it reveals an invite-only account connection for the self-hosted service at `back.blincho.app`. Use an email/password account and the same separately saved encryption key on every device. The app keeps its session and encryption key in memory, so reconnect after restarting. The service cannot recover a lost encryption key. This feature is a testing implementation; deployment and validation on physical devices are still required before relying on it.
+
+Only timer rhythm, sound, appearance and daily aggregate statistics synchronize. Journal answers, detailed activity, calls, input counters and camera frames remain local. Each installation uploads its own aggregate snapshot; the combined display sums device use, including overlapping use, and does not replace local history. Backed-up profiles cloned to another device share an installation identity and should not both upload the same imported history. Device privacy permissions, camera, strict mode, call handling, notifications and local MCP opt-ins stay local. Remote settings use the latest accepted server revision; simultaneous local changes retry against that revision.
+
+An online connected device can schedule a shared blocking Blincho break 2.5 seconds ahead. Peers poll every second, validate the encrypted command and use its remaining duration. Calls and absence can skip a remote break, offline devices continue their local timer, and connection errors never prevent a local break. This is best-effort coordination with synchronized system clocks; browser throttling, sleep and network delays prevent a guarantee of simultaneous delivery. It does not remotely lock the operating system. A shared break uses the local strict overlay until its deadline, without changing the saved strict-mode preference. Logout cancels pending commands. Account deletion removes active cloud data; local records remain.
+
+The compatible backend and its operator documentation are maintained separately. The server stores ciphertext plus account/session metadata. Password reset, email verification, encryption-key rotation and per-device session management are outside this first test version. Frontend tests use a disposable protocol fixture; with the private backend checked out, run `BLINCHO_BACKEND_SOURCE=/absolute/path/to/backend/server.cjs node --test tests/accountSync.test.cjs` for real client/server integration.
+
 ## Contributing
 
 Open an issue with your OS, app version and reproduction steps. Do not include personal journal entries or secrets. Run tests and the build before proposing changes. User-facing text must follow [AGENTS.md](AGENTS.md), including the punctuation rule in every language.

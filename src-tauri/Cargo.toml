@@ -4,7 +4,7 @@ version = "1.10.5"
 edition = "2021"
 
 [build-dependencies]
-tauri-build = "=2.7.0"
+tauri-build = { version = "=2.7.0", features = [] }
 cc = "=1.4.4"
 # Keep code generation paired with the pinned runtime revision.
 tauri-codegen = "=2.7.0"

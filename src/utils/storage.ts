@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   absenceLockEnabled: false,
   inputActivityEnabled: false,
   localMcpEnabled: false,
+  syncEnabled: false,
   strictMode: false,
 };
 

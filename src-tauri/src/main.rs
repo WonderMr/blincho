@@ -5,6 +5,7 @@
 mod camera_activity;
 #[cfg(any(target_os = "linux", test))]
 mod camera_permission;
+mod channel;
 mod history;
 mod input_activity;
 mod local_mcp;
@@ -655,6 +656,9 @@ fn desktop_command(
 }
 #[tauri::command]
 async fn legacy_history(app: tauri::AppHandle) -> Result<Option<history::HistoryExport>, String> {
+    if channel::is_test(&app) && app.state::<Runtime>().test_dir.is_none() {
+        return Ok(None);
+    }
     let source = app.state::<Runtime>().source.clone();
     let explicit = std::env::var_os("BLINCHO_PROTOTYPE_HISTORY_SOURCE").is_some();
     tauri::async_runtime::spawn_blocking(move || {
@@ -754,7 +758,10 @@ fn update_download(version: String, app: tauri::AppHandle) -> updates::UpdateSta
     app.state::<Runtime>().updates.download(&version)
 }
 #[tauri::command]
-async fn update_open_download() -> Result<bool, String> {
+async fn update_open_download(app: tauri::AppHandle) -> Result<bool, String> {
+    if channel::is_test(&app) {
+        return Ok(false);
+    }
     open_external(updates::MANUAL_DOWNLOAD_URL.into())
         .await
         .map(|_| true)
@@ -856,7 +863,9 @@ fn diagnostics(app: &tauri::AppHandle) {
         "size":window(app).ok().and_then(|w|w.outer_size().ok()),
         "innerSize":window(app).ok().and_then(|w|w.inner_size().ok()),
         "renderer":runtime.renderer.lock().ok().map(|v|v.clone()),"sourceExport":runtime.source,"profile":runtime.profile,
-        "pid":std::process::id(),"updates":runtime.updates.get_state(),"autostart":runtime.autostart.lock().ok().map(|v|v.clone())});
+        "pid":std::process::id(),"updates":runtime.updates.get_state(),"autostart":runtime.autostart.lock().ok().map(|v|v.clone()),
+        "identifier":app.config().identifier,"productName":app.config().product_name,
+        "testChannel":channel::is_test(app),"webviewStorage":channel::webview_directory(app,runtime.test_dir.as_deref(),&runtime.profile)});
     let path = runtime
         .test_dir
         .as_ref()
@@ -1085,7 +1094,13 @@ fn main() {
     }
     startup_trace("context-ready");
     let autostart_builder = tauri_plugin_autostart::Builder::new()
-        .app_name(startup::LABEL)
+        .app_name(
+            if context.config().product_name.as_deref() == Some(channel::TEST_NAME) {
+                channel::TEST_IDENTIFIER
+            } else {
+                startup::LABEL
+            },
+        )
         .arg("--autostart");
     #[cfg(target_os = "macos")]
     let autostart_builder =
@@ -1143,7 +1158,7 @@ fn main() {
         })
         .setup(move |app| {
             app.manage(camera_activity::CameraActivity::default());
-            app.manage(local_mcp::LocalMcp::default());
+            app.manage(if channel::is_test(app.handle()) { local_mcp::LocalMcp::isolated() } else { local_mcp::LocalMcp::default() });
             app.manage(Mutex::new(input_activity::InputActivity::default()));
             startup_trace("setup-enter");
             ui::initialize_dock(app.handle(), !hidden);
@@ -1177,17 +1192,11 @@ fn main() {
             if hidden {
                 builder = builder.skip_taskbar(true).focusable(false);
             }
-            if let Some(path) = &test_dir {
+            let webview_directory = channel::webview_directory(app.handle(), test_dir.as_deref(), &profile);
+            if let Some(path) = &webview_directory {
                 #[cfg(target_os = "macos")]
                 {
-                    use std::hash::{Hash, Hasher};
-                    let mut hash = std::collections::hash_map::DefaultHasher::new();
-                    path.hash(&mut hash);
-                    let value = hash.finish();
-                    let mut identifier = [0_u8; 16];
-                    identifier[..8].copy_from_slice(&value.to_le_bytes());
-                    identifier[8..].copy_from_slice(&value.to_be_bytes());
-                    builder = builder.data_store_identifier(identifier);
+                    builder = builder.data_store_identifier(channel::webview_store_identifier(test_dir.as_deref(), path));
                 }
                 #[cfg(not(target_os = "macos"))]
                 { builder = builder.data_directory(path.join("webview")); }
@@ -1204,11 +1213,13 @@ fn main() {
                 });
             });
             startup_trace("webview-config-ready");
-            let source = std::env::var_os("BLINCHO_PROTOTYPE_HISTORY_SOURCE")
+            let source = if channel::is_test(app.handle()) && test_dir.is_none() {
+                profile.join("legacy-import-disabled.json")
+            } else { std::env::var_os("BLINCHO_PROTOTYPE_HISTORY_SOURCE")
                 .map(PathBuf::from)
-                .unwrap_or(history::legacy_profile_dir()?.join("tauri-history-export.json"));
+                .unwrap_or(history::legacy_profile_dir()?.join("tauri-history-export.json")) };
             let preferences = profile.join("update-preferences.json");
-            if test_dir.is_none() && !preferences.exists() {
+            if test_dir.is_none() && !channel::is_test(app.handle()) && !preferences.exists() {
                 let legacy=history::legacy_profile_dir()?.join("update-preferences.json");
                 if legacy.is_file() {
                     use std::io::Read;
@@ -1225,7 +1236,7 @@ fn main() {
             }
             let updates_app=app.handle().clone();
             let bundled=startup::is_packaged();
-            let update_controller=updates::UpdateController::new(profile.clone(),app.package_info().version.to_string(),std::env::consts::ARCH,bundled,move|state|{let _=updates_app.emit("update-state",state);});
+            let update_controller=updates::UpdateController::new(profile.clone(),app.package_info().version.to_string(),std::env::consts::ARCH,bundled && !channel::is_test(app.handle()),move|state|{let _=updates_app.emit("update-state",state);});
             startup_trace("update-controller-ready");
             let meeting = platform::MeetingMonitor::new();
             if test_dir.is_some()
@@ -1256,7 +1267,7 @@ fn main() {
             startup_trace("power-observer-start");
             if let Err(error) = platform::observe_power(power_event) { eprintln!("Power observer: {error}"); }
             startup_trace("power-observer-ready");
-            if bundled { platform::notifications_initialize(notification_clicked); }
+            if bundled || channel::is_test(app.handle()) { platform::notifications_initialize(notification_clicked); }
             startup_trace("native-menu-start");
             let show = MenuItem::with_id(app, "show", "Показать Blincho", true, None::<&str>)?;
             let rest = MenuItem::with_id(app, "rest", "Сделать перерыв", true, None::<&str>)?;
@@ -1273,7 +1284,7 @@ fn main() {
             TrayIconBuilder::with_id("blincho")
                 .icon(symbiote_icons::image(0)?)
                 .icon_as_template(false)
-                .tooltip(ui::tray_title(startup_locale))
+                .tooltip(if channel::is_test(app.handle()) { channel::TEST_NAME } else { ui::tray_title(startup_locale) })
                 .menu(&menu)
                 .on_tray_icon_event(|tray, event| tray_preview::on_tray_event(tray.app_handle(), event))
                 .on_menu_event(move |app, event| match event.id.as_ref() {
@@ -1331,7 +1342,7 @@ fn main() {
             if let Err(error) = window_session::remember(&_main_window) {
                 eprintln!("Window session: {error}");
             }
-            if app.state::<Runtime>().test_dir.is_none() {update_controller.start();}
+            if app.state::<Runtime>().test_dir.is_none() && !channel::is_test(app.handle()) {update_controller.start();}
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 let mut last_strict = false;

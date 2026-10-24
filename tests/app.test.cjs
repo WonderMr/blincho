@@ -3,7 +3,7 @@ const {React,ReactDOMClient,ReactDOM,doc,transformer}=require('./support/synthet
 const repo=path.resolve(__dirname, '..');
 
 doc.documentElement.classList={add(){},remove(){}};
-function createHarness(overrides={},strict=false,browser=false,start=1791712800000,sourceOverrides={},cameraAssets={prepare:async()=>{}}){
+function createHarness(overrides={},strict=false,browser=false,start=1791712800000,sourceOverrides={},cameraAssets={prepare:async()=>{}},runtimeGlobals={}){
   let now=start,monotonicNow=0,nextId=1,idle=0,idleCalls=0,notificationCount=0;
   const metrics={statsReads:0,statsWrites:0,statsParses:0,timerRenders:0,completionChimes:0};
   const warnings=[];const testConsole={...console,warn:(...args)=>warnings.push(args)};
@@ -32,7 +32,7 @@ function createHarness(overrides={},strict=false,browser=false,start=17917128000
     }).replace(/export default App;/g,'').replace(/export (const|function|class|async function) /g,'$1 ')+`\nObject.assign(module.exports,{${exported.join(',')}});`;
     const localRequire=name=>name==='react'?React:name==='lucide-react'?new Proxy({},{get:()=>()=>null}):name.endsWith('/cameraAssets')?{prepareCameraModel:(...args)=>cameraAssets.prepare(...args)}:name.endsWith('/cameraPresence')?{checkCameraPresence:(...args)=>cameraCheck(...args)}:name.endsWith('/soundSynth')?{soundSynth}:name.endsWith('/notifications')?{showEyeBreakNotification:()=>notificationCount++}:name.endsWith('/TransientNotice')?load(path.resolve(path.dirname(file),name+'.tsx')):name.includes('/components/')?new Proxy({},{get:(_obj,componentName)=>function Component(props){if(componentName==='TimerWidget')metrics.timerRenders++;captured[componentName]=props;React.useEffect(()=>{captured[componentName]=props;active.add(componentName);return()=>active.delete(componentName)},[props]);return null}}):load(path.resolve(path.dirname(file),name+(path.extname(name)?'':'.ts')));
     const trackedJSON={parse:raw=>{if(file.replaceAll('\\','/').endsWith('/utils/storage.ts')&&(raw===store.get('myeyes_stats_v1')||raw==='[]'))metrics.statsParses++;return JSON.parse(raw)},stringify:JSON.stringify};
-    vm.runInNewContext(source,{module,exports:module.exports,require:localRequire,JSON:trackedJSON,Date:FakeDate,performance,Math,Set,Map,console:testConsole,window:global.window,document:doc,localStorage,AbortController,HTMLInputElement:class{},HTMLTextAreaElement:class{},setInterval:(cb,d)=>addTimer(cb,d,true),clearInterval:id=>timers.delete(id),setTimeout:(cb,d)=>addTimer(cb,d,false),clearTimeout:id=>timers.delete(id)},{filename:file});return module.exports;
+    vm.runInNewContext(source,{module,exports:module.exports,require:localRequire,JSON:trackedJSON,Date:FakeDate,performance,Math,Set,Map,console:testConsole,window:global.window,document:doc,localStorage,AbortController,...runtimeGlobals,HTMLInputElement:class{},HTMLTextAreaElement:class{},setInterval:(cb,d)=>addTimer(cb,d,true),clearInterval:id=>timers.delete(id),setTimeout:(cb,d)=>addTimer(cb,d,false),clearTimeout:id=>timers.delete(id)},{filename:file});return module.exports;
   }
   const Component=load(repo+'/src/App.tsx').App,host=doc.createElement('div'),root=ReactDOMClient.createRoot(host);
   ReactDOM.flushSync(()=>root.render(strict?React.createElement(React.StrictMode,null,React.createElement(Component)):React.createElement(Component)));
