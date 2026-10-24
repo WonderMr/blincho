@@ -21,7 +21,7 @@ fs.writeFileSync(config, JSON.stringify({ files: [path.join(root, 'src/utils/acc
 execFileSync(process.execPath, [path.join(path.dirname(require.resolve('typescript/package.json')), 'bin/tsc'), '-p', config], { stdio: 'inherit' });
 const { AccountSyncSession, validateSharedBreak } = require(path.join(build, 'utils/accountSync.js'));
 const { generateRecoveryKey, deriveSyncKey, encryptSync, decryptSync } = require(path.join(build, 'utils/syncCrypto.js'));
-const { applySyncSettings, mergeSyncStats } = require(path.join(build, 'utils/syncData.js'));
+const { applySyncSettings, mergeSyncStats, projectSyncSettings } = require(path.join(build, 'utils/syncData.js'));
 const { DEFAULT_SETTINGS, loadSettings } = require(path.join(build, 'utils/storage.js'));
 process.on('exit', () => fs.rmSync(build, { recursive: true, force: true }));
 const invitation = 'test-registration-code-for-local-only';
@@ -282,4 +282,77 @@ test('a reset during publish invalidates both the local delivery and a concurren
     await publishing?.catch(() => {});
     client.close();
   }
+});
+
+
+test('unreadable peer statistics do not block valid totals, settings or this device uploads', async () => {
+  const accountId = 'c'.repeat(32), deviceId = 'd'.repeat(32), secret = generateRecoveryKey();
+  const key = await deriveSyncKey(secret, accountId);
+  const keyCheck = await encryptSync(key, accountId, 'key-check', { check: 'blincho-sync-v1' });
+  const day = { date: '2026-10-20', breaksCompleted: 1, exercisesCompleted: 0, focusMinutes: 5, techniqueCounts: {} };
+  const documents = [
+    { id: 'settings', revision: 3, envelope: await encryptSync(key, accountId, 'settings', projectSyncSettings({ ...DEFAULT_SETTINGS, colorPalette: 'ocean' })) },
+    { id: `stats_${deviceId}`, revision: 4, envelope: { v: 2 } },
+    { id: `stats_${'e'.repeat(32)}`, revision: 7, envelope: { v: 2 } },
+    { id: `stats_${'f'.repeat(32)}`, revision: 8, envelope: await encryptSync(key, accountId, `stats-${'f'.repeat(32)}`, [{ ...day, futureField: 1 }]) },
+    { id: `stats_${'b'.repeat(32)}`, revision: 9, envelope: await encryptSync(key, accountId, `stats-${'b'.repeat(32)}`, [day]) },
+  ];
+  const store = storage(); store.setItem(`blincho_sync_device_${accountId}`, deviceId);
+  const state = { settings: { ...DEFAULT_SETTINGS }, stats: [{ ...day, focusMinutes: 2 }], remote: [] };
+  const statuses = [], writes = [];
+  const originalNow = Date.now;
+  let now = originalNow();
+  const client = new AccountSyncSession({ snapshot: () => state,
+    settings(value) { state.settings = applySyncSettings(state.settings, value); },
+    stats(value) { state.remote = value; }, break() {}, status(value) { statuses.push(value); },
+  }, store, 'http://127.0.0.1:47832', async (url, init) => {
+    let payload = {};
+    if (url.endsWith('/v1/login')) payload = { accountId, token: 'a'.repeat(43), keyCheck };
+    else if (url.endsWith('/v1/state')) payload = { documents };
+    else if (url.includes('/v1/events?')) payload = { instance: 'test', events: [], cursor: 0 };
+    else if (init.method === 'PUT') {
+      const id = url.split('/').at(-1), doc = documents.find(doc => doc.id === id), body = JSON.parse(init.body);
+      assert.equal(body.baseRevision, doc.revision, 'retain revisions for skipped documents');
+      doc.revision++; doc.envelope = body.envelope; writes.push({ id, body });
+      payload = { revision: doc.revision };
+    }
+    return new Response(JSON.stringify(payload), { status: 200 });
+  });
+  try {
+    Date.now = () => now;
+    await client.connect('login', 'owner@example.test', password, secret, '');
+    await until(() => statuses.length >= 2);
+    assert.deepEqual(state.remote, [[day]], 'only the readable peer contributes totals');
+    assert.equal(state.settings.colorPalette, 'ocean');
+    assert(writes.some(write => write.id === `stats_${deviceId}` && write.body.baseRevision === 4));
+    state.settings = { ...state.settings, soundVolume: 40 };
+    state.stats = [{ ...day, focusMinutes: 3 }];
+    client.settingsChanged(state.settings); now += 31_000;
+    await client.tick();
+    assert.equal(statuses.at(-1), 'connected');
+    assert(!statuses.includes('error'));
+    const settingsWrite = writes.find(write => write.id === 'settings');
+    assert(settingsWrite);
+    assert.equal((await decryptSync(key, accountId, 'settings', settingsWrite.body.envelope)).soundVolume, 40);
+    const statsWrite = writes.filter(write => write.id === `stats_${deviceId}`).at(-1);
+    assert.equal((await decryptSync(key, accountId, `stats-${deviceId}`, statsWrite.body.envelope))[0].focusMinutes, 3);
+  } finally { client.close(); Date.now = originalNow; }
+});
+
+test('an unreadable account settings document still rejects connection', async () => {
+  const accountId = 'c'.repeat(32), secret = generateRecoveryKey();
+  const key = await deriveSyncKey(secret, accountId);
+  const keyCheck = await encryptSync(key, accountId, 'key-check', { check: 'blincho-sync-v1' });
+  let uploads = 0;
+  const client = new AccountSyncSession({ snapshot: () => ({ settings: DEFAULT_SETTINGS, stats: [] }), settings() {}, stats() {}, break() {}, status() {} },
+    storage(), 'http://127.0.0.1:47832', async (url, init) => {
+      if (init.method === 'PUT') uploads++;
+      const payload = url.endsWith('/v1/login') ? { accountId, token: 'a'.repeat(43), keyCheck }
+        : url.endsWith('/v1/state') ? { documents: [{ id: 'settings', revision: 1, envelope: { v: 2 } }] } : {};
+      return new Response(JSON.stringify(payload), { status: 200 });
+    });
+  try {
+    await assert.rejects(() => client.connect('login', 'owner@example.test', password, secret, ''));
+    assert.equal(uploads, 0);
+  } finally { client.close(); }
 });

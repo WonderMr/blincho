@@ -149,7 +149,7 @@ pub fn set_tooltip(app: &tauri::AppHandle, text: &str) -> Result<(), String> {
     // A custom hover window replaces the OS tooltip. Keep the text fallback
     // when that window could not be created or is no longer available.
     let (camera_active, camera_label) = crate::camera_activity::current(app);
-    let camera_tooltip = format!("Blincho\n{camera_label}");
+    let camera_tooltip = format!("{}\n{camera_label}", crate::channel::name(app));
     let tooltip = if camera_active {
         Some(camera_tooltip.as_str())
     } else {
@@ -367,14 +367,10 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
     if let Some(path) = &storage {
         #[cfg(target_os = "macos")]
         {
-            use std::hash::{Hash, Hasher};
-            let mut hash = std::collections::hash_map::DefaultHasher::new();
-            path.hash(&mut hash);
-            let value = hash.finish();
-            let mut identifier = [0_u8; 16];
-            identifier[..8].copy_from_slice(&value.to_le_bytes());
-            identifier[8..].copy_from_slice(&value.to_be_bytes());
-            builder = builder.data_store_identifier(identifier);
+            builder = builder.data_store_identifier(crate::channel::webview_store_identifier(
+                runtime.test_dir.as_deref(),
+                path,
+            ));
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -391,7 +387,7 @@ pub fn initialize(app: &tauri::AppHandle) -> Result<(), String> {
     }
     // An unavailable notification area must not invalidate a working hover
     // window. The setter retains the native error for diagnostics and tests.
-    if let Err(error) = set_tooltip(app, "Blincho") {
+    if let Err(error) = set_tooltip(app, crate::channel::name(app)) {
         eprintln!("Tray tooltip: {error}");
     }
     Ok(())

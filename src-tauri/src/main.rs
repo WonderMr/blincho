@@ -1196,14 +1196,7 @@ fn main() {
             if let Some(path) = &webview_directory {
                 #[cfg(target_os = "macos")]
                 {
-                    use std::hash::{Hash, Hasher};
-                    let mut hash = std::collections::hash_map::DefaultHasher::new();
-                    path.hash(&mut hash);
-                    let value = hash.finish();
-                    let mut identifier = [0_u8; 16];
-                    identifier[..8].copy_from_slice(&value.to_le_bytes());
-                    identifier[8..].copy_from_slice(&value.to_be_bytes());
-                    builder = builder.data_store_identifier(identifier);
+                    builder = builder.data_store_identifier(channel::webview_store_identifier(test_dir.as_deref(), path));
                 }
                 #[cfg(not(target_os = "macos"))]
                 { builder = builder.data_directory(path.join("webview")); }

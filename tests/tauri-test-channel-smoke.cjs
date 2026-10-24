@@ -28,14 +28,15 @@ const child = spawn(path.join(root, 'release/test-channel', payload),
   { env, detached: process.platform === 'linux', stdio: ['ignore', 'ignore', 'pipe'] });
 let launchError;
 child.on('error', error => { launchError = error; });
-child.stderr.on('data', () => {});
+let stderr = '';
+child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-4096); });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 (async () => {
   try {
     let value;
     for (let attempt = 0; attempt < 300; attempt++) {
       if (launchError) throw launchError;
-      if (child.exitCode !== null) throw new Error(`Test app exited early: ${child.exitCode}`);
+      if (child.exitCode !== null) throw new Error(`Test app exited early: ${child.exitCode}\n${stderr}`);
       try {
         if (fs.statSync(report).mtimeMs >= started) {
           const current = JSON.parse(fs.readFileSync(report, 'utf8'));
@@ -44,7 +45,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
       } catch (error) { if (!['ENOENT'].includes(error.code) && !(error instanceof SyntaxError)) throw error; }
       await sleep(100);
     }
-    assert.ok(value, 'Test channel did not report readiness');
+    assert.ok(value, `Test channel did not report readiness\n${stderr}`);
     assert.equal(value.productName, 'Blincho Test');
     assert.equal(value.testChannel, true);
     assert.equal(path.resolve(value.profile), profile);

@@ -170,9 +170,12 @@ export class AccountSyncSession {
         typeof doc.revision !== 'number' || !Number.isSafeInteger(doc.revision) || doc.revision < 1 || revisions.has(doc.id)) throw new Error('Invalid document');
       revisions.set(doc.id, doc.revision);
       const kind = doc.id === 'settings' ? 'settings' : doc.id.replace('_', '-');
-      const decrypted = await decryptSync(this.key!, this.accountId, kind, doc.envelope);
-      if (doc.id === 'settings') settings = decrypted;
-      else if (doc.id !== `stats_${this.deviceId}`) snapshots.push(validateSyncStats(decrypted));
+      if (doc.id === 'settings') settings = await decryptSync(this.key!, this.accountId, kind, doc.envelope);
+      else if (doc.id !== `stats_${this.deviceId}`) {
+        // One unreadable peer must not block local uploads or other devices' totals.
+        try { snapshots.push(validateSyncStats(await decryptSync(this.key!, this.accountId, kind, doc.envelope))); }
+        catch { /* Omit this peer until it publishes a readable snapshot. */ }
+      }
     }
     if (this.closed) return;
     if (settings !== undefined) {
