@@ -627,5 +627,17 @@
   "Камера Blincho активна": "Blincho verwendet die Kamera",
   "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Beim ersten Aktivieren wird das Kameramodell (19 MB) von GitHub heruntergeladen. Danach funktionieren die Prüfungen ohne Internet.",
   "Загрузка модели камеры… {percent}%": "Kameramodell wird heruntergeladen… {percent}%",
-  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Das Kameramodell konnte nicht heruntergeladen werden. Prüfe die Internetverbindung und aktiviere diese Option erneut."
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Das Kameramodell konnte nicht heruntergeladen werden. Prüfe die Internetverbindung und aktiviere diese Option erneut.",
+  "Напоминания о перерывах возобновлены": "Pausenerinnerungen fortgesetzt",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kamera und Mikrofon wurden seit 5 Minuten nicht verwendet. Die Pausenerinnerungen wurden fortgesetzt.",
+  "Перерыв начнётся через {seconds} с.": "Die Pause beginnt in {seconds} Sek.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Sind Sie in einer Besprechung? Verschieben Sie die Pause oder pausieren Sie die Erinnerungen bis zum Ende der Besprechung.",
+  "До конца встречи": "Bis zum Ende der Besprechung",
+  "Напоминания приостановлены до конца встречи.": "Die Erinnerungen sind bis zum Ende der Besprechung pausiert.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Die Besprechung ist beendet. Die Pausenerinnerungen sind wieder aktiv.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Die Pause konnte nicht verschoben werden. Versuchen Sie es erneut.",
+  "Перерывы возобновлены во время встречи.": "Die Pausen wurden während der Besprechung wieder aktiviert.",
+  "Я ещё на встрече: отключить перерывы": "Ich bin noch in einer Besprechung: Pausen ausschalten",
+  "Вернуть напоминания": "Erinnerungen wieder einschalten",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Die Erinnerungen konnten nicht geändert werden. Versuchen Sie es erneut."
 }

@@ -627,5 +627,17 @@
   "Камера Blincho активна": "Blincho använder kameran",
   "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Första gången du aktiverar alternativet hämtas kameramodellen (19 MB) från GitHub. Därefter fungerar kontrollerna utan internet.",
   "Загрузка модели камеры… {percent}%": "Hämtar kameramodellen… {percent}%",
-  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Det gick inte att hämta kameramodellen. Kontrollera internetanslutningen och aktivera alternativet igen."
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Det gick inte att hämta kameramodellen. Kontrollera internetanslutningen och aktivera alternativet igen.",
+  "Напоминания о перерывах возобновлены": "Pauspåminnelser återupptagna",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "Kameran och mikrofonen har inte använts på 5 minuter. Pauspåminnelser har återupptagits.",
+  "Перерыв начнётся через {seconds} с.": "Pausen börjar om {seconds} sek.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Är du på ett möte? Skjut upp pausen eller pausa påminnelserna tills mötet är slut.",
+  "До конца встречи": "Tills mötet är slut",
+  "Напоминания приостановлены до конца встречи.": "Påminnelserna är pausade tills mötet är slut.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "Mötet är slut. Pauspåminnelserna har återupptagits.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "Det gick inte att skjuta upp pausen. Försök igen.",
+  "Перерывы возобновлены во время встречи.": "Pauserna har återupptagits under mötet.",
+  "Я ещё на встрече: отключить перерывы": "Jag är fortfarande på ett möte: stäng av pauser",
+  "Вернуть напоминания": "Slå på påminnelser igen",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Det gick inte att ändra påminnelserna. Försök igen."
 }

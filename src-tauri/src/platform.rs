@@ -150,21 +150,33 @@ pub struct MeetingStatus {
     pub in_meeting: bool,
     pub supported: bool,
     pub applications: Vec<String>,
+    /// Passive device-use metadata only. None must never be treated as off.
+    pub capture_active: Option<bool>,
+    /// Distinguishes a failed sample from a runtime without this probe.
+    pub capture_supported: bool,
 }
 impl MeetingStatus {
+    /// Normalize meeting application names and derive activity from detector support, leaving
+    /// capture metadata unknown and unsupported.
     pub fn detected(applications: Vec<String>, supported: bool) -> Self {
         let applications = normalize_meeting_applications(&applications);
         Self {
             in_meeting: supported && !applications.is_empty(),
             supported,
             applications,
+            capture_active: None,
+            capture_supported: false,
         }
     }
+    /// Construct an inactive meeting result with explicit detector support and no capture-probe
+    /// metadata.
     pub fn inactive(supported: bool) -> Self {
         Self {
             in_meeting: false,
             supported,
             applications: vec![],
+            capture_active: None,
+            capture_supported: false,
         }
     }
 }
@@ -189,6 +201,8 @@ impl MeetingMonitor {
             test_status: Mutex::new(None),
         }
     }
+    /// Replace simulated meeting state with normalized application names and invalidate cached
+    /// observations.
     pub fn set_test_status(&self, active: bool, applications: Vec<String>) {
         let applications = if active {
             let applications = normalize_meeting_applications(&applications);
@@ -204,7 +218,18 @@ impl MeetingMonitor {
             in_meeting: active,
             supported: true,
             applications,
+            capture_active: None,
+            capture_supported: false,
         });
+        self.invalidate();
+    }
+    /// Update capture metadata on an existing simulated meeting result and invalidate the
+    /// cache.
+    pub fn set_test_capture(&self, active: Option<bool>, supported: bool) {
+        if let Some(status) = self.test_status.lock().unwrap().as_mut() {
+            status.capture_active = active;
+            status.capture_supported = supported;
+        }
         self.invalidate();
     }
     pub fn invalidate(&self) {

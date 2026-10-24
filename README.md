@@ -38,7 +38,7 @@ Blincho reminds you to step away from the screen, rest your eyes and move a litt
 | --- | --- |
 | **Long stretches at the screen** | Configurable work and break intervals, including the 20–20–20 rule. |
 | **Stepping away from your desk** | Desktop timing pauses during absence, screen lock and sleep. |
-| **Calls that run over** | Optional call detection postpones automatic breaks while a call is detected. |
+| **Calls that run over** | Optional call detection and meeting controls help you postpone breaks until a better moment. |
 | **A moment to move** | Short exercises and a personal comfort journal. |
 | **Understanding your habits** | Local work-time statistics, break counts and daily activity history. |
 | **Making it feel like yours** | 30 languages, light/dark/system themes and calming color palettes. |

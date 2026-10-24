@@ -942,12 +942,16 @@ mod tests {
         })).unwrap()
     }
 
+    /// Verify translated tray labels for disabled, active, inactive, unsupported, and unknown-
+    /// application call states.
     #[test]
     fn call_status_uses_live_snapshot_and_translated_labels_in_every_state() {
         let summary = summary();
         let mut snapshot = crate::timer::Timer::new(0).snapshot;
         snapshot.live_meeting_enabled = false;
         snapshot.live_meeting_status = Some(crate::platform::MeetingStatus {
+            capture_active: None,
+            capture_supported: false,
             in_meeting: true,
             supported: true,
             applications: vec!["Zoom".into()],
@@ -988,6 +992,8 @@ mod tests {
         assert!(!call_active(&snapshot));
         assert_eq!(meeting_label(&summary, &snapshot), "Нет активного звонка");
         snapshot.live_meeting_status = Some(crate::platform::MeetingStatus {
+            capture_active: None,
+            capture_supported: false,
             in_meeting: true,
             supported: false,
             applications: vec!["Zoom".into()],

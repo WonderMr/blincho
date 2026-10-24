@@ -627,5 +627,17 @@
   "Камера Blincho активна": "Blincho gebruikt de camera",
   "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Bij de eerste keer inschakelen wordt het cameramodel (19 MB) van GitHub gedownload. Daarna werken de controles zonder internet.",
   "Загрузка модели камеры… {percent}%": "Cameramodel downloaden… {percent}%",
-  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Het cameramodel kon niet worden gedownload. Controleer je internetverbinding en schakel deze optie opnieuw in."
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Het cameramodel kon niet worden gedownload. Controleer je internetverbinding en schakel deze optie opnieuw in.",
+  "Напоминания о перерывах возобновлены": "Pauzeherinneringen hervat",
+  "Камера и микрофон не используются 5 минут. Напоминания о перерывах возобновлены.": "De camera en microfoon zijn 5 minuten niet gebruikt. Pauzeherinneringen zijn hervat.",
+  "Перерыв начнётся через {seconds} с.": "De pauze begint over {seconds} sec.",
+  "Вы на встрече? Отложите перерыв или приостановите напоминания до её окончания.": "Zit je in een vergadering? Stel de pauze uit of pauzeer herinneringen tot de vergadering is afgelopen.",
+  "До конца встречи": "Tot de vergadering is afgelopen",
+  "Напоминания приостановлены до конца встречи.": "Herinneringen zijn gepauzeerd tot de vergadering is afgelopen.",
+  "Встреча завершена. Напоминания о перерывах возобновлены.": "De vergadering is afgelopen. Pauzeherinneringen zijn hervat.",
+  "Не удалось отложить перерыв. Попробуйте ещё раз.": "De pauze kon niet worden uitgesteld. Probeer het opnieuw.",
+  "Перерывы возобновлены во время встречи.": "Pauzes zijn tijdens de vergadering hervat.",
+  "Я ещё на встрече: отключить перерывы": "Ik zit nog in een vergadering: pauzes uitschakelen",
+  "Вернуть напоминания": "Herinneringen weer inschakelen",
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Herinneringen konden niet worden gewijzigd. Probeer het opnieuw."
 }
