@@ -113,3 +113,16 @@ node site/build.mjs
 Release tests use synthetic executable/package bytes, real archive creation, receipt hashing, and historical feed schema checks. They cover all architectures, native build command selection, PE/ELF and metadata failures, payload tampering, complete Debian/RPM receipt and checksum coverage, historical feed fallback, fourteen canonical website downloads, signing labels and CI dependencies. Tauri bundling, installer extraction and AppImage extraction are stubbed. Native installer and launch checks on Windows/Linux and real six-runner builds remain required before publishing; local tests cannot establish those outcomes.
 
 The manifest command reads real published releases and can use `GH_TOKEN` for read-only GitHub requests. Never commit credentials. Network, schema and digest failures stop generation.
+
+## Optional camera model
+
+Only the small TensorFlow.js WASM runtime is included in public/camera and release packages.
+Model sources remain in camera-model, outside public and dist. The immutable download URL,
+byte sizes and SHA-256 hashes live in src/data/cameraModelManifest.json. Preserve the referenced
+Git commit and upstream Apache-2.0 license. Changing model bytes requires updating that pinned
+manifest and the independent camera asset tests together.
+
+The native camera smoke test explicitly downloads the model through camera opt-in, reloads
+the WebView and verifies real inference with external fetching blocked. Completion smoke tests
+prepare the model cache for their isolated saved opt-in profiles. No physical camera or system
+lock is used by those fixtures. These integration checks require access to raw.githubusercontent.com.

@@ -1,3 +1,4 @@
+import { prepareCameraModel } from './utils/cameraAssets';
 import { useI18n } from './i18n/useI18n';
 import { watchAppearance } from './utils/appearance';
 import { t, getLocale, formatNumber } from './i18n/runtime';
@@ -110,6 +111,7 @@ export const App: React.FC = () => {
   const cameraEpochRef = useRef<{ controller: AbortController; epoch: number } | null>(null);
   const nativePresenceEpochRef = useRef<number | null>(null);
   const cameraAccessPendingRef = useRef(false);
+  const cameraModelReadyRef = useRef(false);
   const [cameraAccessPending, setCameraAccessPending] = useState(false);
   const handleCameraAccessPendingChange = (pending: boolean) => {
     cameraAccessPendingRef.current = pending;
@@ -413,7 +415,7 @@ export const App: React.FC = () => {
     const captureStartedAt = performance.now();
     const isCurrent = () => mountedRef.current && version === session.version && session.counting &&
       (!requireExpiry || session.expiryPending) && !controller.signal.aborted &&
-      !cameraAccessPendingRef.current && settingsRef.current.cameraLockEnabled;
+      !cameraAccessPendingRef.current && cameraModelReadyRef.current && settingsRef.current.cameraLockEnabled;
     if (!isCurrent() || !window.desktopAPI?.lockComputer) return false;
     cameraAbortRef.current?.abort();
     cameraAbortRef.current = controller;
@@ -766,11 +768,26 @@ export const App: React.FC = () => {
     return () => { stopped = true; clearInterval(timer); };
   }, [settings.inputActivityEnabled]);
   useEffect(() => {
+    cameraModelReadyRef.current = false;
+    if (!window.desktopAPI?.isDesktop || !(settings.cameraLockEnabled || settings.enhancedPresenceEnabled)) return;
+    const controller = new AbortController();
+    void prepareCameraModel(controller.signal).then(() => {
+      if (!controller.signal.aborted) cameraModelReadyRef.current = true;
+    }).catch(error => {
+      if (controller.signal.aborted) return;
+      console.warn('Blincho: Camera model preparation failed:', error);
+      // Saved opt-in from an older bundle also needs a model. Failure must never lock.
+      handleUpdateSettings({ ...settingsRef.current, cameraLockEnabled: false, enhancedPresenceEnabled: false });
+      setNoticeMessage("Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.");
+    });
+    return () => { cameraModelReadyRef.current = false; controller.abort(); };
+  }, [settings.cameraLockEnabled, settings.enhancedPresenceEnabled]);
+  useEffect(() => {
     if (!hasNativeTimer() || !settings.enhancedPresenceEnabled) return;
     let stopped = false, busy = false, nextCheck = 0;
     let ownedController: AbortController | null = null;
     const check = async () => {
-      if (stopped || busy || Date.now() < nextCheck || cameraAbortRef.current || cameraAccessPendingRef.current) return;
+      if (stopped || busy || Date.now() < nextCheck || cameraAbortRef.current || cameraAccessPendingRef.current || !cameraModelReadyRef.current) return;
       busy = true;
       try {
         const token = await window.__TAURI__!.core.invoke<{ epoch: number; startedAt: number } | null>('presence_check_begin');

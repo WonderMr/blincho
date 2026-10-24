@@ -624,5 +624,8 @@
   "Показать ярлык": "Visa genväg",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Genvägen på skrivbordet följer din konfiguration.",
   "Не удалось сохранить ярлык.": "Det gick inte att spara genvägen.",
-  "Камера Blincho активна": "Blincho använder kameran"
+  "Камера Blincho активна": "Blincho använder kameran",
+  "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Första gången du aktiverar alternativet hämtas kameramodellen (19 MB) från GitHub. Därefter fungerar kontrollerna utan internet.",
+  "Загрузка модели камеры… {percent}%": "Hämtar kameramodellen… {percent}%",
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Det gick inte att hämta kameramodellen. Kontrollera internetanslutningen och aktivera alternativet igen."
 }

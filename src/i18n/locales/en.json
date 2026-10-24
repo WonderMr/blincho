@@ -624,5 +624,8 @@
   "Показать ярлык": "Show shortcut",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "The desktop shortcut follows your build.",
   "Не удалось сохранить ярлык.": "Could not save the shortcut.",
-  "Камера Blincho активна": "Blincho is using the camera"
+  "Камера Blincho активна": "Blincho is using the camera",
+  "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "When you first enable this option, the camera model (19 MB) is downloaded from GitHub. Checks then work offline.",
+  "Загрузка модели камеры… {percent}%": "Downloading camera model… {percent}%",
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Could not download the camera model. Check your internet connection and enable this option again."
 }

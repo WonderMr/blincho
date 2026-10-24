@@ -83,6 +83,8 @@ async function runFixture(mode) {
         fs.rmSync(file);
         if (command.operation === 'eval') {
           record('native-eval');
+          if (command.script.includes('cameraCachePrepared:true')) { fs.writeFileSync(path.join(profile, 'runtime-diagnostics.json'), JSON.stringify({ renderer: { ready: true, cameraCachePrepared: true }, timer: { totalMs: 1 } })); return; }
+          if (command.script === 'location.reload()') { write(); return; }
           write({ passed: true, detections: 0, webglRequests: 0, cameraAPI: true, lockAPI: true, lockRejected: true, defaultDisabled: mode !== 'assertion-error', toggleReady: true });
         } else if (command.operation === 'quit') {
           record('native-quit');
@@ -114,7 +116,7 @@ test('camera smoke quits the native child before terminating its pipe-owning wra
   const result = await runFixture('graceful');
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(result.events, ['wrapper-start', 'native-start', 'native-eval', 'native-quit', 'wrapper-native-exit']);
+  assert.deepEqual(result.events, ['wrapper-start', 'native-start', 'native-eval', 'native-eval', 'native-eval', 'native-quit', 'wrapper-native-exit']);
   assert.match(result.stdout, /"lockRejected": true/);
   assert.match(result.stdout, /"webglRequests": 0/);
 });
@@ -124,7 +126,7 @@ test('camera smoke preserves assertion failures and gracefully cleans the native
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /AssertionError/);
-  assert.deepEqual(result.events, ['wrapper-start', 'native-start', 'native-eval', 'native-quit', 'wrapper-native-exit']);
+  assert.deepEqual(result.events, ['wrapper-start', 'native-start', 'native-eval', 'native-eval', 'native-eval', 'native-quit', 'wrapper-native-exit']);
 });
 
 test('camera smoke bounds an ignored quit and cleans a native child retaining wrapper pipes', { timeout: TEST_TIMEOUT_MS }, async () => {
@@ -152,7 +154,7 @@ test('camera smoke closes its pipes when a descendant escapes wrapper process-tr
   assert.equal(result.error, undefined, result.error?.message);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Camera smoke did not quit/);
-  assert.deepEqual(result.events, ['wrapper-start', 'native-start', 'native-eval', 'native-quit', 'retained-pipe-start', 'wrapper-native-exit']);
+  assert.deepEqual(result.events, ['wrapper-start', 'native-start', 'native-eval', 'native-eval', 'native-eval', 'native-quit', 'retained-pipe-start', 'wrapper-native-exit']);
 });
 
 test('camera smoke Windows fallback requests quit before a bounded taskkill tree command', { timeout: TEST_TIMEOUT_MS }, async () => {

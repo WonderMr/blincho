@@ -7,17 +7,23 @@ const { transformSync } = require('rolldown/utils');
 const repo = path.resolve(__dirname, '..');
 const assetUrl = 'https://blincho.test/camera/';
 
+function localArtifacts() {
+  const model = JSON.parse(fs.readFileSync(path.join(repo, 'camera-model/model.json'), 'utf8'));
+  const weights = Buffer.concat(model.weightsManifest.flatMap(group => group.paths.map(name => fs.readFileSync(path.join(repo, 'camera-model', name)))));
+  return { modelTopology: model.modelTopology, weightSpecs: model.weightsManifest.flatMap(group => group.weights), weightData: weights.buffer.slice(weights.byteOffset, weights.byteOffset + weights.byteLength) };
+}
 function loadAdapter(tf, loadGraphModel, setWasmPaths) {
   const file = path.join(repo, 'src/utils/cameraModel.ts');
-  const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/\r\n/g, '\n').replace(/^import .*;\n/gm, '').replace('export async function', 'async function');
+  const code = transformSync(file, fs.readFileSync(file, 'utf8')).code.replace(/\r\n/g, '\n').replace(/^import .*;\n/gm, '').replace(/export async function/g, 'async function');
   const module = { exports: {} };
-  vm.runInNewContext(code + '\nmodule.exports = {loadPersonDetector};', { module, tf, loadGraphModel, setWasmPaths, URL, document: { baseURI: 'https://blincho.test/index.html' } }, { filename: file });
+  vm.runInNewContext(code + '\nmodule.exports = {loadPersonDetector};', { module, tf, loadGraphModel, setWasmPaths, getCameraModelArtifacts: async () => localArtifacts(), prepareModelAssets: async () => {}, URL, document: { baseURI: 'https://blincho.test/index.html' } }, { filename: file });
   return module.exports.loadPersonDetector;
 }
 function adapterHarness({ inference = async () => scoreTensor(), loadError, backendReady = true } = {}) {
   const calls = []; let disposed = 0; const tensors = new Set();
   const tensor = () => { const value = { dispose() { tensors.delete(value); } }; tensors.add(value); return value; };
   const tf = {
+    io: { fromMemory: artifacts => artifacts },
     env: () => ({ set: (...args) => calls.push(['flag', ...args]) }), async setBackend(name) { calls.push(['backend', name]); return backendReady; }, async ready() { calls.push(['ready']); },
     browser: { fromPixels: image => { calls.push(['pixels', image]); return tensor(); } },
     expandDims: () => tensor(), tidy(fn) { const prior = new Set(tensors); const value = fn(); for (const item of tensors) if (!prior.has(item) && item !== value) item.dispose(); return value; },
@@ -36,7 +42,8 @@ function scoreTensor(person = 0, other = 0.9, dataError) {
 test('adapter selects local WASM assets and keeps only person scores at the original threshold', async () => {
   const canvas = {}; const output = scoreTensor(0.35);
   const h = adapterHarness({ inference: async () => output }); const detector = await h.load();
-  assert.deepEqual(h.calls.slice(0, 5), [['flag', 'WASM_HAS_MULTITHREAD_SUPPORT', false], ['paths', assetUrl], ['backend', 'wasm'], ['ready'], ['model', `${assetUrl}model.json`]]);
+  assert.deepEqual(h.calls.slice(0, 4), [['flag', 'WASM_HAS_MULTITHREAD_SUPPORT', false], ['paths', assetUrl], ['backend', 'wasm'], ['ready']]);
+  assert.equal(h.calls[4][0], 'model'); assert.equal(h.calls[4][1].weightData.byteLength, 18034528);
   assert.deepEqual(JSON.parse(JSON.stringify(await detector.detect(canvas))), { detections: [{ categories: [{ categoryName: 'person', score: 0.35 }] }] });
   assert.equal(h.calls.at(-1)[2], 'Postprocessor/Slice'); assert.equal(h.tensors.size, 0); assert.equal(output.disposed, 1);
   detector.close(); detector.close(); assert.equal(h.disposed, 1); await assert.rejects(detector.detect(canvas), /closed/);
@@ -123,7 +130,7 @@ test('bundled portable WASM executes the actual offline model without WebGL or c
   const { loadGraphModel } = require('@tensorflow/tfjs-converter');
   const wasm = require('@tensorflow/tfjs-backend-wasm');
   const originalFetch = global.fetch; const requests = [];
-  const manifest = JSON.parse(fs.readFileSync(path.join(repo, 'public/camera/model.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(repo, 'camera-model/model.json'), 'utf8'));
   const allowed = new Set(['model.json', ...manifest.weightsManifest.flatMap(group => group.paths)]);
   global.fetch = async (url, options) => {
     assert.equal(options?.method ?? 'GET', 'GET');
@@ -141,7 +148,7 @@ test('bundled portable WASM executes the actual offline model without WebGL or c
     for (let i = 0; i < pixels.length; i += 4) { pixels[i] = (i / 4) % 255; pixels[i + 1] = 80; pixels[i + 2] = 160; pixels[i + 3] = 255; }
     const canvas = { width, height, getContext(type) { assert.equal(type, '2d', 'inference cannot request WebGL'); return { getImageData: () => ({ data: pixels }) }; } };
     const result = await detector.detect(canvas); assert(Array.isArray(result.detections)); assert.equal(result.detections.length, 0);
-    assert.equal(tf.getBackend(), 'wasm'); assert.deepEqual(requests.sort(), [...allowed].sort());
+    assert.equal(tf.getBackend(), 'wasm'); assert.deepEqual(requests, [], 'verified in-memory model needs no network fetch');
     detector.close(); detector.close(); detector = undefined; assert.equal(tf.memory().numTensors, 0);
   } finally { detector?.close(); global.fetch = originalFetch; }
 });

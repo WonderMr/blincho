@@ -624,5 +624,8 @@
   "Показать ярлык": "Arată scurtătura",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "Scurtătura de pe desktop se adaptează configurației tale.",
   "Не удалось сохранить ярлык.": "Scurtătura nu a putut fi salvată.",
-  "Камера Blincho активна": "Blincho folosește camera"
+  "Камера Blincho активна": "Blincho folosește camera",
+  "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "La prima activare, modelul camerei (19 MB) este descărcat de pe GitHub. Apoi verificările funcționează fără internet.",
+  "Загрузка модели камеры… {percent}%": "Se descarcă modelul camerei… {percent}%",
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Modelul camerei nu a putut fi descărcat. Verifică conexiunea la internet și activează din nou această opțiune."
 }

@@ -82,7 +82,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check   # CI formatting gate
 - Git-ignored outputs, never commit: `dist/`, `site-dist/`, `release/`, `release-upload/`,
   `src-tauri/target`, `src-tauri/gen`, `site/releases.json`,
   `site/copy-source.json`, `site/DESIGN.txt`, `history.md`, `.env*`, `.dev.vars*`.
-- `public/camera/*` is binary and hash-pinned: a model change must update both
+- `public/camera/*` and `camera-model/*` are binary and hash-pinned: a model change must update both
   `public/camera/SHA256SUMS.txt` and the hashes in `tests/camera-assets.test.cjs`.
 - Privacy guarantees are product requirements: settings, journal and statistics stay on the
   device; camera frames are processed locally and never stored or uploaded; call history keeps

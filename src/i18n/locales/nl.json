@@ -624,5 +624,8 @@
   "Показать ярлык": "Snelkoppeling tonen",
   "Ярлык на рабочем столе меняется вместе со сборкой.": "De snelkoppeling op het bureaublad volgt je configuratie.",
   "Не удалось сохранить ярлык.": "De snelkoppeling kon niet worden opgeslagen.",
-  "Камера Blincho активна": "Blincho gebruikt de camera"
+  "Камера Blincho активна": "Blincho gebruikt de camera",
+  "При первом включении модель камеры (19 МБ) загружается с GitHub. Затем проверки работают без интернета.": "Bij de eerste keer inschakelen wordt het cameramodel (19 MB) van GitHub gedownload. Daarna werken de controles zonder internet.",
+  "Загрузка модели камеры… {percent}%": "Cameramodel downloaden… {percent}%",
+  "Не удалось загрузить модель камеры. Проверьте интернет и включите опцию снова.": "Het cameramodel kon niet worden gedownload. Controleer je internetverbinding en schakel deze optie opnieuw in."
 }
