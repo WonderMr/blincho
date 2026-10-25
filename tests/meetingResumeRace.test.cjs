@@ -15,7 +15,8 @@ test.after(() => fs.rmSync(directory, { recursive: true, force: true }));
 
 for (const mode of ['expiry', 'notification-only', 'reset', 'settings']) test(`meeting suspension remains authoritative during pending ${mode} IPC`, async () => {
   const previous = window.__TAURI__;
-  let tick = 10, resolvePause;
+  let tick = 10, resolvePause, resolvePresence;
+  let presenceReads = 0, delayPresence = false;
   let native = { totalMs: 1200000, remainingMs: 600000, manualPaused: false, breakActive: false,
     exercising: false, expiryPending: false, version: 0, reasons: [], absentSince: null,
     absenceEpoch: 0, idleSeconds: 0, locked: false, suspended: false, breakElapsed: false,
@@ -28,7 +29,13 @@ for (const mode of ['expiry', 'notification-only', 'reset', 'settings']) test(`m
       if (!args.input.meetingEnabled) native = { ...native, meetingRemindersPaused: false, meetingResumeToken: null };
       return { ...native };
     }
-    if (command === 'timer_snapshot') return { ...native, tickCount: ++tick };
+    if (command === 'timer_snapshot') {
+      const snapshot = { ...native, tickCount: ++tick };
+      if (delayPresence && ++presenceReads === 3) {
+        return new Promise(resolve => { resolvePresence = () => resolve(snapshot); });
+      }
+      return snapshot;
+    }
     if (command === 'set_meeting_reminders_paused') {
       assert.equal(args.token, 7); assert.equal(args.paused, true);
       native = { ...native, remainingMs: native.remainingMs || 300000, expiryPending: false,
@@ -44,19 +51,17 @@ for (const mode of ['expiry', 'notification-only', 'reset', 'settings']) test(`m
     native = { ...native, version: 1, remainingMs: 600000, tickCount: ++tick };
     window.testNativeFrame({ ...native }); await h.settle();
     const noticesBefore = h.notifications;
-    let resolveIdle;
     if (mode === 'expiry' || mode === 'notification-only') {
-      let reads = 0;
-      h.desktopAPI.getSystemIdleTime = () => ++reads === 2 ? new Promise(resolve => { resolveIdle = resolve; }) : Promise.resolve(0);
+      delayPresence = true;
       native = { ...native, remainingMs: 0, expiryPending: true, meetingWarningRequired: true, meetingWarningReady: true, tickCount: ++tick };
       window.testNativeFrame({ ...native }); await h.settle();
-      assert(resolveIdle, 'expiry reached its final presence query');
+      assert(resolvePresence, 'expiry reached its final native presence query');
     }
     const button = h.host.querySelector('[data-meeting-control]').querySelector('button');
     button[Object.keys(button).find(key => key.startsWith('__reactProps'))].onClick();
     await h.settle(); assert(resolvePause, 'native pause accepted with reply pending');
     if (mode === 'expiry' || mode === 'notification-only') {
-      resolveIdle(0); await h.settle();
+      resolvePresence(); await h.settle();
       assert(!h.active.has('BreakOverlay'));
       assert.equal(h.notifications, noticesBefore, 'pending pause suppresses every expiry outcome');
       assert.equal(h.captured.TimerWidget.secondsRemaining, 0, 'pending pause cannot restart a work cycle');

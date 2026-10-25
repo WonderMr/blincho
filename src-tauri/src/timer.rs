@@ -2,6 +2,8 @@ use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+// Keep the established renderer policy for every absence, including lock and sleep.
+const ABSENCE_RESET_MS: i64 = 180_000;
 const MEETING_MEDIA_INACTIVE_MS: i64 = 300_000;
 const MEETING_END_CONFIRM_MS: i64 = 5000;
 
@@ -56,6 +58,12 @@ pub struct MeetingSpan {
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AbsenceReset {
+    pub epoch: u64,
+    pub remaining_ms: f64,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub total_ms: f64,
     pub remaining_ms: f64,
@@ -67,6 +75,7 @@ pub struct Snapshot {
     pub reasons: Vec<String>,
     pub absent_since: Option<i64>,
     pub absence_epoch: u64,
+    pub absence_reset: Option<AbsenceReset>,
     pub idle_seconds: f64,
     pub suspended: bool,
     pub locked: bool,
@@ -163,6 +172,7 @@ impl Timer {
                 reasons: vec![],
                 absent_since: None,
                 absence_epoch: 0,
+                absence_reset: None,
                 idle_seconds: 0.,
                 suspended: false,
                 locked: false,
@@ -498,6 +508,34 @@ impl Timer {
         if !self.snapshot.reasons.is_empty() {
             self.cancel_for_absence(now, was_present);
             return false;
+        }
+        if !was_present
+            && self.input.is_some()
+            && self
+                .snapshot
+                .absent_since
+                .is_some_and(|since| now.saturating_sub(since) >= ABSENCE_RESET_MS)
+        {
+            // The native clock must restart even while the renderer is suspended.
+            // Retain the previous countdown so the renderer can offer its existing undo.
+            self.snapshot.absence_reset = Some(AbsenceReset {
+                epoch: self.snapshot.absence_epoch,
+                remaining_ms: self.snapshot.remaining_ms,
+            });
+            self.snapshot.remaining_ms = self.snapshot.total_ms;
+            self.snapshot.expiry_pending = false;
+            self.snapshot.version += 1;
+            self.meeting_postponement_pending = false;
+            self.meeting_break_context = false;
+            self.snapshot.meeting_warning_required = false;
+            self.clear_meeting_warning();
+            if let Some(input) = &mut self.input {
+                input.remaining_ms = self.snapshot.remaining_ms;
+                input.expiry_pending = false;
+                input.version = self.snapshot.version;
+                input.break_active = false;
+                input.exercising = false;
+            }
         }
         if self.break_end.is_some_and(|end| now >= end) {
             self.snapshot.break_elapsed = true;
@@ -2877,6 +2915,71 @@ mod tests {
         assert!(t.tick(2000, Some(0.), Some(false)));
         assert!(!t.tick(3000, Some(0.), Some(false)));
         assert_eq!(t.snapshot.focus_by_date.values().sum::<f64>(), 2.);
+    }
+    #[test]
+    fn long_lock_restarts_without_a_renderer_and_rejects_old_commands() {
+        for idle_enabled in [false, true] {
+            let mut timer = Timer::new(0);
+            let mut config = input();
+            config.total_ms = 1_200_000.;
+            config.remaining_ms = 60_000.;
+            config.idle_enabled = idle_enabled;
+            timer.configure(config.clone(), 0).unwrap();
+            timer.power(3, 1000);
+            timer.power(4, 301_001);
+            timer.tick(301_251, Some(0.), Some(false));
+            assert_eq!(timer.snapshot.remaining_ms, 1_200_000.);
+            let reset = timer.snapshot.absence_reset.as_ref().unwrap();
+            assert_eq!(reset.epoch, 1);
+            assert_eq!(reset.remaining_ms, 60_000.);
+            assert!(!timer.snapshot.expiry_pending);
+            assert_eq!(timer.snapshot.focus_by_date.values().sum::<f64>(), 0.);
+            assert!(timer.configure(config, 301_252).is_err());
+            timer.tick(302_251, Some(0.), Some(false));
+            assert_eq!(timer.snapshot.remaining_ms, 1_199_000.);
+            assert_eq!(timer.snapshot.focus_by_date.values().sum::<f64>(), 1.);
+        }
+    }
+    #[test]
+    fn long_nested_lock_waits_for_presence_and_preserves_manual_pause() {
+        let mut timer = Timer::new(0);
+        let mut config = input();
+        config.total_ms = 1_500_000.;
+        config.remaining_ms = 42_000.;
+        config.manual_paused = true;
+        timer.configure(config, 0).unwrap();
+        timer.power(3, 1000);
+        timer.power(1, 2000);
+        timer.power(2, 301_000);
+        timer.tick(301_250, Some(0.), Some(true));
+        assert_eq!(timer.snapshot.remaining_ms, 42_000.);
+        timer.power(4, 302_000);
+        timer.tick(302_250, Some(60.), Some(false));
+        assert_eq!(timer.snapshot.remaining_ms, 42_000.);
+        timer.tick(303_250, Some(0.), Some(false));
+        assert_eq!(timer.snapshot.remaining_ms, 1_500_000.);
+        assert!(timer.snapshot.manual_paused);
+        timer.tick(304_250, Some(0.), Some(false));
+        assert_eq!(timer.snapshot.remaining_ms, 1_500_000.);
+    }
+    #[test]
+    fn absence_reset_keeps_the_existing_three_minute_boundary() {
+        for duration in [179_999, 180_000, 300_000, 300_001] {
+            let mut timer = Timer::new(0);
+            let mut config = input();
+            config.total_ms = 1_200_000.;
+            config.remaining_ms = 60_000.;
+            timer.configure(config, 0).unwrap();
+            timer.power(3, 1000);
+            timer.power(4, 1000 + duration);
+            timer.tick(1000 + duration, Some(0.), Some(false));
+            let expected = if duration >= 180_000 {
+                1_200_000.
+            } else {
+                60_000.
+            };
+            assert_eq!(timer.snapshot.remaining_ms, expected, "duration {duration}");
+        }
     }
     #[test]
     fn sleep_does_not_credit_time_and_preserves_manual_pause() {
