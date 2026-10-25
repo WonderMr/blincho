@@ -151,5 +151,6 @@
   "release.1.10.2": "Automatic camera checks are skipped during detected calls and stop if a call is detected during a check.",
   "release.1.10.4": "Desktop builds now use only Rust and Tauri. Legacy Electron build tools have been removed. Existing history migration remains available.",
   "release.1.10.6": "macOS: Break reminders resume during a meeting after five minutes without camera or microphone use, with undo controls.",
-  "release.1.10.7": "Desktop timers start a fresh work cycle after a long screen lock, even when the window is inactive. Manual pause and restoring the previous countdown remain available."
+  "release.1.10.7": "Desktop timers start a fresh work cycle after a long screen lock, even when the window is inactive. Manual pause and restoring the previous countdown remain available.",
+  "release.1.10.8": "Fix continuous storage journal growth in the desktop app. Statistics use a separate local file, settings and history are preserved, and the latest data is saved before quitting."
 }

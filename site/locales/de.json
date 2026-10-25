@@ -151,5 +151,6 @@
   "release.1.10.2": "Automatische Kameraprüfungen werden bei erkannten Anrufen übersprungen und abgebrochen, wenn während der Prüfung ein Anruf erkannt wird.",
   "release.1.10.4": "Desktop-Builds verwenden jetzt ausschließlich Rust und Tauri. Die alten Electron-Build-Werkzeuge wurden entfernt. Die Migration des vorhandenen Verlaufs bleibt verfügbar.",
   "release.1.10.6": "macOS: Pausenerinnerungen werden während eines Meetings nach fünf Minuten ohne Kamera- und Mikrofonnutzung fortgesetzt, mit Rückgängig-Funktion.",
-  "release.1.10.7": "Der Timer der Desktop-App startet nach einer längeren Bildschirmsperre einen neuen Arbeitszyklus, auch wenn das Fenster inaktiv ist. Manuelles Pausieren und das Wiederherstellen des vorherigen Countdowns bleiben verfügbar."
+  "release.1.10.7": "Der Timer der Desktop-App startet nach einer längeren Bildschirmsperre einen neuen Arbeitszyklus, auch wenn das Fenster inaktiv ist. Manuelles Pausieren und das Wiederherstellen des vorherigen Countdowns bleiben verfügbar.",
+  "release.1.10.8": "Das stetige Anwachsen der Speicherprotokolldatei in der Desktop-App wurde behoben. Statistiken werden in einer separaten lokalen Datei gespeichert, Einstellungen und Verlauf bleiben erhalten, und die neuesten Daten werden vor dem Beenden gesichert."
 }

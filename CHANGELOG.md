@@ -2,6 +2,13 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.10.8]
+
+### Fixed
+
+- Stop repeated desktop statistics writes from growing the WebKit localStorage SQLite journal. Store statistics in a private native file with atomic replacement and coalesced saves.
+- Migrate existing statistics only after the native file is durably saved, preserving settings and history. Flush the latest timer and input totals before quitting, with retry, cancel and explicit discard controls when saving fails.
+
 ## [1.10.7]
 
 ### Fixed

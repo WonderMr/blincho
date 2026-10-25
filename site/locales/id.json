@@ -151,5 +151,6 @@
   "release.1.10.2": "Pemeriksaan kamera otomatis dilewati saat panggilan terdeteksi dan dihentikan jika panggilan terdeteksi selama pemeriksaan.",
   "release.1.10.4": "Build desktop kini hanya menggunakan Rust dan Tauri. Alat build Electron lama telah dihapus. Migrasi riwayat yang ada tetap tersedia.",
   "release.1.10.6": "macOS: Pengingat istirahat dilanjutkan selama rapat setelah lima menit tanpa penggunaan kamera dan mikrofon, dengan kontrol urungkan.",
-  "release.1.10.7": "Timer aplikasi desktop memulai siklus kerja baru setelah layar terkunci dalam waktu lama, meskipun jendela tidak aktif. Jeda manual dan pemulihan hitung mundur sebelumnya tetap tersedia."
+  "release.1.10.7": "Timer aplikasi desktop memulai siklus kerja baru setelah layar terkunci dalam waktu lama, meskipun jendela tidak aktif. Jeda manual dan pemulihan hitung mundur sebelumnya tetap tersedia.",
+  "release.1.10.8": "Memperbaiki pertumbuhan jurnal penyimpanan yang terus-menerus pada aplikasi desktop. Statistik disimpan dalam berkas lokal terpisah, pengaturan dan riwayat tetap terjaga, dan data terbaru disimpan sebelum keluar."
 }

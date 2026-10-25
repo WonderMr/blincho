@@ -151,5 +151,6 @@
   "release.1.10.2": "Las comprobaciones automáticas con la cámara se omiten durante llamadas detectadas y se detienen si se detecta una llamada durante la comprobación.",
   "release.1.10.4": "Las compilaciones de escritorio ahora usan solo Rust y Tauri. Se han eliminado las herramientas de compilación antiguas de Electron. La migración del historial existente sigue disponible.",
   "release.1.10.6": "macOS: Los recordatorios de descanso se reanudan durante una reunión tras cinco minutos sin usar la cámara ni el micrófono, con controles para deshacer.",
-  "release.1.10.7": "El temporizador de la aplicación de escritorio inicia un nuevo ciclo de trabajo tras un bloqueo prolongado de la pantalla, incluso si la ventana está inactiva. La pausa manual y la restauración de la cuenta atrás anterior siguen disponibles."
+  "release.1.10.7": "El temporizador de la aplicación de escritorio inicia un nuevo ciclo de trabajo tras un bloqueo prolongado de la pantalla, incluso si la ventana está inactiva. La pausa manual y la restauración de la cuenta atrás anterior siguen disponibles.",
+  "release.1.10.8": "Se corrige el crecimiento continuo del archivo de registro del almacenamiento en la aplicación de escritorio. Las estadísticas se guardan en un archivo local separado, se conservan los ajustes y el historial, y los últimos datos se guardan antes de salir."
 }

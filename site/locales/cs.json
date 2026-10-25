@@ -151,5 +151,6 @@
   "release.1.10.2": "Automatické kontroly kamerou se při rozpoznaném hovoru přeskočí a zastaví se, pokud je hovor rozpoznán během kontroly.",
   "release.1.10.4": "Desktopová sestavení nyní používají pouze Rust a Tauri. Staré sestavovací nástroje pro Electron byly odstraněny. Migrace stávající historie je nadále dostupná.",
   "release.1.10.6": "macOS: Připomínky přestávek se během schůzky obnoví po pěti minutách bez použití kamery a mikrofonu, s možností vrátit změnu.",
-  "release.1.10.7": "Časovač v desktopové aplikaci po delším uzamčení obrazovky zahájí nový pracovní cyklus, i když okno není aktivní. Ruční pozastavení a obnovení předchozího odpočtu zůstávají dostupné."
+  "release.1.10.7": "Časovač v desktopové aplikaci po delším uzamčení obrazovky zahájí nový pracovní cyklus, i když okno není aktivní. Ruční pozastavení a obnovení předchozího odpočtu zůstávají dostupné.",
+  "release.1.10.8": "Opraven neustálý růst úložného protokolu v desktopové aplikaci. Statistiky se ukládají do samostatného místního souboru, nastavení a historie zůstávají zachovány a nejnovější údaje se uloží před ukončením."
 }

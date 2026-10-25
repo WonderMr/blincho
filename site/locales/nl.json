@@ -151,5 +151,6 @@
   "release.1.10.2": "Automatische cameracontroles worden overgeslagen bij gedetecteerde gesprekken en stoppen als tijdens een controle een gesprek wordt gedetecteerd.",
   "release.1.10.4": "Desktopbuilds gebruiken nu alleen Rust en Tauri. De oude Electron-buildtools zijn verwijderd. Migratie van bestaande geschiedenis blijft beschikbaar.",
   "release.1.10.6": "macOS: Pauzeherinneringen worden tijdens een vergadering hervat na vijf minuten zonder camera- of microfoongebruik, met de mogelijkheid om dit ongedaan te maken.",
-  "release.1.10.7": "De timer in de desktopapp start na een langdurige schermvergrendeling een nieuwe werkcyclus, ook als het venster niet actief is. Handmatig pauzeren en de vorige aftelling herstellen blijven mogelijk."
+  "release.1.10.7": "De timer in de desktopapp start na een langdurige schermvergrendeling een nieuwe werkcyclus, ook als het venster niet actief is. Handmatig pauzeren en de vorige aftelling herstellen blijven mogelijk.",
+  "release.1.10.8": "De voortdurende groei van het opslaglogboek in de desktopapp is verholpen. Statistieken staan in een apart lokaal bestand, instellingen en geschiedenis blijven behouden en de nieuwste gegevens worden opgeslagen voor het afsluiten."
 }
