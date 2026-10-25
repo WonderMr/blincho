@@ -45,7 +45,8 @@ fs.writeFileSync(nativeFixture, `
     }
     export function setNativeMeetingRemindersPaused(token: number, paused: boolean) { return window.testSetMeetingRemindersPaused(token, paused); }
     export function hasNativeTimer() { return true; }
-    export function readNativeTimer() { return window.testReadNativeTimer ? window.testReadNativeTimer() : Promise.resolve(null); }
+    let latestFrame: unknown = null;
+    export function readNativeTimer() { return window.testReadNativeTimer ? window.testReadNativeTimer() : Promise.resolve(latestFrame); }
     let commandQueue = Promise.resolve();
     let historyEnabled: boolean | undefined;
     let historyEpoch = 0;
@@ -63,7 +64,10 @@ fs.writeFileSync(nativeFixture, `
       commandQueue = cleared.then(() => {}).catch(() => {});
       return cleared;
     }
-    export function subscribeNativeTimer(callback: unknown) { window.testNativeFrame = callback; return () => { window.testNativeFrame = null; }; }
+    export function subscribeNativeTimer(callback: (snapshot: unknown) => void) {
+      window.testNativeFrame = (snapshot: unknown) => { latestFrame = snapshot; callback(snapshot); };
+      return () => { window.testNativeFrame = null; };
+    }
   `);
 test.after(() => fs.rmSync(build, { recursive: true, force: true }));
 

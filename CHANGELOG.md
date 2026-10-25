@@ -2,6 +2,13 @@
 
 Release notes are curated here before a version tag is pushed. The website keeps published GitHub release history and links to the full notes for each version.
 
+## [1.10.7]
+
+### Fixed
+
+- Start a fresh desktop work cycle after a long screen lock or sleep, even while the interface is inactive. Preserve manual pauses and exclude locked or suspended time from work totals.
+- Keep time already counted after unlocking when the interface returns, including during an interrupted break. Restore the pre-reset countdown when undoing the automatic reset and clear stale meeting-postponement status.
+
 ## [1.10.6]
 
 ### Added

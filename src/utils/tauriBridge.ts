@@ -10,6 +10,7 @@ import { installWindowDrag } from './windowDrag';
 export interface NativeTimerSnapshot {
   totalMs: number; remainingMs: number; manualPaused: boolean; breakActive: boolean;
   exercising: boolean; expiryPending: boolean; version: number; reasons: PresenceReason[];
+  absenceReset?: { epoch: number; remainingMs: number } | null;
   absentSince: number | null; absenceEpoch: number; idleSeconds: number; locked: boolean; suspended: boolean;
   meetingPostponedEpoch?: number; meetingResumedEpoch?: number; breakElapsed: boolean; breakEndAt?: number | null; focusByDate: Record<string, number>; tickCount: number;
   meetingWarningEpoch?: number;

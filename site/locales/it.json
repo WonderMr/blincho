@@ -150,5 +150,6 @@
   "release.1.10.1": "L’aspetto e il nome dipendono dalle funzioni attivate. Il collegamento sul desktop segue la tua configurazione. Un indicatore della fotocamera sull’icona di Blincho mostra quando è in uso e scompare al termine dell’acquisizione.",
   "release.1.10.2": "I controlli automatici con la fotocamera vengono saltati durante le chiamate rilevate e si interrompono se viene rilevata una chiamata durante il controllo.",
   "release.1.10.4": "Le build desktop ora usano solo Rust e Tauri. I vecchi strumenti di compilazione per Electron sono stati rimossi. La migrazione della cronologia esistente resta disponibile.",
-  "release.1.10.6": "macOS: I promemoria delle pause riprendono durante una riunione dopo cinque minuti senza uso di videocamera e microfono, con possibilità di annullare la modifica."
+  "release.1.10.6": "macOS: I promemoria delle pause riprendono durante una riunione dopo cinque minuti senza uso di videocamera e microfono, con possibilità di annullare la modifica.",
+  "release.1.10.7": "Il timer dell’app desktop avvia un nuovo ciclo di lavoro dopo un blocco prolungato dello schermo, anche quando la finestra è inattiva. La pausa manuale e il ripristino del conto alla rovescia precedente restano disponibili."
 }

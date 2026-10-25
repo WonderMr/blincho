@@ -150,5 +150,6 @@
   "release.1.10.1": "Aspectul și numele depind de funcțiile activate. Scurtătura de pe desktop se adaptează configurației tale. Un indicator de cameră pe pictograma Blincho arată când este folosită camera și dispare la încheierea capturii.",
   "release.1.10.2": "Verificările automate cu camera sunt omise în timpul apelurilor detectate și se opresc dacă un apel este detectat în timpul verificării.",
   "release.1.10.4": "Versiunile pentru desktop folosesc acum doar Rust și Tauri. Vechile instrumente de compilare pentru Electron au fost eliminate. Migrarea istoricului existent rămâne disponibilă.",
-  "release.1.10.6": "macOS: Mementourile pentru pauze se reiau în timpul unei întâlniri după cinci minute fără utilizarea camerei și microfonului, cu posibilitatea de a anula modificarea."
+  "release.1.10.6": "macOS: Mementourile pentru pauze se reiau în timpul unei întâlniri după cinci minute fără utilizarea camerei și microfonului, cu posibilitatea de a anula modificarea.",
+  "release.1.10.7": "Cronometrul aplicației desktop începe un nou ciclu de lucru după o blocare îndelungată a ecranului, chiar și când fereastra este inactivă. Pauza manuală și restabilirea numărătorii inverse anterioare rămân disponibile."
 }

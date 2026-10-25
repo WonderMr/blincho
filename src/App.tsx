@@ -87,6 +87,7 @@ export const App: React.FC = () => {
   const pendingMeetingsRef = useRef<MeetingSpan[]>([]);
   const lastActivityFlushRef = useRef(Date.now());
   const nativeAbsenceEpochRef = useRef(0);
+  const nativeAbsenceResetRef = useRef<{ epoch: number; remainingMs: number; handled: boolean } | null>(null);
   const nativeTickRef = useRef(0);
   const nativeMeetingEpochRef = useRef(0);
   const nativeMeetingResumedEpochRef = useRef(0);
@@ -243,8 +244,8 @@ export const App: React.FC = () => {
     setInMeetingActive(false);
     sync();
   };
-  const endBreak = (preservePending = false) => {
-    if (!session.breakActive) return;
+  /** Close break presentation without changing the authoritative work countdown. */
+  const dismissBreak = (preservePending = false) => {
     session.advance(Date.now());
     flushFocus();
     session.breakActive = false;
@@ -252,11 +253,21 @@ export const App: React.FC = () => {
     if (!preservePending) pendingBreakRef.current = null;
     setIsBreakActive(false);
     releaseDesktopBreak();
+  };
+  /** Finish a current break and start a new configured work interval. */
+  const endBreak = (preservePending = false) => {
+    if (!session.breakActive) return;
+    dismissBreak(preservePending);
     restartWork();
   };
+  /** Cancel interrupted rest while preserving a reset already performed natively. */
   const cancelAbsentActivity = () => {
     pendingBreakRef.current = null;
-    if (session.breakActive) endBreak();
+    if (session.breakActive) {
+      const reset = nativeAbsenceResetRef.current;
+      if (reset && !reset.handled && reset.epoch === nativeAbsenceEpochRef.current) dismissBreak();
+      else endBreak();
+    }
     if (session.exercising) {
       session.exercising = false;
       exerciseIdRef.current = null;
@@ -264,16 +275,22 @@ export const App: React.FC = () => {
       setActiveRoutine(undefined);
     }
   };
+  /** Complete a confirmed return once and retain the prior countdown for undo. */
   const finishReturn = () => {
     if (!session.present || session.absentSince === null) return;
     const awaySeconds = (Date.now() - session.absentSince) / 1000;
     session.absentSince = null;
     const resetOnReturn = resetOnReturnRef.current;
     resetOnReturnRef.current = false;
-    if (awaySeconds >= 180 || resetOnReturn) {
-      undoRef.current = { remainingMs: session.remainingMs, totalMs: session.totalMs };
-      setSavedRemainingBeforeReset(Math.ceil(session.remainingMs / 1000));
-      restartWork();
+    const nativeReset = nativeAbsenceResetRef.current;
+    const alreadyReset = nativeReset !== null && !nativeReset.handled && nativeReset.epoch === nativeAbsenceEpochRef.current;
+    if (alreadyReset) nativeReset.handled = true;
+    if (awaySeconds >= 180 || resetOnReturn || alreadyReset) {
+      const remainingMs = alreadyReset ? nativeReset.remainingMs : session.remainingMs;
+      undoRef.current = { remainingMs, totalMs: session.totalMs };
+      setSavedRemainingBeforeReset(Math.ceil(remainingMs / 1000));
+      if (!alreadyReset) restartWork();
+      else setInMeetingActive(false);
       setNoticeMessage("Активность возобновилась. Начат новый рабочий цикл; прежний отсчёт можно восстановить.", true);
     } else {
       session.lastUpdated = Date.now();
@@ -310,15 +327,30 @@ export const App: React.FC = () => {
       setNoticeMessage("Перерыв записан. Рабочий цикл продолжается.");
     }
   };
+  /** Confirm presence from a complete native snapshot or bounded browser queries. */
   const samplePresence = (refresh = false): Promise<boolean> => {
     if (presenceInFlightRef.current) {
       if (refresh) presenceRefreshRef.current = true;
       return presenceInFlightRef.current;
     }
     const query = async (): Promise<boolean> => {
-      if (hasNativeTimer() && settingsRef.current.enhancedPresenceEnabled) {
+      if (!mountedRef.current) return false;
+      if (hasNativeTimer()) {
+        // Reconcile countdown resets before focus or activity can finish an absence.
         const sampledMonotonicAt = performance.now();
-        const snapshot = await readNativeTimer();
+        let snapshot: NativeTimerSnapshot | null;
+        try { snapshot = await readNativeTimer(); }
+        catch (error) {
+          if (mountedRef.current) {
+            console.warn('Blincho: Native presence query failed; presence is unconfirmed:', error);
+            // Do not configure a stale countdown before the native reset is reconciled.
+            session.reasons.add('unconfirmed');
+            cameraAbortRef.current?.abort();
+            pendingBreakRef.current = null;
+            publish(value => value + 1);
+          }
+          return false;
+        }
         if (!snapshot || !mountedRef.current) return false;
         applyNativeRef.current(snapshot);
         const present = snapshot.reasons.length === 0;
@@ -976,6 +1008,10 @@ export const App: React.FC = () => {
         (cameraOwner?.controller === cameraAbortRef.current && snapshot.presenceEpoch !== undefined &&
           cameraOwner?.epoch !== snapshot.presenceEpoch)) cameraAbortRef.current?.abort();
       if (snapshot.version >= session.version) {
+        const reset = snapshot.absenceReset;
+        if (reset && reset.epoch > (nativeAbsenceResetRef.current?.epoch ?? 0)) {
+          nativeAbsenceResetRef.current = { ...reset, handled: false };
+        }
         session.totalMs = snapshot.totalMs;
         session.remainingMs = snapshot.remainingMs;
         session.manualPaused = snapshot.manualPaused;
@@ -1033,7 +1069,8 @@ export const App: React.FC = () => {
         const beganAt = snapshot.absentSince ?? Date.now();
         // A hidden renderer must observe even an absence that ended before this frame arrived.
         handlersRef.current.setPresenceReason('unconfirmed', true, beganAt);
-        if (session.absentSince !== null) session.absentSince = Math.min(session.absentSince, beganAt);
+        // A local IPC failure may already have marked presence unconfirmed without an absence.
+        session.absentSince = session.absentSince === null ? beganAt : Math.min(session.absentSince, beganAt);
         cancelAbsentActivity();
       }
       for (const [date, seconds] of Object.entries(snapshot.focusByDate)) {
