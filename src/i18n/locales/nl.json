@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Pauzes zijn tijdens de vergadering hervat.",
   "Я ещё на встрече: отключить перерывы": "Ik zit nog in een vergadering: pauzes uitschakelen",
   "Вернуть напоминания": "Herinneringen weer inschakelen",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Herinneringen konden niet worden gewijzigd. Probeer het opnieuw."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Herinneringen konden niet worden gewijzigd. Probeer het opnieuw.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "De statistieken konden niet worden opgeslagen. Bij afsluiten gaan de laatste niet-opgeslagen wijzigingen verloren.",
+  "Повторить сохранение": "Opnieuw opslaan",
+  "Выйти без сохранения": "Afsluiten zonder opslaan"
 }

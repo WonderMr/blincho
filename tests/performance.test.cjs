@@ -30,12 +30,12 @@ try {
   assert.equal(storage.loadTodayStats(snapshot).date, today);
   assert.equal(reads, 0, 'one existing snapshot serves today and history without another storage read');
   storage.recordBreakCompleted(0, 'old-event');
-  assert.equal(reads, 1, 'cross-day idempotence uses the update snapshot');
+  assert.equal(reads, 2, 'cross-day idempotence reads once for update and once to skip identical writes');
   assert.equal(storage.loadTodayStats().breaksCompleted, 1, 'a historical event cannot be credited on a new day');
 
   reads = 0;
   storage.recordExerciseCompleted('donald-korb-blinking', 'new-event');
-  assert.equal(reads, 1, 'new exercise completion reads history once');
+  assert.equal(reads, 2, 'new completion reads its update snapshot and compares stored bytes before writing');
   const saved = JSON.parse(values.get('myeyes_stats_v1'));
   assert.deepEqual(saved.map(day => day.date), [previous, today], 'existing unsorted persisted history is sorted');
   assert.equal(saved[1].exercisesCompleted, 1);

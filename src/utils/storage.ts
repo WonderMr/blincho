@@ -5,10 +5,10 @@ import { normalizeTimerSettings } from './timerSession';
 import { mergeInputActivity, normalizeInputActivity } from './inputActivity';
 import type { InputActivitySnapshot } from './inputActivity';
 import { CVS_SURVEY_QUESTIONS } from '../data/cvsQuestions';
+import { readStatistics, writeStatistics, statisticsWriteResult } from './statisticsPersistence';
 
 const STORAGE_KEYS = {
   SETTINGS: 'myeyes_settings_v1',
-  STATS: 'myeyes_stats_v1',
   CVS_RESULT: 'myeyes_cvs_result_v1',
 };
 
@@ -56,7 +56,8 @@ export function loadSettings(): AppSettings {
 
 export function saveSettings(settings: AppSettings): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    const value = JSON.stringify(settings);
+    if (localStorage.getItem(STORAGE_KEYS.SETTINGS) !== value) localStorage.setItem(STORAGE_KEYS.SETTINGS, value);
   } catch (err) {
     console.warn('Blincho: Failed to save settings to localStorage:', err);
   }
@@ -68,7 +69,7 @@ function emptyDay(date: string): DayStats {
 
 export function loadAllStats(): DayStats[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEYS.STATS) || '[]');
+    const parsed: unknown = JSON.parse(readStatistics() || '[]');
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((stat): stat is DayStats => !!stat && typeof stat.date === 'string' &&
       /^\d{4}-\d{2}-\d{2}$/.test(stat.date) &&
@@ -96,9 +97,9 @@ export function loadTodayStats(stats: DayStats[] = loadAllStats()): DayStats {
 
 // Remove call records only. Keep activity, totals, completion IDs and other data.
 // Return the write outcome so the UI never announces a deletion that failed.
-export function clearMeetingHistory(): boolean {
+export function clearMeetingHistory(): boolean | Promise<boolean> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.STATS);
+    const raw = readStatistics();
     if (!raw) return true;
     const stats: unknown = JSON.parse(raw);
     if (!Array.isArray(stats)) return false;
@@ -107,8 +108,8 @@ export function clearMeetingHistory(): boolean {
       const { meetings: _meetings, ...rest } = day;
       return rest;
     });
-    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(cleared));
-    return true;
+    writeStatistics(JSON.stringify(cleared));
+    return statisticsWriteResult();
   } catch (error) {
     console.warn('Blincho: Failed to clear call history:', error);
     return false;
@@ -126,7 +127,7 @@ function updateDay(date: string, update: (stat: DayStats, stats: DayStats[]) => 
   update(stat, stats);
   try {
     // Keep the full daily history so long streaks and earned achievements survive.
-    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats));
+    writeStatistics(JSON.stringify(stats));
   } catch (err) {
     console.warn('Blincho: Failed to save statistics:', err);
   }
@@ -152,7 +153,7 @@ export function recordActivitySpans(spans: ActivitySpan[]): void {
   recordTimerProgress([], spans);
 }
 
-export function recordInputActivity(snapshot: InputActivitySnapshot): boolean {
+export function recordInputActivity(snapshot: InputActivitySnapshot): boolean | Promise<boolean> {
   if (snapshot.status !== 'active' || typeof snapshot.source !== 'string' || !snapshot.source || snapshot.source.length > 100 || !Array.isArray(snapshot.buckets)) return false;
   const stats = loadAllStats();
   const history = new Map(stats.map(day => [day.date, day]));
@@ -172,16 +173,16 @@ export function recordInputActivity(snapshot: InputActivitySnapshot): boolean {
     history.set(date, day);
   }
   try {
-    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify([...history.values()].sort((a, b) => a.date.localeCompare(b.date))));
-    return true;
+    writeStatistics(JSON.stringify([...history.values()].sort((a, b) => a.date.localeCompare(b.date))));
+    return statisticsWriteResult();
   } catch (error) { console.warn('Blincho: Input activity storage failed:', error); return false; }
 }
 
-export function clearInputActivity(): boolean {
+export function clearInputActivity(): boolean | Promise<boolean> {
   try {
     const stats = loadAllStats().map(({ inputActivity: _counts, inputActivityCursor: _cursor, ...day }) => day);
-    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(stats));
-    return true;
+    writeStatistics(JSON.stringify(stats));
+    return statisticsWriteResult();
   } catch (error) { console.warn('Blincho: Input activity deletion failed:', error); return false; }
 }
 
@@ -209,7 +210,7 @@ export function recordTimerProgress(focus: [string, number][], spans: ActivitySp
     day.meetings = normalizeMeetings([...(day.meetings ?? []), ...entries], date);
   }
   try {
-    localStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify([...history.values()].sort((a, b) => a.date.localeCompare(b.date))));
+    writeStatistics(JSON.stringify([...history.values()].sort((a, b) => a.date.localeCompare(b.date))));
   } catch (error) { console.warn('Blincho: Failed to save timer progress:', error); }
 }
 

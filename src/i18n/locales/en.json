@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Breaks have resumed during the meeting.",
   "Я ещё на встрече: отключить перерывы": "I'm still in a meeting: turn off breaks",
   "Вернуть напоминания": "Turn reminders back on",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Couldn't change reminders. Try again."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Couldn't change reminders. Try again.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "Could not save statistics. Quitting will lose the latest unsaved changes.",
+  "Повторить сохранение": "Retry saving",
+  "Выйти без сохранения": "Quit without saving"
 }

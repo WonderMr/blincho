@@ -71,7 +71,7 @@ async function launch() {
 }
 async function inspect() {
   const marker = ++sequence;
-  await control('eval', { script: `window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,meetingProbe:${marker},stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')||'[]'),breakDialog:!!document.querySelector('.fullscreen-break-takeover[role="dialog"]'),historyEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').meetingHistoryEnabled===true,historyToggle:document.querySelector('#statistics-meeting-history-enabled')?{checked:document.querySelector('#statistics-meeting-history-enabled').checked,disabled:document.querySelector('#statistics-meeting-history-enabled').disabled}:null,deleteConfirmation:!!document.querySelector('#statistics-meeting-history-confirm-delete'),activeElementId:document.activeElement?.id||'',callsText:document.querySelector('.statistics-meetings')?.textContent||'',callRows:document.querySelectorAll('.statistics-meeting-list tbody tr').length,horizontalOverflow:document.querySelector('.statistics-meetings')?document.querySelector('.statistics-meetings').scrollWidth-document.querySelector('.statistics-meetings').clientWidth:0}})` });
+  await control('eval', { script: `window.__TAURI__.core.invoke('statistics_load').then(raw=>window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,meetingProbe:${marker},stats:JSON.parse(raw||'[]'),breakDialog:!!document.querySelector('.fullscreen-break-takeover[role="dialog"]'),historyEnabled:JSON.parse(localStorage.getItem('myeyes_settings_v1')||'{}').meetingHistoryEnabled===true,historyToggle:document.querySelector('#statistics-meeting-history-enabled')?{checked:document.querySelector('#statistics-meeting-history-enabled').checked,disabled:document.querySelector('#statistics-meeting-history-enabled').disabled}:null,deleteConfirmation:!!document.querySelector('#statistics-meeting-history-confirm-delete'),activeElementId:document.activeElement?.id||'',callsText:document.querySelector('.statistics-meetings')?.textContent||'',callRows:document.querySelectorAll('.statistics-meeting-list tbody tr').length,horizontalOverflow:document.querySelector('.statistics-meetings')?document.querySelector('.statistics-meetings').scrollWidth-document.querySelector('.statistics-meetings').clientWidth:0}}))` });
   return until(value => value.renderer?.meetingProbe === marker);
 }
 async function stop() {
@@ -84,7 +84,7 @@ const canonicalCalls = spans => spans.map(({ start, end, app }) => ({ start, end
   .sort((a, b) => a.start - b.start || a.app.localeCompare(b.app));
 async function inspectUntil(predicate) {
   let state;
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 60; i++) {
     state = await inspect();
     if (predicate(state)) return state;
     await sleep(200);

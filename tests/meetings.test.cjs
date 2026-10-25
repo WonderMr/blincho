@@ -64,6 +64,7 @@ fs.writeFileSync(nativeFixture, `
       commandQueue = cleared.then(() => {}).catch(() => {});
       return cleared;
     }
+    export function subscribeNativeQuit() { return () => {}; }
     export function subscribeNativeTimer(callback: (snapshot: unknown) => void) {
       window.testNativeFrame = (snapshot: unknown) => { latestFrame = snapshot; callback(snapshot); };
       return () => { window.testNativeFrame = null; };

@@ -53,6 +53,8 @@ function harness({ store = createStore(), source = () => Promise.resolve(snapsho
     core: { async invoke(command, args) {
       calls.push([command, args]);
       if (command === 'legacy_history') return readSource();
+      if (command === 'statistics_load') return store.nativeStatistics ?? null;
+      if (command === 'statistics_save') { store.nativeStatistics = args.value; return; }
       if (command === 'preferred_languages') return ['en-US'];
       if (command === 'desktop_info') return { platform, meetingDetectionSupported: platform !== 'linux' };
       if (command === 'tray_preview_state') return { timer: { remainingMs: 60_000, totalMs: 1_200_000, reasons: [] }, summary: null };
@@ -163,11 +165,11 @@ test('source failure reaches localized recovery before App writes, and repaired 
     h.setSource(async () => oldSource);
     await h.click('Retry import', true);
     assert(h.appMounts > 0); assert.equal(h.rootCount, 1);
-    assert.equal(h.store.getItem('myeyes_stats_v1'), snapshot.entries.myeyes_stats_v1);
+    assert.equal(h.store.nativeStatistics, snapshot.entries.myeyes_stats_v1);
     assert.equal(h.store.getItem('blincho-language-v1'), snapshot.entries['blincho-language-v1']);
     assert(h.store.getItem(marker)); assert.equal(h.store.getItem(pending), null);
     assert.equal(h.calls.filter(([name]) => name === 'legacy_history').length, 2);
-    assert.deepEqual([...h.listenCounts], [['native-timer', 1], ['update-state', 1], ['trigger-break', 1]]);
+    assert.deepEqual([...h.listenCounts], [['native-timer', 1], ['update-state', 1], ['trigger-break', 1], ['statistics-before-quit', 1]]);
     assert.equal(doc._listeners.get('click').size, 1); assert.equal(doc._listeners.get('mousedown').size, 1);
     for (const callback of h.native.get('native-timer')) callback({ payload: { tickCount: 1 } });
     assert.equal(frames, 1); unsubscribe();
@@ -187,13 +189,13 @@ test('Continue persists a scoped decision before App mounts and future startup p
     assert.equal(store.changes[0][1], choiceKey, 'choice commits before App defaults');
     assert.deepEqual(JSON.parse(store.getItem(choiceKey)), { schemaVersion: 1, source: 'electron-legacy-history', choice: 'continue-without-history' });
     assert.equal(store.getItem(marker), null); assert.equal(store.getItem(pending), null);
-    store.setItem('myeyes_stats_v1', '[{"date":"2026-10-12","breaksCompleted":1}]');
+    store.nativeStatistics = '[{"date":"2026-10-12","breaksCompleted":1}]';
   } finally { h.destroy(); }
   const restarted = harness({ store, source: async () => { throw Error('Still unavailable'); } });
   try {
     await restarted.start(); assert(restarted.appMounts > 0);
     assert.equal(restarted.calls.filter(([name]) => name === 'legacy_history').length, 0);
-    assert.equal(store.getItem('myeyes_stats_v1'), '[{"date":"2026-10-12","breaksCompleted":1}]');
+    assert.equal(store.nativeStatistics, '[{"date":"2026-10-12","breaksCompleted":1}]');
   } finally { restarted.destroy(); }
 });
 
@@ -210,14 +212,14 @@ test('a failed Continue write leaves recovery open and App unmounted', async () 
 
 test('healthy imported and existing profiles open without reading legacy source or modifying history', async () => {
   for (const initial of [
-    [[marker, '{}'], ['myeyes_stats_v1', 'healthy']],
-    [['myeyes_stats_v1', 'healthy']],
+    [[marker, '{}'], ['myeyes_stats_v1', '[{"healthy":true}]']],
+    [['myeyes_stats_v1', '[{"healthy":true}]']],
   ]) {
     const h = harness({ store: createStore(initial), source: async () => { throw Error('Broken old source'); } });
     try {
       await h.start(); assert(h.appMounts > 0);
       assert.equal(h.calls.filter(([name]) => name === 'legacy_history').length, 0);
-      assert.equal(h.store.getItem('myeyes_stats_v1'), 'healthy');
+      assert.equal(h.store.nativeStatistics, '[{"healthy":true}]');
     } finally { h.destroy(); }
   }
 });
@@ -256,7 +258,7 @@ test('a failed import write rolls back its transaction and a repaired retry impo
     assert.deepEqual([...store.map], [['unrelated', 'preserved']]);
     assert.equal(store.getItem(marker), null); assert.equal(store.getItem(pending), null);
     await h.click('Retry import'); assert(h.appMounts > 0);
-    assert.equal(store.getItem('myeyes_stats_v1'), snapshot.entries.myeyes_stats_v1);
+    assert.equal(store.nativeStatistics, snapshot.entries.myeyes_stats_v1);
   } finally { h.destroy(); }
 });
 
@@ -265,12 +267,12 @@ test('an invalid pending journal stays unchanged on import failure and explicit 
   try {
     await h.start(); assert.equal(h.appMounts, 0); assert.deepEqual([...store.map], initial); assert.deepEqual(store.changes, []);
     await h.click('Continue without history'); assert(h.appMounts > 0);
-    store.setItem('myeyes_stats_v1', 'new history');
+    store.nativeStatistics = '[{"newHistory":true}]';
   } finally { h.destroy(); }
   const restarted = harness({ store });
   try {
     await restarted.start(); assert(restarted.appMounts > 0);
-    assert.equal(store.getItem('myeyes_stats_v1'), 'new history'); assert.equal(store.getItem(pending), '{invalid journal}');
+    assert.equal(store.nativeStatistics, '[{"newHistory":true}]'); assert.equal(store.getItem(pending), '{invalid journal}');
     assert.equal(restarted.calls.filter(([name]) => name === 'legacy_history').length, 0);
   } finally { restarted.destroy(); }
 });

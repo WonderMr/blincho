@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Istirahat dilanjutkan saat rapat berlangsung.",
   "Я ещё на встрече: отключить перерывы": "Saya masih rapat: nonaktifkan istirahat",
   "Вернуть напоминания": "Aktifkan kembali pengingat",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Tidak dapat mengubah pengingat. Coba lagi."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Tidak dapat mengubah pengingat. Coba lagi.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "Statistik tidak dapat disimpan. Jika keluar, perubahan terbaru yang belum disimpan akan hilang.",
+  "Повторить сохранение": "Coba simpan lagi",
+  "Выйти без сохранения": "Keluar tanpa menyimpan"
 }

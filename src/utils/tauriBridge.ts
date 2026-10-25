@@ -1,3 +1,4 @@
+import { initializeStatisticsPersistence, flushStatistics } from './statisticsPersistence';
 import { gatherLegacyHistory } from './historyTransfer';
 import { createHistoryRecovery } from './historyRecovery';
 import type { HistoryStartupResult } from './historyRecovery';
@@ -38,6 +39,28 @@ interface TauriGlobal {
 declare global { interface Window { __TAURI__?: TauriGlobal } }
 const frames = new Set<(snapshot: NativeTimerSnapshot) => void>();
 const breaks = new Set<() => void>();
+const quitHandlers = new Set<(quitting: boolean) => void | Promise<void>>();
+let quitInFlight = false;
+export function subscribeNativeQuit(callback: (quitting: boolean) => void | Promise<void>): () => void {
+  quitHandlers.add(callback);
+  return () => { quitHandlers.delete(callback); };
+}
+export async function requestNativeQuit(discard = false): Promise<void> {
+  const api = window.__TAURI__;
+  if (!api || quitInFlight) return;
+  quitInFlight = true;
+  try {
+    if (!discard) {
+      for (const callback of quitHandlers) await callback(true);
+      await flushStatistics();
+    }
+    await api.core.invoke('statistics_finish_quit');
+  } catch (error) {
+    console.warn('Blincho: Could not save statistics before quitting:', error);
+    for (const callback of quitHandlers) await callback(false);
+    throw error;
+  } finally { quitInFlight = false; }
+}
 const updateListeners = new Set<(state: UpdateState) => void>();
 let latest: NativeTimerSnapshot | null = null;
 let commandQueue = Promise.resolve();
@@ -127,6 +150,7 @@ export async function initializeTauriHistory(): Promise<void> {
   if (!window.__TAURI__) return;
   historyRecovery ??= createHistoryRecovery(localStorage, () => window.__TAURI__!.core.invoke('legacy_history'));
   const history = await historyRecovery.run();
+  await initializeStatisticsPersistence(window.__TAURI__!.core.invoke);
   reportHistoryStartup(history);
 }
 
@@ -134,6 +158,7 @@ export async function continueWithoutTauriHistory(): Promise<void> {
   if (!window.__TAURI__) return;
   historyRecovery ??= createHistoryRecovery(localStorage, () => window.__TAURI__!.core.invoke('legacy_history'));
   const history = await historyRecovery.continueWithoutHistory();
+  await initializeStatisticsPersistence(window.__TAURI__!.core.invoke);
   reportHistoryStartup(history);
 }
 
@@ -197,6 +222,11 @@ async function installTauriBridge(): Promise<void> {
     }));
     unlisten.push(await api.event.listen<UpdateState>('update-state', event => { for (const callback of updateListeners) callback(event.payload); }));
     unlisten.push(await api.event.listen('trigger-break', () => { for (const callback of breaks) callback(); }));
+    unlisten.push(await api.event.listen('statistics-before-quit', () => {
+      // The error is presented by App's quit handler; keep native exit guarded.
+      void requestNativeQuit().catch(() => {});
+    }));
+    await api.core.invoke('statistics_ready');
   } catch (error) {
     for (const unsubscribe of unlisten) unsubscribe();
     throw error;

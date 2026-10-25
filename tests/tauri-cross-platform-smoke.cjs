@@ -152,7 +152,7 @@ async function launch(args = []) {
 }
 async function inspectRenderer() {
   const probe = Date.now();
-  await control('eval', { script: `window.__TAURI__.core.invoke('desktop_info').then(info=>window.__TAURI__.core.invoke('renderer_report',{report:{platform:info.platform,ready:true,probe:${probe},stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')),dialog:!!document.querySelector('[role=dialog]'),text:document.body.innerText}}))` });
+  await control('eval', { script: `Promise.all([window.__TAURI__.core.invoke('desktop_info'),window.__TAURI__.core.invoke('statistics_load')]).then(([info,raw])=>window.__TAURI__.core.invoke('renderer_report',{report:{platform:info.platform,ready:true,probe:${probe},stats:JSON.parse(raw||'[]'),dialog:!!document.querySelector('[role=dialog]'),text:document.body.innerText}}))` });
   return until(value => value.renderer?.probe === probe);
 }
 async function stop() {

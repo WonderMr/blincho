@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Die Pausen wurden während der Besprechung wieder aktiviert.",
   "Я ещё на встрече: отключить перерывы": "Ich bin noch in einer Besprechung: Pausen ausschalten",
   "Вернуть напоминания": "Erinnerungen wieder einschalten",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Die Erinnerungen konnten nicht geändert werden. Versuchen Sie es erneut."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Die Erinnerungen konnten nicht geändert werden. Versuchen Sie es erneut.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "Die Statistiken konnten nicht gespeichert werden. Beim Beenden gehen die letzten ungespeicherten Änderungen verloren.",
+  "Повторить сохранение": "Speichern erneut versuchen",
+  "Выйти без сохранения": "Ohne Speichern beenden"
 }

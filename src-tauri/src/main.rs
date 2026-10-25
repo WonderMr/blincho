@@ -10,6 +10,7 @@ mod input_activity;
 mod local_mcp;
 mod platform;
 mod startup;
+mod statistics_store;
 mod symbiote_icons;
 mod symbiote_shortcuts;
 mod timer;
@@ -43,6 +44,7 @@ struct Runtime {
     source: PathBuf,
     test_dir: Option<PathBuf>,
     quitting: AtomicBool,
+    statistics_ready: AtomicBool,
     updates: Arc<updates::UpdateController>,
     meeting: platform::MeetingMonitor,
 }
@@ -75,6 +77,34 @@ fn local_mcp_take_commands(
 ) -> Vec<local_mcp::McpCommand> {
     server.take_commands()
 }
+#[tauri::command]
+async fn statistics_load(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<statistics_store::StatisticsStore>().load()
+    })
+    .await
+    .map_err(|_| "Statistics task failed".to_string())?
+}
+#[tauri::command]
+async fn statistics_save(app: tauri::AppHandle, value: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<statistics_store::StatisticsStore>().save(value)
+    })
+    .await
+    .map_err(|_| "Statistics task failed".to_string())?
+}
+#[tauri::command]
+fn statistics_ready(runtime: tauri::State<Runtime>) {
+    runtime.statistics_ready.store(true, Ordering::SeqCst);
+}
+#[tauri::command]
+fn statistics_finish_quit(app: tauri::AppHandle) {
+    app.state::<Runtime>()
+        .quitting
+        .store(true, Ordering::SeqCst);
+    app.exit(0);
+}
+
 // Fixed stage names only, explicitly opted in by native prototype tests. Keep
 // this separate from runtime diagnostics so a blocked setup leaves evidence.
 fn startup_trace(stage: &'static str) {
@@ -1057,7 +1087,6 @@ fn test_control_on_main(app: &tauri::AppHandle) {
                 .eval(command["script"].as_str().ok_or("Missing script")?)
                 .map_err(|e| e.to_string())?,
             "quit" => {
-                runtime.quitting.store(true, Ordering::SeqCst);
                 app.exit(0);
             }
             _ => return Err("Unsupported test control".into()),
@@ -1134,6 +1163,7 @@ fn main() {
             clear_meeting_history,
             desktop_command,
             legacy_history,
+            statistics_load, statistics_save, statistics_ready, statistics_finish_quit,
             renderer_report,
             get_runtime_metadata, desktop_info, preferred_languages, notification_permission, notification_send, lock_computer, attention, open_external,
             set_locale, update_get_state, update_set_policy, update_check, update_skip, update_download, update_open_download, check_meeting_active,
@@ -1160,6 +1190,7 @@ fn main() {
                 None => app.path().app_data_dir()?,
             };
             std::fs::create_dir_all(&profile)?;
+            app.manage(statistics_store::StatisticsStore::new(profile.join("statistics-v1.json")));
             let autostart = startup::initialize(app.handle(), &profile, test_dir.is_some(), hidden);
             if let Some(path) = &test_dir {
                 std::fs::create_dir_all(path)?;
@@ -1242,6 +1273,7 @@ fn main() {
                 source,
                 test_dir,
                 quitting: AtomicBool::new(false),
+                statistics_ready: AtomicBool::new(false),
                 updates: update_controller.clone(),
                 meeting,
             });
@@ -1297,9 +1329,6 @@ fn main() {
                         let _ = request_tray_break(app);
                     }
                     "quit" => {
-                        app.state::<Runtime>()
-                            .quitting
-                            .store(true, Ordering::SeqCst);
                         app.exit(0);
                     }
                     _ => {}
@@ -1503,6 +1532,18 @@ fn main() {
         }
         if let tauri::RunEvent::Ready = event {
             startup_trace("event-loop-ready");
+        }
+        if let tauri::RunEvent::ExitRequested { ref api, .. } = event {
+            if let Some(runtime) = app.try_state::<Runtime>() {
+                if runtime.statistics_ready.load(Ordering::SeqCst)
+                    && !runtime.quitting.load(Ordering::SeqCst)
+                {
+                    api.prevent_exit();
+                    if let Err(error) = app.emit_to("main", "statistics-before-quit", ()) {
+                        eprintln!("Statistics shutdown: {error}");
+                    }
+                }
+            }
         }
         if let tauri::RunEvent::Exit = event {
             if let Some(state) = app.try_state::<Mutex<input_activity::InputActivity>>() {

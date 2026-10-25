@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Molalar toplantı sırasında yeniden başladı.",
   "Я ещё на встрече: отключить перерывы": "Hâlâ toplantıdayım: molaları kapat",
   "Вернуть напоминания": "Hatırlatıcıları yeniden aç",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Hatırlatıcılar değiştirilemedi. Yeniden deneyin."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Hatırlatıcılar değiştirilemedi. Yeniden deneyin.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "İstatistikler kaydedilemedi. Çıkarsanız son kaydedilmemiş değişiklikler kaybolacak.",
+  "Повторить сохранение": "Kaydetmeyi yeniden dene",
+  "Выйти без сохранения": "Kaydetmeden çık"
 }

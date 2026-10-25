@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Pauzele au fost reluate în timpul întâlnirii.",
   "Я ещё на встрече: отключить перерывы": "Sunt încă într-o întâlnire: dezactivează pauzele",
   "Вернуть напоминания": "Reactivează mementourile",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Mementourile nu au putut fi modificate. Încearcă din nou."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Mementourile nu au putut fi modificate. Încearcă din nou.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "Statisticile nu au putut fi salvate. La ieșire se vor pierde ultimele modificări nesalvate.",
+  "Повторить сохранение": "Reîncearcă salvarea",
+  "Выйти без сохранения": "Ieși fără salvare"
 }

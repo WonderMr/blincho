@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Přestávky byly obnoveny během schůzky.",
   "Я ещё на встрече: отключить перерывы": "Stále jsem na schůzce: vypnout přestávky",
   "Вернуть напоминания": "Znovu zapnout připomínky",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Připomínky se nepodařilo změnit. Zkuste to znovu."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Připomínky se nepodařilo změnit. Zkuste to znovu.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "Statistiky se nepodařilo uložit. Ukončením ztratíte poslední neuložené změny.",
+  "Повторить сохранение": "Zkusit uložit znovu",
+  "Выйти без сохранения": "Ukončit bez uložení"
 }

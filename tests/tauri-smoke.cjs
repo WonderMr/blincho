@@ -75,7 +75,7 @@ async function stop() {
 }
 async function inspectStorage() {
   const probe = Date.now();
-  await control('eval', { script: "window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,probe:" + probe + ",stats:JSON.parse(localStorage.getItem('myeyes_stats_v1')),cvs:JSON.parse(localStorage.getItem('myeyes_cvs_result_v1')),dialog:!!document.querySelector('[role=dialog]'),text:document.body.innerText.slice(0,4000)}})" });
+  await control('eval', { script: "window.__TAURI__.core.invoke('statistics_load').then(raw=>window.__TAURI__.core.invoke('renderer_report',{report:{ready:true,probe:" + probe + ",stats:JSON.parse(raw||'[]'),cvs:JSON.parse(localStorage.getItem('myeyes_cvs_result_v1')),dialog:!!document.querySelector('[role=dialog]'),text:document.body.innerText.slice(0,4000)}}))" });
   return until(value => value.renderer?.probe === probe);
 }
 (async () => {

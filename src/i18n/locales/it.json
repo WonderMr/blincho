@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Le pause sono riprese durante la riunione.",
   "Я ещё на встрече: отключить перерывы": "Sono ancora in riunione: disattiva le pause",
   "Вернуть напоминания": "Riattiva i promemoria",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Impossibile modificare i promemoria. Riprova."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Impossibile modificare i promemoria. Riprova.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "Impossibile salvare le statistiche. Uscendo, le ultime modifiche non salvate andranno perse.",
+  "Повторить сохранение": "Riprova a salvare",
+  "Выйти без сохранения": "Esci senza salvare"
 }

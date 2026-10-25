@@ -61,7 +61,7 @@ Blincho is a general wellness tool. It does not diagnose or treat eye conditions
 
 ## Your data stays with you
 
-Settings, journal answers and statistics remain on the device. Unless background update checks are turned off, packages contact `blincho.app` for update metadata. Downloads come from GitHub. These requests do not send journal answers or activity history. No account is required.
+Settings, journal answers and statistics remain on the device. Desktop statistics are saved to `statistics-v1.json` in the application data directory, using atomic file replacement. On upgrade, existing WebView statistics are copied there before their old storage key is removed. Background changes are batched over five seconds, and normal Quit waits for the final save. An unexpected process termination can lose the most recent unsaved batch. The browser version continues to use its local storage. Unless background update checks are turned off, packages contact `blincho.app` for update metadata. Downloads come from GitHub. These requests do not send journal answers or activity history. No account is required.
 
 - **Camera checks run locally.** Frames are never saved or uploaded, and the camera turns off after each check.
 - **Optional tracking has separate controls.** Input statistics count events without recording typed text. Call history stores observed times and normalized application names, without conversation content.

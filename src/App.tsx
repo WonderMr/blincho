@@ -29,6 +29,7 @@ import { MeetingBreakWarning, type MeetingBreakWarningState } from './components
 import { CVSSurvey } from './components/CVSSurvey';
 import { ErgonomicsGuide } from './components/ErgonomicsGuide';
 import { StatisticsView } from './components/StatisticsView';
+import { StatisticsQuitError } from './components/StatisticsQuitError';
 import { SettingsModal } from './components/SettingsModal';
 import type { MeetingHistoryControlsProps } from './components/MeetingHistoryControls';
 import { LanguageSuggestion } from './components/LanguageSuggestion';
@@ -39,7 +40,7 @@ import { useLocalMcp } from './utils/localMcp';
 import { buildMcpStats } from './utils/mcpStats';
 import { getSymbioteBuild, getSymbioteName, readSymbioteCapabilities } from './utils/symbiote';
 import { updateDocumentSymbioteIcon } from './utils/symbioteIcons';
-import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, synchronizeNativeTimer, clearNativeMeetingHistory, deferNativeMeetingBreak, setNativeMeetingRemindersPaused } from './utils/tauriBridge';
+import { hasNativeTimer, NativeTimerSession, NativeTimerSnapshot, readNativeTimer, subscribeNativeTimer, subscribeNativeQuit, requestNativeQuit, synchronizeNativeTimer, clearNativeMeetingHistory, deferNativeMeetingBreak, setNativeMeetingRemindersPaused } from './utils/tauriBridge';
 
 import {
   BookOpen, Play, Lock, Video, UserCheck
@@ -123,6 +124,8 @@ export const App: React.FC = () => {
   const exerciseCompletionsRef = useRef(new Map<string, { eventId: string; promise: Promise<void> }>());
   const breakEventId = breakIdRef.current;
   const exerciseEventId = exerciseIdRef.current;
+  const [quitFailed, setQuitFailed] = useState(false);
+  const closingRef = useRef(false);
   const mountedRef = useRef(false);
   const presenceInFlightRef = useRef<Promise<boolean> | null>(null);
   const presenceRefreshRef = useRef(false);
@@ -770,7 +773,7 @@ export const App: React.FC = () => {
       }
       pendingMeetingsRef.current = [];
       nativeMeetingEndsRef.current.clear();
-      if (!clearMeetingHistory()) throw new Error('Call history storage deletion failed');
+      if (!await clearMeetingHistory()) throw new Error('Call history storage deletion failed');
       if (mountedRef.current) { refreshStats(); setMeetingHistoryFeedback('deleted'); }
     } catch (error) {
       console.warn('Blincho: Call history deletion failed:', error);
@@ -902,7 +905,7 @@ export const App: React.FC = () => {
         if (stopped || !settingsRef.current.inputActivityEnabled) return;
         setInputStatus(snapshot.status);
         if (snapshot.status === 'active') {
-          if (recordInputActivity(snapshot)) refreshStats();
+          if (await recordInputActivity(snapshot)) refreshStats();
           else setInputStatus('unavailable');
         }
       } catch (error) { if (!stopped) setInputStatus('unavailable'); console.warn('Blincho: Input activity read failed:', error); }
@@ -1000,6 +1003,7 @@ export const App: React.FC = () => {
      * epoch, then ingest permitted history and dispatch due timer transitions.
      */
     const applyNative = (snapshot: NativeTimerSnapshot) => {
+      if (closingRef.current) return;
       if (!mountedRef.current || snapshot.totalMs < 1000 || snapshot.tickCount <= nativeTickRef.current) return;
       nativeTickRef.current = snapshot.tickCount;
       nativePresenceEpochRef.current = snapshot.presenceEpoch ?? null;
@@ -1117,9 +1121,28 @@ export const App: React.FC = () => {
     };
     applyNativeRef.current = applyNative;
     const unsubscribeNative = hasNativeTimer() ? subscribeNativeTimer(applyNative) : undefined;
+    const unsubscribeQuit = subscribeNativeQuit(async quitting => {
+      if (!quitting) {
+        closingRef.current = false;
+        setQuitFailed(true);
+        sendDesktopCommand('show-statistics-save-error', () => window.desktopAPI?.bringToFront?.());
+        return;
+      }
+      setQuitFailed(false);
+      if (settingsRef.current.inputActivityEnabled && window.__TAURI__) {
+        const input = await window.__TAURI__.core.invoke<InputActivitySnapshot>('input_activity_snapshot');
+        if (input.status === 'active' && !await recordInputActivity(input)) throw new Error('Final input statistics save failed');
+      }
+      const snapshot = await readNativeTimer();
+      if (snapshot) applyNative(snapshot);
+      closingRef.current = true;
+      session.advance(Date.now());
+      recordTimerProgress(session.drainFocus(), [...pendingActivityRef.current.splice(0), ...session.drainActivity()],
+        pendingMeetingsRef.current.splice(0).filter(canRecordMeetingHistory));
+    });
     if (hasNativeTimer()) synchronizeTimer();
     const tick = async () => {
-      if (polling) return;
+      if (polling || closingRef.current) return;
       polling = true;
       try {
         if (hasNativeTimer()) {
@@ -1190,13 +1213,15 @@ export const App: React.FC = () => {
       session.advance(Date.now());
       const finalActivity = [...pendingActivityRef.current.splice(0), ...session.drainActivity()];
       const finalMeetings = pendingMeetingsRef.current.splice(0).filter(canRecordMeetingHistory);
-      if (finalActivity.length || finalMeetings.length) recordTimerProgress([], finalActivity, finalMeetings);
+      const finalFocus = session.drainFocus();
+      if (finalFocus.length || finalActivity.length || finalMeetings.length) recordTimerProgress(finalFocus, finalActivity, finalMeetings);
       mountedRef.current = false;
       pendingBreakRef.current = null;
       clearInterval(timer);
       unsubscribeBreak?.();
       unsubscribePower?.();
       unsubscribeNative?.();
+      unsubscribeQuit();
       for (const name of ['mousemove', 'keydown', 'mousedown', 'touchstart']) window.removeEventListener(name, activity);
       window.removeEventListener('focus', focus);
       document.removeEventListener('visibilitychange', visibility);
@@ -1413,10 +1438,11 @@ export const App: React.FC = () => {
             onDelete: async () => {
               handleUpdateSettings({ ...settingsRef.current, inputActivityEnabled: false });
               await configureInputActivity(false);
-              const ok = clearInputActivity(); refreshStats(); return ok;
+              const ok = await clearInputActivity(); refreshStats(); return ok;
             } }}
         />
       )}
+      {quitFailed && <StatisticsQuitError onRetry={() => requestNativeQuit()} onDiscard={() => requestNativeQuit(true)} onCancel={() => setQuitFailed(false)} />}
     </div>
   );
 };

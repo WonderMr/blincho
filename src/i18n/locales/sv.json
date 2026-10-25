@@ -639,5 +639,8 @@
   "Перерывы возобновлены во время встречи.": "Pauserna har återupptagits under mötet.",
   "Я ещё на встрече: отключить перерывы": "Jag är fortfarande på ett möte: stäng av pauser",
   "Вернуть напоминания": "Slå på påminnelser igen",
-  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Det gick inte att ändra påminnelserna. Försök igen."
+  "Не удалось изменить напоминания. Попробуйте ещё раз.": "Det gick inte att ändra påminnelserna. Försök igen.",
+  "Не удалось сохранить статистику. При выходе последние несохранённые изменения будут потеряны.": "Statistiken kunde inte sparas. Om du avslutar förloras de senaste osparade ändringarna.",
+  "Повторить сохранение": "Försök spara igen",
+  "Выйти без сохранения": "Avsluta utan att spara"
 }
