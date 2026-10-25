@@ -150,5 +150,6 @@
   "release.1.10.1": "Utseendet och namnet beror på vilka funktioner som är aktiverade. Genvägen på skrivbordet följer din konfiguration. En kameramarkering på Blinchos ikon visar när kameran används och försvinner när bildinsamlingen avslutas.",
   "release.1.10.2": "Automatiska kamerakontroller hoppas över vid upptäckta samtal och avbryts om ett samtal upptäcks under kontrollen.",
   "release.1.10.4": "Skrivbordsversionerna använder nu endast Rust och Tauri. De gamla byggverktygen för Electron har tagits bort. Migrering av befintlig historik är fortfarande tillgänglig.",
-  "release.1.10.6": "macOS: Pauspåminnelser återupptas under ett möte efter fem minuter utan användning av kamera och mikrofon, med möjlighet att ångra."
+  "release.1.10.6": "macOS: Pauspåminnelser återupptas under ett möte efter fem minuter utan användning av kamera och mikrofon, med möjlighet att ångra.",
+  "release.1.10.7": "Timern i skrivbordsappen startar en ny arbetscykel efter en längre skärmlåsning, även när fönstret är inaktivt. Manuell paus och återställning av den föregående nedräkningen är fortfarande tillgängliga."
 }

@@ -150,5 +150,6 @@
   "release.1.10.1": "Diện mạo và tên phụ thuộc vào các tính năng được bật. Lối tắt trên màn hình thay đổi theo cấu hình của bạn. Biểu tượng camera trên khay hệ thống cho biết khi Blincho sử dụng camera và biến mất khi kết thúc thu hình.",
   "release.1.10.2": "Kiểm tra camera tự động được bỏ qua trong các cuộc gọi đã phát hiện và dừng lại nếu phát hiện cuộc gọi khi đang kiểm tra.",
   "release.1.10.4": "Các bản dựng cho máy tính hiện chỉ sử dụng Rust và Tauri. Các công cụ dựng Electron cũ đã được gỡ bỏ. Tính năng di chuyển lịch sử hiện có vẫn khả dụng.",
-  "release.1.10.6": "macOS: Lời nhắc nghỉ được tiếp tục trong cuộc họp sau năm phút không sử dụng camera và micrô, kèm tùy chọn hoàn tác."
+  "release.1.10.6": "macOS: Lời nhắc nghỉ được tiếp tục trong cuộc họp sau năm phút không sử dụng camera và micrô, kèm tùy chọn hoàn tác.",
+  "release.1.10.7": "Bộ hẹn giờ trong ứng dụng máy tính bắt đầu chu kỳ làm việc mới sau khi màn hình bị khóa lâu, ngay cả khi cửa sổ không hoạt động. Vẫn có thể tạm dừng thủ công và khôi phục bộ đếm ngược trước đó."
 }

@@ -150,5 +150,6 @@
   "release.1.10.1": "A aparência e o nome dependem dos recursos ativados. O atalho no ambiente de trabalho acompanha a sua configuração. Um indicador de câmera no ícone do Blincho mostra quando ela está em uso e desaparece ao terminar a captura.",
   "release.1.10.2": "As verificações automáticas com a câmera são ignoradas durante chamadas detectadas e interrompidas se uma chamada for detectada durante a verificação.",
   "release.1.10.4": "As compilações para desktop agora usam apenas Rust e Tauri. As antigas ferramentas de compilação do Electron foram removidas. A migração do histórico existente continua disponível.",
-  "release.1.10.6": "macOS: Os lembretes de pausa são retomados durante uma reunião após cinco minutos sem usar a câmera nem o microfone, com opção de desfazer."
+  "release.1.10.6": "macOS: Os lembretes de pausa são retomados durante uma reunião após cinco minutos sem usar a câmera nem o microfone, com opção de desfazer.",
+  "release.1.10.7": "O temporizador do aplicativo para computador inicia um novo ciclo de trabalho após um bloqueio prolongado da tela, mesmo quando a janela está inativa. A pausa manual e a restauração da contagem regressiva anterior continuam disponíveis."
 }
