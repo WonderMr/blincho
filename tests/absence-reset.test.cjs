@@ -63,3 +63,28 @@ test('a long lock restarts the configured work interval and preserves manual pau
     } finally { h.destroy(); }
   }
 });
+
+
+test('native presence IPC failure cancels timer actions without an unhandled rejection', async () => {
+  const previous = window.__TAURI__;
+  let snapshot, ticks = 0, fail = false;
+  window.__TAURI__ = { core: { async invoke(command, args) {
+    if (command === 'configure_timer') snapshot = { ...args.input, reasons: fail ? ['unconfirmed'] : [],
+      focusByDate: {}, absenceEpoch: 0, absentSince: null, idleSeconds: 0,
+      locked: false, suspended: false, breakElapsed: false };
+    if (command === 'timer_snapshot' && fail) throw Error('native presence IPC unavailable');
+    if (command === 'configure_timer' || command === 'timer_snapshot') return { ...snapshot, tickCount: ++ticks };
+  } } };
+  const h = createHarness();
+  try {
+    await h.settle();
+    fail = true;
+    await assert.doesNotReject(() => h.call('TimerWidget', 'onTriggerInstantBreak'));
+    assert.equal(h.active.has('BreakOverlay'), false);
+    assert.equal(h.captured.TimerWidget.isIdlePaused, true);
+    assert(h.warnings.some(args => args.some(value => String(value).includes('Native presence query failed'))));
+  } finally {
+    h.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+  }
+});

@@ -438,6 +438,7 @@ impl Timer {
         }
         self.last_at = now;
     }
+    /// Sample presence and elapsed work in milliseconds, resetting long absences on return.
     pub fn tick(&mut self, now: i64, idle: Option<f64>, locked: Option<bool>) -> bool {
         let start = self.last_at;
         let meeting_was_allowed = self.meeting_probe_allowed();

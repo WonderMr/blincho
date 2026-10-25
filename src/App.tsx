@@ -244,6 +244,7 @@ export const App: React.FC = () => {
     setInMeetingActive(false);
     sync();
   };
+  /** Close break presentation without changing the authoritative work countdown. */
   const dismissBreak = (preservePending = false) => {
     session.advance(Date.now());
     flushFocus();
@@ -253,11 +254,13 @@ export const App: React.FC = () => {
     setIsBreakActive(false);
     releaseDesktopBreak();
   };
+  /** Finish a current break and start a new configured work interval. */
   const endBreak = (preservePending = false) => {
     if (!session.breakActive) return;
     dismissBreak(preservePending);
     restartWork();
   };
+  /** Cancel interrupted rest while preserving a reset already performed natively. */
   const cancelAbsentActivity = () => {
     pendingBreakRef.current = null;
     if (session.breakActive) {
@@ -272,6 +275,7 @@ export const App: React.FC = () => {
       setActiveRoutine(undefined);
     }
   };
+  /** Complete a confirmed return once and retain the prior countdown for undo. */
   const finishReturn = () => {
     if (!session.present || session.absentSince === null) return;
     const awaySeconds = (Date.now() - session.absentSince) / 1000;
@@ -323,6 +327,7 @@ export const App: React.FC = () => {
       setNoticeMessage("Перерыв записан. Рабочий цикл продолжается.");
     }
   };
+  /** Confirm presence from a complete native snapshot or bounded browser queries. */
   const samplePresence = (refresh = false): Promise<boolean> => {
     if (presenceInFlightRef.current) {
       if (refresh) presenceRefreshRef.current = true;
@@ -333,7 +338,15 @@ export const App: React.FC = () => {
       if (hasNativeTimer()) {
         // Reconcile countdown resets before focus or activity can finish an absence.
         const sampledMonotonicAt = performance.now();
-        const snapshot = await readNativeTimer();
+        let snapshot: NativeTimerSnapshot | null;
+        try { snapshot = await readNativeTimer(); }
+        catch (error) {
+          if (mountedRef.current) {
+            console.warn('Blincho: Native presence query failed; presence is unconfirmed:', error);
+            setPresenceReason('unconfirmed', true, session.lastUpdated);
+          }
+          return false;
+        }
         if (!snapshot || !mountedRef.current) return false;
         applyNativeRef.current(snapshot);
         const present = snapshot.reasons.length === 0;
