@@ -88,3 +88,42 @@ test('native presence IPC failure cancels timer actions without an unhandled rej
     if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
   }
 });
+
+test('a failed first return snapshot cannot overwrite a native reset behind an active break', async () => {
+  const previous = window.__TAURI__;
+  let snapshot, ticks = 0, fail = false;
+  const configured = [];
+  window.__TAURI__ = { core: { async invoke(command, args) {
+    if (command === 'configure_timer') {
+      configured.push({ ...args.input });
+      if (!snapshot) snapshot = { ...args.input, reasons: [], focusByDate: {}, absenceEpoch: 0,
+        absentSince: null, idleSeconds: 0, locked: false, suspended: false, breakElapsed: false };
+      else if (args.input.version >= snapshot.version) Object.assign(snapshot, args.input);
+    }
+    if (command === 'timer_snapshot' && fail) throw Error('first return snapshot unavailable');
+    if (command === 'configure_timer' || command === 'timer_snapshot') return { ...snapshot, tickCount: ++ticks };
+  } } };
+  const h = createHarness();
+  try {
+    await h.settle();
+    await h.call('TimerWidget', 'onTriggerInstantBreak');
+    const beforeReturn = configured.length;
+    snapshot = { ...snapshot, breakActive: false, remainingMs: 1_190_000, version: snapshot.version + 1,
+      absenceEpoch: 1, absentSince: h.now + 1000, absenceReset: { epoch: 1, remainingMs: 60_000 } };
+    await h.shiftWall(320_000);
+    fail = true;
+    await h.emit('focus');
+    assert.equal(configured.length, beforeReturn, 'failed reads must not configure an unreconciled timer');
+    assert.equal(snapshot.remainingMs, 1_190_000);
+    fail = false;
+    await h.emit('focus');
+    assert.equal(h.captured.TimerWidget.secondsRemaining, 1190);
+    assert.equal(h.active.has('BreakOverlay'), false);
+    assert.equal(h.captured.TimerWidget.isIdlePaused, false);
+    await h.undo();
+    assert.equal(h.captured.TimerWidget.secondsRemaining, 60);
+  } finally {
+    h.destroy();
+    if (previous === undefined) delete window.__TAURI__; else window.__TAURI__ = previous;
+  }
+});

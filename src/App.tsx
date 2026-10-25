@@ -343,7 +343,11 @@ export const App: React.FC = () => {
         catch (error) {
           if (mountedRef.current) {
             console.warn('Blincho: Native presence query failed; presence is unconfirmed:', error);
-            setPresenceReason('unconfirmed', true, session.lastUpdated);
+            // Do not configure a stale countdown before the native reset is reconciled.
+            session.reasons.add('unconfirmed');
+            cameraAbortRef.current?.abort();
+            pendingBreakRef.current = null;
+            publish(value => value + 1);
           }
           return false;
         }
@@ -1065,7 +1069,8 @@ export const App: React.FC = () => {
         const beganAt = snapshot.absentSince ?? Date.now();
         // A hidden renderer must observe even an absence that ended before this frame arrived.
         handlersRef.current.setPresenceReason('unconfirmed', true, beganAt);
-        if (session.absentSince !== null) session.absentSince = Math.min(session.absentSince, beganAt);
+        // A local IPC failure may already have marked presence unconfirmed without an absence.
+        session.absentSince = session.absentSince === null ? beganAt : Math.min(session.absentSince, beganAt);
         cancelAbsentActivity();
       }
       for (const [date, seconds] of Object.entries(snapshot.focusByDate)) {
