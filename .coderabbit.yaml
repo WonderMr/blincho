@@ -648,7 +648,6 @@ knowledge_base:
     filePatterns:
     - AGENTS.md
     - CLAUDE.md
-    - docs/**/*.md
   learnings:
     scope: local
   pull_requests:
