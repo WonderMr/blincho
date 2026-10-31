@@ -1,0 +1,655 @@
+# Managed by Agents-Core scripts/install_review_config.py
+# Do not edit by hand: rerun the installer after changing the templates.
+# Stacks: universal, docs-ai-instructions, frontend, iac-ci, rust, windows-scripts
+# Reference: https://docs.coderabbit.ai/reference/configuration
+inheritance: true
+language: en-US
+reviews:
+  profile: assertive
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    base_branches:
+    - ^test$
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: The title names the change, not the activity. It starts with a Conventional
+        Commits type and an optional scope, stays under 72 characters and carries no issue
+        number alone.
+    description:
+      mode: warning
+    issue_assessment:
+      mode: warning
+  path_instructions:
+  - path: '**/*'
+    instructions: |-
+      Contracts and conditions. Report these as defects, not as style notes.
+      1. Two code paths, surfaces or documents that must agree have drifted apart.
+      Check every place the same rule is implemented or stated: a preview endpoint
+      and the endpoint that accepts the same token, a handler and the template it
+      renders, a runtime instruction and the file that documents it. Name both
+      places and the input that makes them disagree.
+      2. An absolute requirement arrives without its exception branch. A statement
+      that something always happens, is always logged, or is always included is a
+      defect when another part of the same change defines a case where it cannot.
+      Ask for the exception to be stated where the requirement is stated.
+      3. A required step cannot be completed with the data at hand, so the author
+      or the model has to invent a value. A mandatory confirmation against a
+      resource that may not exist, or a target for a metric that has no observed
+      value, belongs behind an explicit "when available" branch.
+      4. A metric or badge that describes a selected period is computed from a
+      cumulative row or an unfiltered aggregate. Period-scoped output must come
+      from period-scoped input.
+  - path: '**/*'
+    instructions: |-
+      Input, failure and interpolation.
+      1. Boundary input is accepted without validation: negative, zero, empty,
+      absent, far larger than expected, or syntactically valid but semantically
+      impossible. Name the input and the observable consequence, for example a
+      negative limit that silently returns all but the last rows, or an unbounded
+      count that inflates a request.
+      2. Error handling fails open. One malformed entry aborts an enumeration that
+      should skip it and report it; a failure is converted into a warning and the
+      caller still reports success; an exception is swallowed with no log and no
+      signal. State which failure becomes invisible.
+      3. A value is interpolated into another format without that format's own
+      escaping. Text placed into a shell command, a sed replacement, SQL, a
+      configuration file, a URL path segment, HTML or a regular expression needs
+      the target format's quoting, not the source language's. Name a concrete
+      character that breaks it.
+      4. A deadline or budget is advertised but not propagated. When a handler
+      promises a limit and calls several operations with their own fixed timeouts,
+      show the arithmetic that exceeds the promise.
+  - path: '**/*'
+    instructions: |-
+      Irreversible actions and disclosure.
+      1. A destructive or irreversible action runs without a verified rollback
+      point: a backup that is written but never read back, a deletion allowlist
+      that matches by prefix instead of by a known inventory, a rollback that
+      reverts state the operation never created. Unknown entries must keep the
+      data, not remove it.
+      2. The decision to delete, overwrite or publish depends on inherited
+      environment or global configuration that the caller does not control. Check
+      for inherited variables and user-level tool settings that change what the
+      probe reports, and require them to be neutralised before the decision.
+      3. Secrets or user text reach a place that is not audited: a passphrase in a
+      process environment or command argument, a masking routine that stops at the
+      first whitespace or handles only unquoted values, prompt or message text in
+      diagnostic output, a default credential used when an environment variable
+      arrives empty.
+      4. A write leaves the repository or account for an audience that was not
+      checked at the moment of the write. Require the destination and payload
+      classification to be rechecked immediately before each external write.
+  - path: '**/*'
+    instructions: |-
+      Evidence the change actually holds.
+      1. The change has no regression test for the exact condition that triggers
+      the defect. A test that exercises the happy path again is not coverage for a
+      CRLF journal, a platform where a stat field is zero, one malformed file among
+      valid ones, more than one page of results, or a clock the test itself froze.
+      Name the fixture the test needs.
+      2. Documentation, metadata, help text or a docstring contradicts the code in
+      the same change: a declared minimum version the dependency does not support,
+      a help string naming a script that does not exist, a described contract the
+      function no longer honours, a pull request description that states a narrower
+      change than the diff makes.
+      3. A query or scan grows with total stored data instead of the requested
+      slice, and runs on every request. Ask for the filter, the pagination or the
+      bound, and say which call site pays the cost.
+      4. A command that reads from an external tool relies on that tool's default
+      limit or default output. Default page sizes, default untracked-file settings
+      and default status filters silently truncate; require the explicit flag.
+  - path: '{agents,skills,rules,implants}/**/*.mdc'
+    instructions: Read the YAML frontmatter and the file body as two renderings of one contract.
+      Standard prompt tiers render only the frontmatter compiled value while deeper tiers
+      render the body, so a statement that exists in one and not the other silently fails
+      to reach the model. Report a defect when compiled names fewer tiers, levels, steps or
+      categories than the body section it summarizes, when compiled orders them differently,
+      when compiled still describes a mechanism the body replaced, or when description and
+      keywords advertise a capability the body no longer contains. Quote the exact compiled
+      text that should replace it. Report a defect when an identity field such as display_name
+      or role changes while the body paragraph still introduces the file under the previous
+      name or previous scope, and require both surfaces to change together. Inspect every
+      reference this file makes to another persona, skill, rule or implant by file name. Report
+      a defect when the referenced file no longer holds the referenced content because that
+      content moved, was renamed or was deleted, and when content removed from this file is
+      not reachable from any other file although a capability directive or another prompt
+      still demands it. Require the reference to be repointed to the file that now holds the
+      content, or the content to be restored, and require the change to say where a removed
+      capability now lives.
+  - path: '{agents,skills}/**/*.mdc'
+    instructions: Inspect every routing keyword list in the frontmatter as matcher input,
+      not as prose. Report a defect when a keyword string contains an unbalanced parenthesis,
+      bracket or quote, because the file then fails to parse or the keyword never matches.
+      Report a defect when a keyword spells an abbreviation in a case the body does not use,
+      so the two spellings cannot be correlated. Report a defect when a keyword is a bare
+      common word such as patient, update, select, join, visa or feel, or a phrase whose only
+      significant token is such a word, because substring and token fallback matching then
+      routes unrelated queries to this file. Require a qualified phrase that carries the domain
+      or jurisdiction, and require sibling files to use the same qualification style. Report
+      a defect when a keyword belongs to another jurisdiction, product or domain than this
+      file, and when a keyword contains stray characters from an unrelated script. Report
+      a defect when a change removes the last keyword that covered a topic this file still
+      claims in its role or body, or that no sibling file covers, because the topic then has
+      no route at all. Name the keyword, the queries it wrongly matches or no longer matches,
+      and the replacement.
+  - path: agents/*/system_prompt.mdc
+    instructions: Check the frontmatter against the agent schema and the loader, and check
+      the body against what the loader can actually supply. Report a defect when a required
+      frontmatter section is absent, for example the context section with its file globs or
+      the static skill list used when the server is unavailable, and when a tier list breaks
+      its documented size range, for example an empty preferred skill list where three to
+      eight entries are required. Report a defect when the body relies on a skill for deterministic
+      behaviour such as an output format or a safety check while that skill sits in a tier
+      that retrieval may skip, and require core wiring for behaviour the body states unconditionally.
+      Report a defect when the body tells the agent to load more files than the named tier
+      can load on the standard tier, and require the count to match the loader or the instruction
+      to be narrowed. Inspect every table that partitions a range or a population. Report
+      a defect when two rows overlap on a boundary value while they prescribe different behaviour,
+      because selection is then ambiguous for that value. Report a defect when the prompt
+      uses more than one vocabulary for the same labels, for example tier names in a table
+      that the output contract does not list, or a superseded term left in a template header.
+      Require one canonical label set, spelled identically in the table, the body and the
+      output contract.
+  - path: flows/**/*.md
+    instructions: Read a flow as an executable procedure and check that every step can be
+      performed with what earlier steps produced. Report a defect when a later step consumes
+      a result that no earlier step creates, for example an aggregation that needs verdicts
+      for a variant whose run is never started, and when a step passes an argument that exists
+      only on a conditional path, so the command names a missing file when that path was not
+      taken. Report a defect when a documented command cannot run in the stated client, for
+      example a shell style glob given to a client that runs commands without a shell, and
+      require explicit enumerated paths. Report a defect when a step releases a lock, pointer
+      or ownership marker before the final state and label writes happen, because another
+      session can take ownership and the late writes then overwrite its state. Require ownership
+      to be held through the last write and an ownership check before writing. Report a defect
+      when a control that affects production also runs in a rehearsal or dry mode, and require
+      the step to be conditioned on the mode. Report a defect when a mode the flow advertises,
+      such as a no write draft, is contradicted by a step that persists or logs data, and
+      when an unconditional final requirement cannot be satisfied by an exit the flow itself
+      permits. Report a defect when a documented check claims to mirror a code contract but
+      checks a narrower condition, for example a net tree diff instead of every commit, or
+      a policy read from a moving branch instead of the pinned revision. Require the stricter
+      condition and a defined stop.
+  - path: '{docs,flows}/**/*.md'
+    instructions: Inspect every documented step that writes, logs, prints or transmits content,
+      and every value the document itself carries. Report a defect when a documented output
+      includes user prompt text, a verbatim user request or another conversation payload,
+      and when one requirement promises that a sink carries no secrets while another requires
+      content to pass through unchanged, because both cannot hold. Require a named sanitized
+      value for the field, a defined redaction point or an explicit opt out, and say which
+      requirement must be narrowed. Report a defect when the document commits real identifiers
+      that belong under access control, such as captured hardware addresses or an origin hostname
+      and address that a proxy is meant to hide, and require pseudonyms or a move to an access
+      controlled record. Report a defect when a step falls back to a weaker store or transport
+      than the document promises, for example a private file where the stated requirement
+      is an operating system secret store only, or an unencrypted remote for a credentialed
+      push, and require fail closed behaviour or an explicit documented exception with its
+      trade off. Report a defect when a missing attribution, marker or field is treated as
+      authorization, and require the check to refuse when that evidence is absent. Report
+      a defect when a permission claim holds on one platform only, for example numeric file
+      modes on a system that uses access control lists, and require the platform specific
+      control.
+  - path: docs/**/*.md
+    instructions: Treat a design, plan or research document as a set of claims about the repository
+      and about cited sources, and check the claims you can reach. Report a defect when a
+      version, threshold, symbol, path or option named here differs from the pinned value
+      in the manifest, lock file or code that governs it, and name the governing file and
+      the correct value. Report a defect when the same measurement appears twice with different
+      values and no stated reason, and when a precise result such as a detection count is
+      given without the experiment, hardware, data set and denominator that produced it. Require
+      the source to be linked or the number to be removed. Report a defect when the document
+      asserts interoperability with an external schema, specification or software development
+      kit while the described field, exclusion or symbol is not permitted or not documented
+      there, and require the claim to be narrowed to the validated case. Report a defect when
+      a review, plan or status document presents as open a decision the current plan already
+      settles, or cites a table or section the current plan does not contain, and require
+      a rebase against the current text. Report a defect when a date, rate or quantity is
+      written in a form the document audience reads differently, such as an ambiguous all
+      numeric date, and require an unambiguous spelling. Report a defect when an artifact
+      the document says is needed to audit a run cannot be rebuilt from the inputs it names,
+      and require that artifact to be archived or the exact revision to be recorded.
+  - path: '**/README.md'
+    instructions: Check a README against the mechanism it documents and against the files
+      it points to. Report a defect when the README still describes a removed registry, file
+      or loading model, or states a size or count range the current model contradicts, for
+      example a minimum of one where zero is allowed, and require the text to describe only
+      the current mechanism. Report a defect when the same concept is defined twice in the
+      file with different meanings, such as one line saying a field feeds retrieval and another
+      saying it does not. Report a defect when a link or navigation entry points to a deleted
+      or renamed file, or labels a target with the wrong language or content after a rename,
+      and name the correct target. Report a defect when a documented command or runbook step
+      omits a prerequisite whose absence makes the result wrong instead of failing loudly.
+      Examples are checking out a branch without fast forwarding it, so a sweep evaluates
+      stale content while reporting the branch name, dropping or restoring a database while
+      another enabled service still writes to it, continuing a migration after a dump or archive
+      step failed without checking that result, and leaving timers or services stopped because
+      the restart sits in a cleanup block scheduled days later. Require the prerequisite,
+      the failure check or the reordering. Require a named owner and date for any recorded
+      expiry or rotation the document leaves unassigned.
+  - path: '{AGENTS.md,CLAUDE.md,scripts/templates/*.md}'
+    instructions: Treat the contributor instruction file as the contract every client follows
+      and review it as a specification. Report a defect when two passages state different
+      requirements for the same situation, when an absolute requirement has no exception branch
+      although another passage grants that exception, and when an instruction replaces or
+      refreshes part of the loaded state while another part it depends on becomes stale. Report
+      a defect when a branch tells the reader to perform the required steps directly without
+      naming them or without a completion criterion, for example a fallback that says to run
+      the checks when a tool is unavailable, so the reader cannot know when the gate is passed.
+      Require the enumerated steps and the blocking condition. Report a defect when a required
+      value cannot be produced on the path the document describes, because the reader then
+      invents one. Report a defect when this file and another surface that delivers the same
+      rule disagree, including an installation template, a client specific instruction file,
+      a generated runtime instruction or a reference document. Name every surface that must
+      carry the change and require them to agree, including footer labels, component lists
+      and any condition that gates display or logging on an active setting. Require the delivery
+      of each rule to be covered by a check.
+  - path: '**/*.{ts,tsx}'
+    instructions: |-
+      Review React and TypeScript client state for ordering and lifecycle defects that a linter cannot see.
+      Check every async result written into component state. When a second request, selection or click can start before the first settles, require a generation counter, an abort signal or an identity check so only the newest response is applied, and treat an applied older response as a defect.
+      Check local state derived from a prop or a fetched record while the component stays mounted at the same position. When the record identity changes, require an explicit reset or a `key` on the component. A retained marker such as a copied or selected flag is a defect, because it then describes the previous record.
+      Check per submit validation flags. Require that they clear when the inputs they describe change, so error text and `aria-invalid` do not survive a correction.
+      Check caches and memo maps for a key that can point at different data over the life of the page, and require the key to carry the identifier that produced the value.
+      Check that every state update reachable after an await has the same mounted or current guard on all branches, including early return and false result branches, not only in the catch branch.
+      Check shared in flight promises. When a helper hands an existing promise to a later caller, require that the later caller's arguments, abort signal and freshness need are honored, or that the calls are serialized. A silently discarded second request is a defect.
+      Check that promise chains started from event handlers attach a rejection handler that surfaces the failure in the interface instead of producing an unhandled rejection.
+      Check route and query values for the empty string case, because an empty value can disable a data hook and leave the page on a loader forever. Treat it like a missing value.
+      Check fetch helpers used by server rendering for an abort based timeout, so a stalled dependency degrades to an error instead of holding the render.
+  - path: '**/app/**/*.tsx'
+    instructions: |-
+      Review Next.js App Router files for defects at the server and client boundary.
+      Check that global stylesheet imports live in a layout file. A global CSS import from an ordinary component is rejected by the App Router build, so move the import to the root or a route level layout.
+      Check route segment prop types against the router version in use. A `params` type that does not match what the framework passes breaks type checking and the build, so verify the shape rather than copying a signature.
+      Check values rendered both on the server and in the browser. Locale and time zone dependent formatting such as `toLocaleDateString` resolves differently in the two runtimes and produces a hydration mismatch, so require a pinned time zone or rendering after mount.
+      Check client handlers that navigate after a request. When the request rejects, either the navigation still happens or the user sees the failure, so the visible state never contradicts what actually happened.
+      Check dynamic imports of third party widgets for a rejection handler, because a failed chunk load or a constructor that throws otherwise leaves an unhandled rejection and a silent page.
+      Check icon only controls for an accessible name from `aria-label`, since `title` does not reliably provide one.
+      Check button and link text against the operation it performs, so a control that creates an account and a session is not labelled as a sign in for an existing account.
+  - path: '**/*.jsx'
+    instructions: |-
+      Review renderer code that calls Tauri or another host bridge for migration and optional value defects.
+      Check each option name against the plugin version actually imported. A version one option name such as `dir` is silently ignored by the version two filesystem plugin, which then resolves paths against the working directory, so require `baseDir` and treat any remaining version one call site as a defect.
+      Check compatibility wrappers for a change in request encoding. A helper that serializes to `URLSearchParams` cannot carry nested file objects, so a multipart upload reaches the server as `[object Object]` and image or file features break.
+      Check every host API whose type is nullable, for example a current monitor lookup, for a null guard at every call site and not only at the one the change touched. A sibling handler that dereferences the same value without the guard is a defect.
+      Check progress and percentage math for a divisor that can be absent or zero, such as a missing content length header, and require the guard to test the divisor rather than the numerator.
+      Check async window close and unload handlers. Without a prevented default the awaited save runs detached while the window closes, so a save on close must either block the close or happen earlier.
+  - path: '**/src/daemon/*_ui.html'
+    instructions: |-
+      Review the inline page script in these single file pages for client state and DOM update defects.
+      Check every fetch whose response mutates a list or the editor. Require a per request token or generation that advances on each load and on each item click, and treat a view or tab check alone as insufficient, because a response from an earlier visit still passes it.
+      Check that a response for an item that is no longer displayed is dropped rather than merged. A late metadata merge can restore the previous item identity under the current text area and let the next save write to the wrong item.
+      Check session expiry handling in the shared request path rather than only at startup, so every operation reaches the sign in state when the server reports an expired session.
+      Check controls whose value changes before the handler runs, such as a `select` with a confirmation step. When the user cancels, require the control to be restored, because later requests read the control and would combine the new value with the old item identity.
+      Check that a rendered empty state cannot appear twice during a filter, and that ranking runs once over the flattened result set instead of restarting in every section.
+      Check inline parsing and rendering loops for quadratic scanning over the accumulated buffer or over an unmatched run of delimiters. These stall the page even when a work budget exists, so require a single pass with a bounded advance.
+      Check layout measurement code for widths read while a flex item can shrink or its text can wrap, and require shrinking to be disabled while the unshrunk width is measured.
+      Check that a row shows the field the user must review before confirming an action, such as the address a stored credential will be sent to, and that the value is written with `textContent`.
+  - path: '**/internal/web/templates/**/*.html'
+    instructions: |-
+      Review these server rendered template pages for claims and conditions that the rendered data does not support.
+      Check each sentence, tooltip and badge against the exact field it reads. A flag that only records that a value is present does not establish a security mode, and a per device observation flag does not establish that the observation belongs to the displayed name, so require the narrower wording or a stricter guard in the template.
+      Check statistical captions against the formula behind them, and require the wording to describe what the estimator measures rather than a stronger completeness claim.
+      Check every template condition for a case where the value it hides is still meaningful. When a second field can be positive while the guarded field is zero, the value disappears from the visible text and from the data attributes at once, so require the condition to cover every field it gates.
+      Check banners and links gated by a feature flag. When historical rows remain available with the feature off, a guard on the flag can hide both the rows and the only link that would reveal them.
+      Check interactive `svg` markup for a role that collapses its descendants, because an image role makes non focusable children presentational and hides the structure a keyboard user navigates.
+  - path: '**/static/**/*.{js,css}'
+    instructions: |-
+      Review these progressive enhancement scripts and styles for server rendered pages.
+      Check partial refresh code against every page it runs on. When the script replaces only one container, such as a table body, other elements on that page that derive from the same data, for example a chart and its totals, keep stale values. Require the script to update each dynamic container or to reload such pages.
+      Check preference and layout saves triggered by user interaction for write ordering. Independent requests let an earlier save land after a later one and overwrite the newer value, so require serialization per target or a monotonic revision that the server rejects when stale.
+      Check focus styling. When a rule removes the browser outline and the only remaining indicator comes from a script, keyboard focus becomes invisible if that script fails to load, so require a visible indicator in the stylesheet itself.
+      Check pointer driven menus for focus inside the element they close. Closing on pointer leave while a descendant link holds focus moves focus to the document and loses the keyboard position, so require the open state to consider focus as well.
+      Check keyboard affordances bound by selector. An anchor rendered without an `href` is skipped by an `a[href="#"]` binding and never receives a role or a handler, so it stays unreachable by keyboard although hover still works. Require the markup to be normalized or the binding to cover that case.
+  - path: '**/tests/**/*.cjs'
+    instructions: |-
+      Review these Node harnesses that launch and drive the real application.
+      Check that each assertion observes the behavior under test rather than a proxy. A generic report marker does not confirm that the view changed, programmatic focus does not prove the element is reachable with the Tab key, and a synthetic event can bypass native hit testing. Require a state specific marker and an asserted precondition, for example that a container actually overflows.
+      Check response correlation in a command and response channel. Accepting a message because it reports a failure, rather than because its identifier matches the request, lets a late response from the previous command fail the current one.
+      Check bounded waits for a clock the test replaces. When the test fixes the current time, a deadline computed from that same source can never expire and the run hangs until the job timeout, so require an elapsed time source the test does not override.
+      Check cleanup blocks for a throw that replaces the primary assertion error and skips the remaining cleanup. Record the primary error and treat cleanup as best effort.
+      Check child process teardown. Require a bounded wait for exit and a kill when the wait expires, and do not treat the launcher's close event as proof that a whole process group ended.
+      Check that failure output carries the diagnostic a reader needs, such as a bounded standard error tail, for the case where the application exits before writing its own artifacts.
+      Check that timing sensitive values such as a start timestamp are captured before the command that can race them.
+      Check that tooling is invoked portably, because executing a binary inside a package bin directory fails where the package manager installs a shim. Run it through the Node executable instead.
+  - path: '**/{tools,scripts}/**/*.{js,mjs,cjs}'
+    instructions: |-
+      Review these Node automation scripts that drive a browser or build a release.
+      Check every callback evaluated inside the page for identifiers taken from the enclosing script. They are not in scope in the browser and raise a reference error that aborts the run before measurements and images are written, so require them to be passed as arguments or applied after the value returns to Node.
+      Check screenshot options against the current scroll position, because a clip is expressed in page coordinates and still starts at the top of the document after a scroll. Check also that a clamped height does not silently crop a capture the report presents as complete.
+      Check navigation checks for an explicit status assertion, because a navigation resolves for a not found response as well, and a route expected to be absent must be flagged when it starts returning success.
+      Check threshold comparisons against the unrounded value and round only for display, so a value just below the limit is not rounded into the passing band.
+      Check that every measurement the report records is also compared against its requirement, and that a missing element or an empty selection is flagged rather than skipped. Otherwise a run that performed no checks reports zero problems.
+      Check that the process exit code reflects the result, because printing a failure count while exiting with zero makes the step pass in automation.
+      Check ordered text replacement where one pattern is a prefix of another, and require the longer value to be applied first so that no suffix of a sensitive value survives.
+      Check build scripts for an output directory that is reused without removal and then signed or packaged, and for a declared target or architecture that the build command never passes.
+  - path: .github/workflows/**
+    instructions: 'Check that every workflow in this change still runs on the code it guards
+      and that its failures are visible. Inspect on.pull_request.paths and on.push.paths against
+      the files the jobs really execute, including every module imported by the selected tests
+      and every script a step invokes. It is a defect when a module exercised by those tests
+      appears in neither filter list, because a pull request limited to that module skips
+      the workflow and the check reports nothing at all; name the missing path and require
+      it in both the pull_request and the push list. Inspect step level if conditions for
+      the same silent skip. A validation or smoke step that a sibling step guards with hashFiles
+      needs the same guard, otherwise a rerun of an older tag that lacks the test file fails
+      on a missing file instead of skipping. A validation step placed after a scanning or
+      gating step inherits the default success condition, so a failing scan removes runtime
+      validation from the run; require an explicit condition on the outcome of the earlier
+      step rather than moving the validation ahead of the gate, because that would let the
+      gate be skipped instead. When a workflow adds a schedule trigger, check how a failure
+      on that schedule is detected: Actions sends email only to recipients who enabled those
+      notifications, so a statement that a failed nightly run will email someone is not a
+      detection path; require a configured alert or a conditional statement.'
+  - path: .github/workflows/**
+    instructions: Inspect every run step that decides whether this workflow passes, and judge
+      whether the step can exit zero while the work it gates actually failed. A step that
+      infers success from the absence of a marker in an API response is a defect, because
+      an authentication error, an empty body, an error code shaped differently than the pattern
+      expects, a restart of the remote scheduler and a job that failed all remove that marker
+      and produce a green run. Require the identifier returned by the trigger call to be carried
+      forward and the terminal status read from a job details endpoint, with any non success
+      status ending the step through exit 1. A pipeline such as scanner piped into tee and
+      followed by a grep for High or Critical is a defect, because the default Actions shell
+      runs bash -e without pipefail, so a scanner that fails without printing those words
+      leaves the gate green; require pipefail or an explicit shell declaration. An exit code
+      read after an assignment of the form RESPONSE=$(curl ...) is dead code, because the
+      same errexit setting ends the step at the failing substitution and the diagnostic branch
+      never runs; require an if form around the assignment or an explicit errexit window.
+      Check that the HTTP status is captured and that an empty or non numeric value is rejected
+      before any numeric comparison such as a test against 200, and that every curl call sets
+      both a connect timeout and a maximum time, because a stalled socket otherwise holds
+      the runner until the job timeout.
+  - path: .github/workflows/**
+    instructions: 'Inspect what each scanner in this workflow actually reads, and whether
+      a real finding could still pass the gate. It is a defect when the scanned input omits
+      a class of dependency that the built image or the build stage really contains. A filesystem
+      scan of a node project without the flag that includes development dependencies skips
+      packages the build stage installs, staging a Cargo manifest beside the Cargo lockfile
+      makes Trivy drop Rust development dependencies in versions that have no such flag, and
+      a package declared only as a version range in a requirements file but absent from the
+      committed lockfile is ignored, so a vulnerable allowed version passes. Name the package
+      or dependency class that escapes the scan and the flag or input change that restores
+      it. Inspect secret scanning configuration: passing an empty value to the secret configuration
+      flag only stops a repository configuration from loading, it does not disable the built
+      in allow rules, so a credential committed to a Markdown file is still skipped; require
+      a trusted configuration created outside the checkout that disables the relevant allow
+      rule, and a synthetic credential that proves the job fails on it. Inspect how the step
+      turns a report into a verdict. A check that asserts only that one operating system package
+      and one language package appear cannot detect an inventory that silently lost packages,
+      and an audit whose vulnerability data source failed can leave nothing for the final
+      grep to match; require the report to be compared against the package database of the
+      image and the installed distribution metadata, and require the step to fail when the
+      inventory or the vulnerability data is incomplete, not only when a severity word appears.'
+  - path: '**/*.toml'
+    instructions: 'Inspect dependency and packaging declarations here against the way the
+      project is installed and tested in practice. It is a defect when a minimum version or
+      an override takes effect on only one installation path, for example a resolver specific
+      override that raises a floor while the documented pip install of a requirements file
+      still resolves the vulnerable lower bound; require the floor on the path the documentation
+      and the scripts really use, or a generated requirements file produced from the resolved
+      set. It is a defect when a declared minimum still admits a version with a known advisory,
+      so state the lowest safe version instead of the nearest minor release. When this change
+      alters dependency metadata and the repository commits a lockfile, require the lockfile
+      to be regenerated in the same change, because a locked install cannot reproduce the
+      new requirement and a locked synchronisation rejects a lock whose project metadata still
+      carries the old one. Inspect optional extras against the code that needs them: an extra
+      that pulls a heavy package no module imports slows every install for nothing, and an
+      extra that omits a provider client which the benchmark scripts and the tests expect
+      breaks the documented install command, so name the package and the importing surface.
+      Inspect packaging discovery and test configuration: a package discovery pattern finds
+      no sub package that lacks an init module unless namespace packages are enabled, so a
+      development tree keeps working through path insertion while an installed copy is incomplete,
+      and a test marker only documents intent until the default options exclude it, so the
+      default test run still executes the slow tests.'
+  - path: '**/docker-compose*.yml'
+    instructions: 'Inspect how each service publishes ports and whether this file still parses
+      when variable interpolation is disabled. It is a defect when a service publishes a port
+      on every host interface while the documented topology places a reverse proxy in front
+      of it: the mapping both collides with the proxy that owns that port and lets a client
+      reach the service directly, which makes any trust the service places in a forwarded
+      client address header unsafe, because the client can then set that header itself. Require
+      the published port to be bound to the loopback address, moved to an internal port number
+      and overridable through an environment variable, and state which header trust depends
+      on that binding. It is a defect when a short form volume or port specification embeds
+      a parameter default, because the extra colons make the configuration rendering command
+      used by validation workflows split the specification on every colon and reject it with
+      a too many colons error, which fails every job that renders this file, not only the
+      service that carries the broken entry. Require the long form with source, target and
+      read only as separate fields, so the specification parses with and without interpolation.'
+  - path: '**/*.nix'
+    instructions: Inspect this Nix environment against the other build environments the repository
+      already describes, such as the install commands in the readme, the continuous integration
+      scripts and the container image. It is a defect when a package those environments install
+      is absent from buildInputs or nativeBuildInputs while the build or the runtime still
+      needs it. A bundler helper such as patchelf sets the run path on packaged binaries,
+      so the packaging step fails late without it, and a library the application loads dynamically
+      at runtime, for example a tray indicator library resolved through a dynamic loader,
+      produces no build error and no log line, so the feature silently does not appear. Name
+      the derivation attribute and the feature that breaks. Inspect every environment variable
+      the shell exports. Extending a search path variable by writing the new entries followed
+      by a plain reference to the old value is a defect, because an unset variable leaves
+      an empty entry and the dynamic loader then searches the current working directory; require
+      the conditional expansion that adds the separator only when the variable is set. When
+      that form appears inside a Nix indented string, check the emitted shell code and not
+      only the Nix source, because a doubled single quote before the dollar sign escapes to
+      a literal quote and the expansion breaks.
+  - path: '**/*.rs'
+    instructions: 'Inspect every platform cfg guard this change adds, narrows or widens around
+      a platform specific call. Report a defect when the guard covers one call site while
+      sibling calls of the same capability stay unguarded, for example a builder option such
+      as skip_taskbar(true), visible(false) or position(..) gated off for Linux while the
+      matching runtime setters set_skip_taskbar, set_position or center still run there. Report
+      a defect when the guard makes code reachable on a platform that could never reach it
+      before, because the panic or the blank surface behind that path appears there for the
+      first time. Report a defect when the cfg on a call site is wider than the cfg on the
+      import or helper it uses, since that fails to compile on a third target. Inspect runtime
+      session detection separately. Deciding the display server from environment variables
+      with backend.contains("x11") is a defect, because GDK_BACKEND holds a comma separated
+      priority list such as wayland,x11, so the check must read the selected first entry and
+      fall back to WAYLAND_DISPLAY or XDG_SESSION_TYPE. Calling such a detector twice inside
+      one function is a defect too, since the two reads can disagree. Fix direction: drive
+      every guarded call from one shared predicate, store the detection result in a local,
+      and say in the guard whether it targets the operating system or the session type.'
+  - path: src-tauri/src/window*.rs
+    instructions: 'Inspect the order in which a window becomes visible relative to its geometry
+      and to its webview. Report a defect when show() runs inside a shared builder helper
+      or before set_size, set_min_size, set_position and center() have been applied, because
+      the window appears at the default size and at a compositor chosen origin and then visibly
+      jumps. Report a defect when a platform skips the builder option visible(false) and the
+      code does not call hide() right after build(), and when a capture window such as a screenshot
+      surface is visible while it captures the screen, since it records itself as a blank
+      frame. Report a defect when Rust calls show() before an emit whose frontend handler
+      decides to hide the window, because the user sees a flash. Inspect the reuse path of
+      an existing window. Returning an existing handle early must not skip reapplying the
+      configured size and position, and the helper must not call show() or set_focus() on
+      a reused handle when every call site shows the window after its own configuration. Inspect
+      coordinate conversions. Multiplying a value that is already in physical pixels, such
+      as a mouse position, by the scale factor is a defect, and so is falling back to a hard
+      coded scale factor of 1.0 when current_monitor() yields Err or Ok(None) while scale_factor()
+      is available. Fix direction: build hidden, configure, then show from the call site,
+      keep one documented unit per coordinate, and leave visibility to the frontend where
+      it already owns that decision.'
+  - path: src-tauri/src/**/*.rs
+    instructions: 'Inspect every unwrap and expect this change leaves on a call that the window
+      manager, compositor or display server can legitimately reject. That includes window
+      operations such as set_position, set_size, set_always_on_top, set_skip_taskbar, set_decorations,
+      show and hide, monitor queries such as available_monitors, current_monitor and primary_monitor,
+      WebviewWindowBuilder::build, emit to a window that may already be closing, Path::to_str
+      on a path that is not guaranteed to be UTF-8, and process spawns such as osascript.
+      Each is a defect in a command, an event handler or setup, because the Err becomes a
+      process wide panic that takes the whole desktop app down while the same call is handled
+      with a logged Err elsewhere in the file. Monitor queries return Result<Option<..>>,
+      so handling Err and then unwrapping the Option is still a defect. Report a defect when
+      managed state is read with app.state::<T>() on a path that can run before its initializer,
+      such as a close request or a synchronize handler, and require try_state with an error
+      return. Report a defect when a function logs that it will recover from an Err and then
+      calls expect on that same value, since the log promises a fallback that does not exist.
+      Fix direction: match the Result, log the failing call by name, and keep the user visible
+      action working with a safe default.'
+  - path: src-tauri/src/main.rs
+    instructions: 'Inspect every emit and every webview lifecycle hook this change touches.
+      Report a defect when a generation or epoch counter that guards renderer reports is reset
+      on a page load event that does not mean the navigation committed. On Windows, wry maps
+      PageLoadEvent::Started to the WebView2 ContentLoading event, so a failed or superseded
+      navigation resets the counter while the previous document still owns the resource and
+      keeps its old generation, after which every later report fails the check. Report a defect
+      when native code clears or rejects a queued operation without emitting the matching
+      cancellation epoch or tick, because a renderer overlay that waits for native completion
+      stays on screen. Report a defect when a periodic snapshot emit ships retained history,
+      such as every stored activity span, on each tick of a 250 ms or 500 ms loop and to every
+      webview including windows that never read it. Report a defect when a tray or window
+      handle is fetched by an identifier, for example tray_by_id("main"), that the builder
+      never assigns, because the lookup returns None and the update silently does nothing.
+      Fix direction: tie the reset to a commit equivalent signal for each platform, emit the
+      cancellation signal from every path that clears a token, send a cursor or a capped tail
+      to the window that consumes it, and set the identifier explicitly where the handle is
+      built.'
+  - path: src-tauri/**/*.rs
+    instructions: 'Inspect every long lived thread, hook, listener and spawned loop. A thread
+      that owns Windows low level input hooks such as WH_KEYBOARD_LL or WH_MOUSE_LL must wait
+      on its own message queue, for example with MsgWaitForMultipleObjects and QS_ALLINPUT
+      plus a timeout. Sleeping between pumps with std::thread::sleep is a defect, because
+      Windows delivers hook callbacks through that queue and withholds every key press and
+      pointer move until the procedure returns, and a missed LowLevelHooksTimeout lets Windows
+      uninstall the hook while the reported status still says active. Report a defect when
+      an accept or read loop treats every error except WouldBlock as fatal and exits, since
+      ConnectionAborted, Interrupted and descriptor exhaustion are transient and no caller
+      restarts the worker until the user toggles the feature. Report a defect when a background
+      monitor is started both in setup and in a toggle handler, which spawns a second infinite
+      loop, and when the loop returns as soon as its enable flag goes false while the only
+      restart path assumes it still runs. Report a defect when an event loop refactor drops
+      the call that installed a hook, leaving the feature dead. Report a defect when two native
+      queries share one deadline that is measured once, because the first query can consume
+      the budget and the second then fails silently. Inspect lock scope in the same pass.
+      Holding a MutexGuard across a blocking platform call, a multi second confirmation loop
+      or a full snapshot parse is a defect when a renderer timer polls that same mutex every
+      few hundred milliseconds. Fix direction: validate under the lock, drop the guard before
+      the platform call, share large payloads through an Arc, and give every loop one owner
+      with an idempotent start.'
+  - path: src-tauri/src/*.rs
+    instructions: 'Inspect how this change resolves files that ship with the bundle and files
+      it writes at runtime. Building a path to a bundled asset, for example an AppleScript
+      that osascript runs, from app_config_dir() plus a resources segment is a defect, because
+      that directory belongs to the user profile, nothing copies the asset there, and the
+      call fails on an installed build. Require path().resource_dir() or path().resolve(..,
+      BaseDirectory::Resource) and confirm the file is listed in the bundle resources. Report
+      a defect when the code writes a file such as a JSON handoff into an application directory
+      without create_dir_all first, since that directory is absent on a fresh profile and
+      the window then renders empty content. Report a defect when a WebView data store or
+      profile identifier is derived from DefaultHasher or any other hash whose algorithm the
+      standard library does not guarantee across releases, because a toolchain upgrade points
+      a persistent install at an empty store and loses renderer held data, and report it again
+      when two windows derive that identifier through duplicated code that can drift apart.
+      Report a defect when a store is created with StoreBuilder::build() and never loaded
+      or reloaded while the log claims the config was loaded, because the app then starts
+      from defaults. Fix direction: use a fixed identifier for a persistent profile, keep
+      a path hash only for throwaway directories, and expose one helper that every window
+      calls.'
+  - path: '**/*.bat'
+    instructions: Inspect every cmd command that embeds a quoted path or generates code. FOR
+      /F runs its command through cmd /c, which strips the outer quote pair when the command
+      string starts with a quote, so a command that begins with a quoted interpreter path
+      loses that quote and the executable token absorbs the following arguments. That is a
+      defect whenever the command string starts with a quote and is not wrapped in one additional
+      outer quote pair, so add that extra pair around the whole command. Flag any interpreter
+      or script path used unquoted inside for /f when the path can contain spaces, because
+      cmd then treats the first space delimited token as the executable and the captured variable
+      stays empty. Quote the path. Flag python -c or similar inline snippets that escape an
+      inner double quote with a backslash, because cmd does not treat a backslash as an escape
+      inside a quoted argument and the snippet reaches the interpreter malformed. Use single
+      quotes inside the snippet instead. When the script emits a temporary script or a code
+      line with echo, check that every opening parenthesis in the emitted text is closed in
+      the emitted text and that escaped characters such as caret, percent, greater than and
+      pipe survive the echo, because an unbalanced parenthesis only fails at run time. Count
+      the parentheses in the generated line and fix the escaping.
+  - path: '**/*.bat'
+    instructions: 'Inspect every invocation of python, pip or another interpreter in a cmd
+      script. Using the bare command name after activate.bat is a defect when the script has
+      already resolved an absolute interpreter path, because activation output is usually
+      suppressed and unchecked, the selected launcher may be py -3.11 so that no python command
+      exists on PATH, and the bare name then resolves to a system interpreter or to nothing.
+      Helper scripts and generated snippets that import project only packages then fail, and
+      pip installs land in the global environment. Require the resolved absolute path, for
+      example the Scripts python.exe of the virtual environment or the previously selected
+      launcher variable, for every pip call, every helper script, every inline -c snippet
+      used for counting or configuration, and every temporary script the installer writes.
+      Also check each for /f that captures a version or another value from such a probe: for
+      /f does not clear the target variable when the command prints nothing, so an unsupported
+      interpreter that exits non zero leaves the variable empty or stale and the later comparison
+      reports the wrong version. Test errorlevel after the probe and branch on it.'
+  - path: '**/*.bat'
+    instructions: Inspect every findstr test and every for /f that reads a value out of a
+      dotenv or config file. findstr treats its pattern as a regular expression unless /L
+      is given, so a placeholder pattern containing dots matches any real value with the same
+      prefix and the check keeps firing after the value is configured. Add /L for a literal
+      comparison. A findstr /B /L test for the plain key equals form is a defect when the
+      file may also hold the export form, a quoted value, leading whitespace or no such line
+      at all, because the script then decides the key is absent and overwrites a configured
+      value, or decides it is present while the value is empty. Accept every assignment form
+      the project tooling accepts, and treat a missing line and an empty value as unconfigured.
+      When a value is captured with for /f, check that an inline comment, surrounding quotes
+      and trailing whitespace are stripped before the value is compared or written back, because
+      a placeholder line copied from the example file carries a trailing comment and the raw
+      comparison classifies the key wrongly. Strip the comment and the quotes, or delegate
+      the parsing to the same helper the rest of the project uses.
+  - path: '**/*.bat'
+    instructions: Inspect variable expansion and process scope in cmd scripts. Inside a setlocal
+      DisableDelayedExpansion scope an exclamation mark reference is not expanded, so a guard
+      that sets fatal context variables and then jumps to a shared handler which expands them
+      loses its message and the script exits silently. End that scope before setting the variables,
+      and route every guard through the shared handler instead of calling exit /b directly.
+      The right hand side of a pipeline runs in a child cmd.exe, so a set executed there never
+      reaches the parent and the later test still reads the old value. Run the command on
+      its own line and set the variable from errorlevel afterwards. set /p leaves the variable
+      unchanged when the user presses Enter, so a prompt whose variable is not initialized
+      first can inherit a value from the parent environment and invert the documented default.
+      Initialize the variable to that default before the prompt. A for /f body that chains
+      two set commands with an ampersand and no parenthesized do block runs only the first
+      one inside the loop, so the second variable is assigned after the loop from the wrong
+      token. Wrap the body in parentheses. A yes or no test that compares only the single
+      letter n accepts the answer no as agreement. Match any answer that starts with n or
+      N.
+  - path: '**/*.ps1'
+    instructions: 'Inspect PowerShell helpers that pick an interpreter, a JDK or another tool
+      from the file system or from several candidates. Returning the first directory produced
+      by Get-ChildItem is a defect, because enumeration order is not guaranteed and the choice
+      then varies between machines and runs. Sort the candidates explicitly. Sorting folder
+      names as text is also a defect, because jdk-9 sorts above jdk-17 and the older runtime
+      wins. Extract the numeric major version from the name, or ask the tool for its version,
+      and order by that number. When runtime code requires a minimum version, check that the
+      selector enforces that floor and fails with a clear message when no candidate meets
+      it, instead of returning the newest version that happens to be installed. When the script
+      later removes an installation tree, check that the interpreter it launches does not
+      live inside that tree: Windows refuses to delete a running executable, so an installation
+      that supplies the running interpreter leaves a partially removed directory and a failing
+      exit code. Resolve the real executable path of each candidate, for Python through sys.executable,
+      and reject any candidate inside the removal inventory before launching it.'
+  - path: '**/*.nsi'
+    instructions: Inspect every environment variable and service registry write in an NSIS
+      installer or uninstaller script. Writing a machine level or per service variable without
+      first reading the previous value is a defect, because the variable may already be owned
+      by another installation on that host. Store the previous value under the product registry
+      key during install, restore it on uninstall, and delete the variable only when the installer
+      created it from empty. A reg.exe add or a registry write that supplies a whole Environment
+      REG_MULTI_SZ value replaces every entry in it, so other per service variables left by
+      earlier versions, by policy or by an administrator disappear. Read the existing multi
+      string, add or replace only the one entry, and write the result back. An uninstaller
+      that expects sc delete to take the service key away with it is a defect, because the
+      key survives when the service is only marked for deletion and stale per service environment
+      entries stay on the machine. Delete the Environment value explicitly before removing
+      the service. When the installer sets a variable that other processes are meant to read,
+      check that the scope matches that expectation, because a per service Environment entry
+      is invisible outside that service and no WM_SETTINGCHANGE broadcast makes it visible.
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+    - AGENTS.md
+    - CLAUDE.md
+    - docs/**/*.md
+  learnings:
+    scope: local
+  pull_requests:
+    scope: local
