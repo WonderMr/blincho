@@ -339,6 +339,15 @@ pub(super) fn bounded_probe_with_exit(
         _ => None,
     }
 }
+/// Lowercase macOS browser process and bundle names whose call signals count as meetings.
+const MACOS_BROWSERS: [&str; 6] = [
+    "google chrome",
+    "chromium",
+    "safari",
+    "firefox",
+    "microsoft edge",
+    "vivaldi",
+];
 pub fn active_meeting_applications(output: &str) -> Vec<String> {
     static SUMMARY: OnceLock<Regex> = OnceLock::new();
     static ASSERTION: OnceLock<Regex> = OnceLock::new();
@@ -370,15 +379,7 @@ pub fn active_meeting_applications(output: &str) -> Vec<String> {
                 "facetime",
             ]
             .contains(&owner.as_str());
-            let browser = [
-                "google chrome",
-                "chromium",
-                "safari",
-                "firefox",
-                "microsoft edge",
-                "vivaldi",
-            ]
-            .contains(&owner.as_str());
+            let browser = MACOS_BROWSERS.contains(&owner.as_str());
             let webrtc = name == "webrtc" || name.starts_with("webrtc ");
             // Background Chrome calls can keep the system awake without
             // preventing display sleep, including while the microphone is muted.
@@ -401,6 +402,75 @@ pub fn active_meeting_applications(output: &str) -> Vec<String> {
 #[cfg(any(target_os = "macos", test))]
 fn needs_zoom_capture_probe(applications: &[String]) -> bool {
     !applications.iter().any(|application| application == "Zoom")
+}
+/// Browsers that capture the microphone, from the per-client assertions coreaudiod lists in
+/// `pmset -g assertions`. Some browser calls, such as WhatsApp Web, hold no WebRTC assertion,
+/// so a browser microphone stream is a meeting heuristic, as on Linux. Playback is excluded.
+#[cfg(any(target_os = "macos", test))]
+fn audio_input_browser_applications(
+    output: &str,
+    mut executable_path: impl FnMut(i32) -> Option<String>,
+) -> Vec<String> {
+    let applications = audio_input_client_pids(output)
+        .into_iter()
+        .filter_map(|pid| executable_path(pid))
+        .filter_map(|path| browser_bundle_application(&path))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    normalize_meeting_applications(&applications)
+}
+/// Client PIDs of coreaudiod assertions whose resources include an audio input device.
+#[cfg(any(target_os = "macos", test))]
+fn audio_input_client_pids(output: &str) -> Vec<i32> {
+    static OWNER: OnceLock<Regex> = OnceLock::new();
+    static CLIENT: OnceLock<Regex> = OnceLock::new();
+    let owner = OWNER.get_or_init(|| Regex::new(r"^\s*pid\s+\d+\((.+?)\):").unwrap());
+    let client = CLIENT.get_or_init(|| Regex::new(r"^\tCreated for PID:\s*(\d+)\b").unwrap());
+    let mut pids = Vec::new();
+    // (owned by coreaudiod, client PID, audio input resource) for the current assertion.
+    let mut current: Option<(bool, Option<i32>, bool)> = None;
+    let mut finish = |current: &mut Option<(bool, Option<i32>, bool)>| {
+        if let Some((true, Some(pid), true)) = current.take() {
+            pids.push(pid);
+        }
+    };
+    for line in output.lines() {
+        if !line.starts_with('\t') {
+            finish(&mut current);
+            current = owner
+                .captures(line)
+                .map(|capture| (capture[1].trim() == "coreaudiod", None, false));
+            continue;
+        }
+        let Some((_, pid, audio_input)) = current.as_mut() else {
+            continue;
+        };
+        if let Some(capture) = client.captures(line) {
+            *pid = capture[1].parse::<i32>().ok().filter(|pid| *pid > 0);
+        } else if let Some(resources) = line.trim_start().strip_prefix("Resources:") {
+            *audio_input |= resources.split_whitespace().any(|item| item == "audio-in");
+        }
+    }
+    finish(&mut current);
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+/// The browser whose application bundle contains an executable. Chromium browsers capture audio
+/// in a helper app nested inside the browser bundle, so the outermost bundle names the browser.
+#[cfg(any(target_os = "macos", test))]
+fn browser_bundle_application(path: &str) -> Option<&'static str> {
+    let bundle = path
+        .split('/')
+        .find_map(|component| {
+            let (name, extension) = component.rsplit_once('.')?;
+            extension.eq_ignore_ascii_case("app").then_some(name)
+        })?
+        .to_lowercase();
+    MACOS_BROWSERS
+        .contains(&bundle.as_str())
+        .then(|| parsing::meeting_application(&bundle))
+        .flatten()
 }
 #[cfg(test)]
 pub fn active_meeting_assertion(output: &str) -> bool {
@@ -570,6 +640,71 @@ mod tests {
             ),
             ["Google Chrome"]
         );
+    }
+    #[test]
+    fn browser_microphone_capture_is_a_call_without_webrtc_assertions() {
+        let helper = "/Applications/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework/Versions/8.3.4191.45/Helpers/Vivaldi Helper.app/Contents/MacOS/Vivaldi Helper";
+        let output = "Listed by owning process:\n   pid 676(coreaudiod): [0x00360b5d00018248] 00:00:42 PreventUserIdleSystemSleep named: \"com.apple.audio.BuiltInMicrophoneDevice.context.preventuseridlesleep\"  \n\tCreated for PID: 4242. \n\tResources: audio-in BuiltInMicrophoneDevice \n   pid 13957(Vivaldi): [0x00360b5a000184d7] 00:00:41 NoIdleSleepAssertion named: \"Playing audio\"  \nKernel Assertions: 0x100=MAGICWAKE\n";
+        let paths = |pid| (pid == 4242).then(|| helper.to_string());
+        // Without the microphone signal, a WhatsApp Web call looks like playback.
+        assert!(active_meeting_applications(output).is_empty());
+        assert_eq!(audio_input_browser_applications(output, paths), ["Vivaldi"]);
+        for playback in ["audio-out BuiltInMicrophoneDevice", "BuiltInSpeakerDevice"] {
+            let output = output.replace("audio-in BuiltInMicrophoneDevice", playback);
+            assert!(audio_input_browser_applications(&output, paths).is_empty());
+        }
+        assert!(
+            audio_input_browser_applications(&output.replace("coreaudiod", "Vivaldi"), paths)
+                .is_empty()
+        );
+        assert!(audio_input_browser_applications(output, |_| None).is_empty());
+        for path in [
+            "/System/Library/PrivateFrameworks/CoreSpeech.framework/corespeechd",
+            "/Applications/zoom.us.app/Contents/MacOS/zoom.us",
+            "/Applications/NotVivaldi.app/Contents/MacOS/NotVivaldi",
+            "/Applications/Vivaldi/Contents/MacOS/Vivaldi",
+        ] {
+            assert!(audio_input_browser_applications(output, |_| Some(path.into())).is_empty());
+        }
+    }
+    #[test]
+    fn audio_input_clients_come_only_from_coreaudiod_input_details() {
+        let output = "   pid 676(coreaudiod): [0x1] 00:25:15 PreventUserIdleSystemSleep named: \"com.apple.audio.AudioTap-505D.context.preventuseridlesleep\"  \n\tCreated for PID: 999. \n\tResources: audio-in C31471DB \n   pid 676(coreaudiod): [0x2] 00:00:01 PreventUserIdleSystemSleep named: \"com.apple.audio.BuiltInSpeakerDevice.context.preventuseridlesleep\"  \n\tCreated for PID: 78798. \n\tResources: audio-out BuiltInSpeakerDevice \n   pid 676(coreaudiod): [0x3] 00:00:01 PreventUserIdleSystemSleep named: \"com.apple.audio.USBMic.context.preventuseridlesleep\"  \n\tResources: audio-in USBMic \n\tCreated for PID: 501. \n   pid 676(coreaudiod): [0x4] 00:00:01 PreventUserIdleSystemSleep named: \"com.apple.audio.Mic.context.preventuseridlesleep\"  \n\tResources: audio-in Mic \n   pid 70520(Claude): [0x5] 00:21:22 NoIdleSleepAssertion named: \"Electron\"  \n\tCreated for PID: 12. \n\tResources: audio-in Mic \n   pid 676(coreaudiod): [0x6] 00:00:01 PreventUserIdleSystemSleep named: \"com.apple.audio.Mic2.context.preventuseridlesleep\"  \n\tCreated for PID: 999. \n\tResources: audio-in Mic2 \n   id=561  level=255 0x100=MAGICWAKE\n\tCreated for PID: 13. \n\tResources: audio-in Mic \n";
+        assert_eq!(audio_input_client_pids(output), [501, 999]);
+        assert!(audio_input_client_pids(&output.replace("audio-in", "audio-inx")).is_empty());
+        assert!(audio_input_client_pids(&output.replace("PID: ", "PID: -")).is_empty());
+    }
+    #[test]
+    fn browser_bundles_resolve_from_nested_helper_executables() {
+        for (path, application) in [
+            (
+                "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/131.0.6778.86/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper",
+                Some("Google Chrome"),
+            ),
+            (
+                "/Applications/Microsoft Edge.app/Contents/Frameworks/Microsoft Edge Framework.framework/Helpers/Microsoft Edge Helper.app/Contents/MacOS/Microsoft Edge Helper",
+                Some("Microsoft Edge"),
+            ),
+            (
+                "/Applications/Firefox.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container",
+                Some("Firefox"),
+            ),
+            (
+                "/Users/me/Applications/Chromium.app/Contents/MacOS/Chromium",
+                Some("Chromium"),
+            ),
+            ("/Applications/Safari.app/Contents/MacOS/Safari", Some("Safari")),
+            ("/Applications/VIVALDI.APP/Contents/MacOS/Vivaldi", Some("Vivaldi")),
+            (
+                "/System/Library/Frameworks/WebKit.framework/Versions/A/XPCServices/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU",
+                None,
+            ),
+            ("/Applications/Spotify.app/Contents/MacOS/Spotify", None),
+            ("/usr/bin/afplay", None),
+            ("", None),
+        ] {
+            assert_eq!(browser_bundle_application(path), application, "{path}");
+        }
     }
     #[test]
     fn vivaldi_preply_waiting_room_is_detected_without_remote_audio() {
