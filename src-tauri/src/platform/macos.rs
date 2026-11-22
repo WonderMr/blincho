@@ -1,6 +1,6 @@
 use super::{
-    active_meeting_applications, bounded_probe, bounded_probe_with_exit, needs_zoom_capture_probe,
-    MeetingStatus, Presence,
+    active_meeting_applications, audio_input_browser_applications, bounded_probe,
+    bounded_probe_with_exit, needs_zoom_capture_probe, MeetingStatus, Presence,
 };
 use std::{
     ffi::{c_void, CString},
@@ -239,6 +239,10 @@ fn meeting_status_with_probes(
         };
     };
     let mut applications = active_meeting_applications(&output);
+    applications.extend(audio_input_browser_applications(
+        &output,
+        process_executable_path,
+    ));
     if needs_zoom_capture_probe(&applications) {
         match probe("/usr/bin/pgrep", &["-i", "-x", "CptHost"], Some(1)) {
             Some(text) if text.trim().is_empty() => {}
@@ -265,9 +269,30 @@ fn meeting_status_with_probes(
     status
 }
 
+/// Executable path of a running process, or None when it has exited or cannot be inspected.
+fn process_executable_path(pid: i32) -> Option<String> {
+    let mut buffer = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let capacity = u32::try_from(buffer.len()).ok()?;
+    let length = unsafe { libc::proc_pidpath(pid, buffer.as_mut_ptr().cast(), capacity) };
+    buffer.truncate(usize::try_from(length).ok().filter(|length| *length > 0)?);
+    String::from_utf8(buffer).ok()
+}
+
 #[cfg(test)]
 mod meeting_tests {
     use super::*;
+
+    #[test]
+    fn process_executable_path_reads_live_processes_only() {
+        let current = std::env::current_exe().unwrap().canonicalize().unwrap();
+        let pid = i32::try_from(std::process::id()).unwrap();
+        assert_eq!(
+            process_executable_path(pid).map(std::path::PathBuf::from),
+            Some(current)
+        );
+        assert_eq!(process_executable_path(i32::MAX), None);
+        assert_eq!(process_executable_path(-1), None);
+    }
 
     #[test]
     fn failed_zoom_fallback_cannot_grant_a_negative_camera_preflight() {
